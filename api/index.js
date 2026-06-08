@@ -19,6 +19,7 @@ const ORIGINAL_PAGE = `<!DOCTYPE html>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="A guide to the best ISA investment strategies for UK investors in 2024, covering stocks and shares ISAs, index funds, and platform selection.">
   <meta name="keywords" content="ISA investment, stocks and shares ISA, index funds UK, best ISA platform 2024">
+  <meta name="msvalidate.01" content="148DCC9206B1EAB68990C712CBC90D1D" />
   <title>Best ISA Investment Strategies 2024 | Finance Weekly</title>
   <style>
     body { font-family: Georgia, serif; max-width: 800px; margin: 40px auto; padding: 0 20px; line-height: 1.7; color: #333; }
