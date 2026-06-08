@@ -1,5 +1,13 @@
 {
   "version": 2,
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "index, follow" }
+      ]
+    }
+  ],
   "routes": [
     { "src": "/health",      "dest": "/api/health.js" },
     { "src": "/dashboard",   "dest": "/api/dashboard.js" },
