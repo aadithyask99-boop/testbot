@@ -1,0 +1,8 @@
+{
+  "name": "ai-ad-platform",
+  "version": "1.0.0",
+  "description": "AI bot detection and content injection platform",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
