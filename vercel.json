@@ -1,8 +1,0 @@
-{
-  "version": 2,
-  "routes": [
-    { "src": "/health", "dest": "/api/health.js" },
-    { "src": "/dashboard", "dest": "/api/dashboard.js" },
-    { "src": "/", "dest": "/api/index.js" }
-  ]
-}
