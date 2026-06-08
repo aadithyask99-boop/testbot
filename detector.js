@@ -43,6 +43,40 @@ const AI_CRAWLERS = [
     value: 'medium',
     // FACT CHECK: You.com is an AI search engine that does real-time retrieval.
   },
+  {
+    name: 'Claude (Anthropic retrieval)',
+    patterns: ['Claude-User', 'claude-user'],
+    type: 'retrieval',
+    value: 'high',
+    // FACT CHECK: Claude-User is Anthropic's retrieval crawler — used when
+    // Claude fetches live web pages during a conversation. Distinct from
+    // ClaudeBot which is the training crawler. Confirmed from live dashboard
+    // observation — appeared at 15:24 on first real-world test.
+  },
+  {
+    name: 'Perplexity User',
+    patterns: ['Perplexity-User'],
+    type: 'retrieval',
+    value: 'high',
+    // FACT CHECK: Perplexity-User appeared in live dashboard logs alongside
+    // PerplexityBot during real Perplexity query test. Likely the user-session
+    // request that precedes the crawler fetch.
+  },
+  {
+    name: 'Gemini (Google AI)',
+    patterns: ['Google-CloudVertexBot', 'Googlebot-AI'],
+    type: 'retrieval',
+    value: 'high',
+    // FACT CHECK: Google's AI retrieval crawlers for Gemini responses.
+  },
+  {
+    name: 'SearchGPT',
+    patterns: ['OAI-SearchBot'],
+    type: 'retrieval',
+    value: 'high',
+    // FACT CHECK: OpenAI's SearchGPT product uses OAI-SearchBot for retrieval.
+    // Confirmed in OpenAI's crawler documentation 2024.
+  },
 
   // --- TRAINING CRAWLERS (lower commercial value) ---
   // These visit to build datasets for future model training.
