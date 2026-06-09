@@ -107,6 +107,28 @@ module.exports = function handler(req, res) {
     <tbody id="adv-queries"><tr><td colspan="3" class="empty">No query data yet</td></tr></tbody></table>
   </section>
 
+  <!-- VERIFICATION PANEL -->
+  <section>
+    <h2>Verification</h2>
+    <div style="padding:14px;display:grid;gap:12px">
+      <div>
+        <div style="font-size:11px;color:#999;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Self-Test Command</div>
+        <div style="font-family:monospace;font-size:12px;background:#f5f5f5;border:1px solid #e5e5e5;border-radius:4px;padding:10px;color:#333;word-break:break-all" id="adv-selftest">Loading…</div>
+        <div style="font-size:11px;color:#aaa;margin-top:4px">Run this to verify your creative is live. Your ad copy should appear as a paragraph in the HTML output.</div>
+      </div>
+      <div>
+        <div style="font-size:11px;color:#999;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Recent Verified Impressions</div>
+        <table>
+          <thead><tr><th>When</th><th>Platform</th><th>Type</th><th>Confidence</th><th>IP Prefix</th></tr></thead>
+          <tbody id="adv-verify-log"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+        </table>
+      </div>
+      <div style="font-size:12px;color:#888;line-height:1.6;border-left:2px solid #e5e5e5;padding-left:10px">
+        <b style="color:#555">How to verify independently:</b> Each impression is logged with timestamp, IP, User-Agent, and detection confidence. Impression data is stored in Upstash Redis and available on request. You can also check your brand is appearing in AI responses by asking Perplexity or ChatGPT about ISA investment strategies and looking for your brand name in the response.
+      </div>
+    </div>
+  </section>
+
   <!-- CREATIVE UPDATE FORM -->
   <div class="form-section">
     <h2>Update Creative</h2>
@@ -253,6 +275,20 @@ function renderAdvertiser() {
   document.getElementById('adv-queries').innerHTML = q.length ? q.map(q => \`<tr>
     <td>\${q.query}</td><td>\${q.platform}</td><td>\${ago(q.time)}</td>
   </tr>\`).join('') : '<tr><td colspan="3" class="empty">Queries appear when Perplexity or Google clicks are tracked</td></tr>';
+
+  // Render verification panel
+  const v = advData.verification || {};
+  if (v.selfTest) {
+    document.getElementById('adv-selftest').textContent = v.selfTest.command;
+  }
+  const vlog = v.recentImpressions || [];
+  document.getElementById('adv-verify-log').innerHTML = vlog.length ? vlog.map(e => `<tr>
+    <td>${ago(e.time)}</td>
+    <td>${e.platform || '—'}</td>
+    <td>${tag(e.crawlerType || '—', e.crawlerType || '')}</td>
+    <td style="color:${parseInt(e.confidence) >= 85 ? '#16a34a' : '#f59e0b'}">${e.confidence}</td>
+    <td style="font-family:monospace;font-size:11px;color:#aaa">${e.ipPrefix}</td>
+  </tr>`).join('') : '<tr><td colspan="5" class="empty">No impressions logged yet</td></tr>';
 
   if (!formLoaded) {
     loadCurrentCreative();

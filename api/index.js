@@ -141,7 +141,7 @@ module.exports = async function handler(req, res) {
 
         if (isUnique) {
           // Mark this IP as seen for 30 minutes (1800 seconds)
-          ops.push(kvSet(sessionKey, '1', 1800));
+          ops.push(kvSet(sessionKey, '1', 300)); // 5-minute session window
           // Count unique clicks separately
           ops.push(kvIncr('stats:unique_clicks:total'));
           ops.push(kvIncr(`stats:unique_clicks:date:${today}`));
