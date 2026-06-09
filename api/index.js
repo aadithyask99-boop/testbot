@@ -1,5 +1,6 @@
 const { analyseRequest } = require('../lib/combined-detector');
 const { injectSponsoredContent } = require('../lib/injector');
+const { kvGet, kvIncr, kvListPush } = require('../lib/kv');
 const config = require('../lib/config');
 
 const ORIGINAL_PAGE = `<!DOCTYPE html>
@@ -29,7 +30,7 @@ const ORIGINAL_PAGE = `<!DOCTYPE html>
 </body>
 </html>`;
 
-module.exports = function handler(req, res) {
+module.exports = async function handler(req, res) {
   const detection = analyseRequest({
     headers: req.headers,
     meta: { visitCount: 1, requestsPerMinute: 1 }
@@ -37,6 +38,7 @@ module.exports = function handler(req, res) {
 
   const ip = req.headers['x-forwarded-for'] || 'unknown';
   const ua = req.headers['user-agent'] || '';
+  const today = new Date().toISOString().split('T')[0];
 
   console.log(JSON.stringify({
     time: new Date().toISOString(),
@@ -52,10 +54,42 @@ module.exports = function handler(req, res) {
   res.setHeader('Content-Type', 'text/html');
 
   if (detection.isBot) {
-    const result = injectSponsoredContent(ORIGINAL_PAGE, config.sponsored.text, { strategy: 'auto' });
+
+    // Fetch live creative from database (falls back to config)
+    let sponsoredText = config.sponsored.text;
+    try {
+      const stored = await kvGet(`creative:${config.sponsored.category}`);
+      if (stored && stored.text) sponsoredText = stored.text;
+    } catch (e) {
+      // Silent fallback — never break the page
+    }
+
+    // Log impression to database (fire and forget)
+    try {
+      await Promise.all([
+        kvIncr('stats:impressions:total'),
+        kvIncr(`stats:impressions:platform:${detection.platform || 'unknown'}`),
+        kvIncr(`stats:impressions:type:${detection.crawlerType || 'unknown'}`),
+        kvIncr(`stats:impressions:date:${today}`),
+        kvListPush('log:recent', {
+          time: new Date().toISOString(),
+          ip,
+          platform: detection.platform,
+          crawlerType: detection.crawlerType,
+          confidence: detection.confidence,
+          cpmMin: detection.suggestedCPM?.min,
+          cpmMax: detection.suggestedCPM?.max,
+        }, 100),
+      ]);
+    } catch (e) {
+      // Silent fallback — impression logging never breaks the page
+    }
+
+    const result = injectSponsoredContent(ORIGINAL_PAGE, sponsoredText, { strategy: 'auto' });
     res.setHeader('X-Bot-Detected', 'true');
     res.setHeader('X-Bot-Platform', detection.platform || 'unknown');
     res.status(200).send(result.html);
+
   } else {
     res.status(200).send(ORIGINAL_PAGE);
   }

@@ -1,50 +1,76 @@
 // ============================================================
-// DASHBOARD — Vercel version
+// DASHBOARD — /dashboard
 // ============================================================
-// Plain English: Vercel functions have no persistent memory.
-// Each function invocation is completely fresh — the request
-// log array from the Express version doesn't survive between
-// requests. So this dashboard shows a different kind of data:
-// a live snapshot of what THIS request looks like, plus
-// instructions for reading logs in the Vercel dashboard.
-//
-// For real persistent logging you'd connect a database
-// (Vercel KV, PlanetScale, Supabase). That's Phase 2.
-// For now the Vercel dashboard's built-in log viewer shows
-// every request in real time — that's your dashboard for now.
+// Shows real persistent impression data from the database.
+// Every bot visit is logged and counted here.
 // ============================================================
 
-const { analyseRequest } = require('../lib/combined-detector');
+const { kvGet, kvListGet } = require('../lib/kv');
 
-module.exports = function handler(req, res) {
+module.exports = async function handler(req, res) {
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Access-Control-Allow-Origin', '*');
 
-  const ip = req.headers['x-forwarded-for'] || 'unknown';
-  const ua = req.headers['user-agent'] || '';
+  try {
+    const today = new Date().toISOString().split('T')[0];
 
-  const detection = analyseRequest({
-    headers: req.headers,
-    meta: { visitCount: 1, requestsPerMinute: 1 }
-  });
+    // Fetch all stats in parallel
+    const [
+      totalImpressions,
+      perplexityCount,
+      gptbotCount,
+      claudeCount,
+      bingCount,
+      unknownCount,
+      retrievalCount,
+      trainingCount,
+      todayCount,
+      recentLogs,
+    ] = await Promise.all([
+      kvGet('stats:impressions:total'),
+      kvGet('stats:impressions:platform:Perplexity'),
+      kvGet('stats:impressions:platform:GPTBot (OpenAI training)'),
+      kvGet('stats:impressions:platform:Claude (Anthropic retrieval)'),
+      kvGet('stats:impressions:platform:Bing Copilot'),
+      kvGet('stats:impressions:platform:unknown'),
+      kvGet('stats:impressions:type:retrieval'),
+      kvGet('stats:impressions:type:training'),
+      kvGet(`stats:impressions:date:${today}`),
+      kvListGet('log:recent', 20),
+    ]);
 
-  res.status(200).json({
-    message: 'Vercel functions are stateless — no persistent request log. Use Vercel dashboard logs to see all requests.',
-    vercelLogsUrl: 'https://vercel.com/dashboard → your project → Logs tab',
-    thisRequest: {
-      time: new Date().toISOString(),
-      ip: ip,
-      ua: ua.substring(0, 100),
-      isBot: detection.isBot,
-      platform: detection.platform,
-      confidence: detection.confidence,
-      crawlerType: detection.crawlerType,
-      suggestedCPM: detection.suggestedCPM,
-    },
-    howToReadLogs: [
-      '1. Go to vercel.com and open your project',
-      '2. Click the Logs tab',
-      '3. Every request appears here in real time',
-      '4. Filter by "BOT DETECTED" to see only bot visits',
-      '5. Each log line is JSON — platform, confidence, CPM all included',
-    ]
-  });
+    const total = parseInt(totalImpressions) || 0;
+    const retrieval = parseInt(retrievalCount) || 0;
+    const training = parseInt(trainingCount) || 0;
+
+    // Estimate revenue: retrieval at £18 CPM, training at £5 CPM
+    const estimatedRevenueGBP = ((retrieval * 18) + (training * 5)) / 1000;
+
+    res.status(200).json({
+      publisher: 'Finance Weekly Demo',
+      summary: {
+        totalImpressions: total,
+        todayImpressions: parseInt(todayCount) || 0,
+        retrievalCrawlers: retrieval,
+        trainingCrawlers: training,
+        estimatedRevenueGBP: parseFloat(estimatedRevenueGBP.toFixed(4)),
+        publisherShare60pct: parseFloat((estimatedRevenueGBP * 0.6).toFixed(4)),
+        platformShare40pct: parseFloat((estimatedRevenueGBP * 0.4).toFixed(4)),
+      },
+      byPlatform: {
+        Perplexity: parseInt(perplexityCount) || 0,
+        GPTBot: parseInt(gptbotCount) || 0,
+        Claude: parseInt(claudeCount) || 0,
+        Bing: parseInt(bingCount) || 0,
+        unknown: parseInt(unknownCount) || 0,
+      },
+      recentImpressions: recentLogs,
+    });
+
+  } catch (e) {
+    res.status(500).json({
+      error: 'Dashboard unavailable',
+      message: e.message,
+    });
+  }
 };

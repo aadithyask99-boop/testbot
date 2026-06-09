@@ -1,42 +1,40 @@
 // ============================================================
-// AD ENDPOINT — /ad?pub=PUBLISHER_ID
+// AD ENDPOINT — /ad?pub=PUBLISHER_ID&cat=CATEGORY
 // ============================================================
-// Plain English: The SDK calls this endpoint to fetch the
-// right sponsored text for a given publisher. In production
-// this would query a database of advertisers, match by
-// publisher category, and return the winning creative.
-// For the demo it returns the hardcoded Vanguard creative.
+// Returns the current live creative for a given category.
+// Checks the database first. Falls back to config.js if
+// the database has no creative set yet.
 // ============================================================
 
 const config = require('../lib/config');
+const { kvGet } = require('../lib/kv');
 
-module.exports = function handler(req, res) {
-
-  // Allow cross-origin requests — the SDK runs on the
-  // publisher's domain and calls back to your server.
-  // Without CORS headers the browser blocks the request.
+module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET');
   res.setHeader('Content-Type', 'application/json');
 
   const publisherId = req.query.pub || 'unknown';
-  const pageUrl = req.query.url || '';
+  const category = req.query.cat || config.sponsored.category;
 
-  console.log(JSON.stringify({
-    event: 'ad_request',
-    publisherId,
-    pageUrl,
-    time: new Date().toISOString(),
-  }));
+  // Try database first
+  let creative = null;
+  try {
+    const stored = await kvGet(`creative:${category}`);
+    if (stored) creative = stored;
+  } catch (e) {
+    console.error('Ad fetch error:', e.message);
+  }
 
-  // In production: look up publisher in database,
-  // match to advertiser by category, return winning creative.
-  // For demo: return hardcoded creative.
-  res.status(200).json({
-    publisherId,
-    advertiser: config.sponsored.advertiser,
-    text: config.sponsored.text,
-    category: config.sponsored.category,
-    cpmGBP: config.sponsored.cpmGBP,
-  });
+  // Fall back to config.js if nothing in database yet
+  if (!creative) {
+    creative = {
+      advertiser: config.sponsored.advertiser,
+      text: config.sponsored.text,
+      cpmGBP: config.sponsored.cpmGBP,
+      category: config.sponsored.category,
+      source: 'config_fallback',
+    };
+  }
+
+  res.status(200).json({ publisherId, ...creative });
 };
