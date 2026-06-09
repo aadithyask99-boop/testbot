@@ -34,6 +34,10 @@ const ORIGINAL_PAGE = `<!DOCTYPE html>
 module.exports = async function handler(req, res) {
   const detection = analyseRequest({
     headers: req.headers,
+    // NOTE: requestsPerMinute is not measured per-IP in this implementation.
+    // The behavioural rate signal (+30 pts) therefore never fires.
+    // For production: track per-IP request counts in KV with 60s TTL.
+    // For now: UA + anonymous_crawler detection handles the important cases.
     meta: { visitCount: 1, requestsPerMinute: 1 }
   });
 

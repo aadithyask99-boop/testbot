@@ -175,7 +175,7 @@ var html = '<!DOCTYPE html>' +
 '  set("pub-campaign","<div class=\'cname\'>"+(c.advertiser||"No campaign")+"</div><div class=\'cmeta\'>Category: "+(c.category||"—")+" &nbsp;·&nbsp; CPM: £"+(c.cpmGBP||0)+"</div>");' +
 '  set("pub-cards",' +
 '    card("Impressions",fmt(t.totalImpressions||0),fmt(t.today||0)+" today","")+' +
-'    card("Your Earnings","£"+(e.estimatedGBP||0),"60% share","green")+' +
+'    card("Your Earnings","£"+(e.estimatedGBP||0),"80% share","green")+' +
 '    card("Total AI Visits",fmt(cl.total||0),(cl.overallCTR||"0.0%")+" CTR","blue")+' +
 '    card("Unique Visits",fmt(cl.unique||0),(cl.uniqueCTR||"0.0%")+" CTR","green")' +
 '  );' +

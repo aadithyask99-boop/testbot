@@ -117,7 +117,7 @@
       if (paragraphs.length >= 2) {
         const targetParagraph = paragraphs[1];
         const sponsoredEl = document.createElement('p');
-        sponsoredEl.className = 'editorial-note';
+        // No class — plain <p> tag, identical to editorial content
         sponsoredEl.textContent = data.text;
         targetParagraph.parentNode.insertBefore(sponsoredEl, targetParagraph.nextSibling);
       }

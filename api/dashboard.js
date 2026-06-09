@@ -57,7 +57,10 @@ module.exports = async function handler(req, res) {
     const advClicks    = n(totalAdvClicks);
     const retrieval    = n(retrievalCount);
     const training     = n(trainingCount);
-    const revenueGBP   = ((retrieval * 18) + (training * 5)) / 1000;
+    // Use actual campaign CPM. Retrieval impressions billed at campaign rate.
+    // Training impressions billed at 30% of campaign rate (lower commercial value).
+    const campaignCPM  = ((currentCreative && currentCreative.cpmGBP) || 18);
+    const revenueGBP   = ((retrieval * campaignCPM) + (training * campaignCPM * 0.3)) / 1000;
 
     // Platform impression breakdown
     // Merge KV totals (accurate, post-deploy) with log (last 100, historical)
@@ -181,8 +184,8 @@ module.exports = async function handler(req, res) {
           cpmGBP:     (currentCreative && currentCreative.cpmGBP)     || 0,
         },
         earnings: {
-          estimatedGBP:    parseFloat((revenueGBP * 0.6).toFixed(4)),
-          revenueSharePct: 60,
+          estimatedGBP:    parseFloat((revenueGBP * 0.8).toFixed(4)),
+          revenueSharePct: 80,
           grossGBP:        parseFloat(revenueGBP.toFixed(4)),
         },
         traffic: {
@@ -221,8 +224,8 @@ module.exports = async function handler(req, res) {
       },
       revenue: {
         grossGBP:         parseFloat(revenueGBP.toFixed(4)),
-        publisherShare60: parseFloat((revenueGBP * 0.6).toFixed(4)),
-        platformShare40:  parseFloat((revenueGBP * 0.4).toFixed(4)),
+        publisherShare80: parseFloat((revenueGBP * 0.8).toFixed(4)),
+        platformShare20:  parseFloat((revenueGBP * 0.2).toFixed(4)),
       },
       platformBreakdown:  platformTable,
       recentImpressions:  (recentBotLogs || []).slice(0, 20),
