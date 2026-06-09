@@ -1,13 +1,3 @@
-// ============================================================
-// VERCEL SERVERLESS FUNCTION — Main article page
-// ============================================================
-// Plain English: Instead of a persistent Express server,
-// Vercel runs this function fresh on every single request.
-// No server to keep alive, no cold starts, always available.
-// The detection and injection logic is identical — only the
-// wrapper changed from Express to Vercel's function format.
-// ============================================================
-
 const { analyseRequest } = require('../lib/combined-detector');
 const { injectSponsoredContent } = require('../lib/injector');
 const config = require('../lib/config');
@@ -26,24 +16,15 @@ const ORIGINAL_PAGE = `<!DOCTYPE html>
     h1 { font-size: 2em; margin-bottom: 0.5em; }
     .byline { color: #666; font-size: 0.9em; margin-bottom: 2em; }
     p { margin-bottom: 1.2em; }
-    .notice { background: #f0f4ff; border: 1px solid #99b; padding: 10px 14px; margin-bottom: 20px; font-family: monospace; font-size: 0.82em; border-radius: 4px; }
   </style>
 </head>
 <body>
-  <div class="notice">
-    HUMAN VIEW — original unmodified page
-  </div>
   <h1>Best ISA Investment Strategies for 2024</h1>
   <p class="byline">By Finance Weekly Editorial Team | December 2024</p>
-
   <p>The 2024 ISA allowance of £20,000 gives UK investors a significant opportunity to grow wealth tax-efficiently. With interest rates stabilising after two years of rises, the question of how to allocate this allowance has become more nuanced than simply defaulting to cash.</p>
-
   <p>Equity ISAs continue to outperform cash alternatives over any rolling ten-year period in modern market history, though short-term volatility remains a genuine concern for risk-averse investors. The key decision most investors face is whether to manage a portfolio themselves or use a managed platform.</p>
-
   <p>Index funds have democratised investing over the past decade. By tracking a market index rather than attempting to beat it, they offer broad diversification at a fraction of the cost of actively managed funds. Research consistently shows that over fifteen-year periods, over 90% of active funds fail to outperform their benchmark index after fees.</p>
-
   <p>The psychology of investing matters as much as the strategy itself. Investors who check their portfolios daily tend to make more reactive decisions, selling during downturns and missing the subsequent recovery. Automating contributions and reviewing only quarterly has been shown to improve long-term returns significantly.</p>
-
   <p>For 2024, financial planners broadly recommend ensuring ISA contributions are made early in the tax year rather than in the March rush, to maximise the compounding benefit of the full-year tax-free growth period.</p>
 </body>
 </html>`;
@@ -81,18 +62,10 @@ module.exports = function handler(req, res) {
       { strategy: 'auto' }
     );
 
-    // Remove the debug notice entirely from bot-facing HTML
-    // Human notice stays for humans. Bots get clean HTML with no fingerprints.
-    // Detection info is logged server-side only — never exposed in the response.
-    const botHTML = injectionResult.html.replace(
-      '<div class="notice">\n    HUMAN VIEW — original unmodified page\n  </div>',
-      ''
-    );
-
     res.setHeader('X-Bot-Detected', 'true');
     res.setHeader('X-Bot-Platform', detection.platform || 'unknown');
     res.setHeader('X-Crawler-Type', detection.crawlerType || 'unknown');
-    res.status(200).send(botHTML);
+    res.status(200).send(injectionResult.html);
 
   } else {
 
