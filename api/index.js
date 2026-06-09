@@ -1,7 +1,7 @@
 const { analyseRequest } = require('../lib/combined-detector');
 const { injectSponsoredContent } = require('../lib/injector');
 const { detectAIReferrer } = require('../lib/referrer');
-const { kvGet, kvIncr, kvListPush } = require('../lib/kv');
+const { kvGet, kvIncr, kvListPush, kvJsonUpdate } = require('../lib/kv');
 const config = require('../lib/config');
 
 const ORIGINAL_PAGE = `<!DOCTYPE html>
@@ -83,6 +83,11 @@ module.exports = async function handler(req, res) {
         kvIncr(`stats:impressions:platform:${detection.platform || 'unknown'}`),
         kvIncr(`stats:impressions:type:${detection.crawlerType || 'unknown'}`),
         kvIncr(`stats:impressions:date:${today}`),
+        kvJsonUpdate('stats:platform_totals', (totals) => {
+          const p = detection.platform || 'unknown';
+          totals[p] = (totals[p] || 0) + 1;
+          return totals;
+        }),
         kvListPush('log:recent', {
           time: new Date().toISOString(),
           ip,

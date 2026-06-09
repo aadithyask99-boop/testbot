@@ -98,8 +98,8 @@ module.exports = function handler(req, res) {
   <div class="grid" id="adv-cards"><div class="empty">Loading…</div></div>
   <section>
     <h2>Performance by AI Platform</h2>
-    <table><thead><tr><th>Platform</th><th>Impressions</th><th>Publisher Clicks</th><th>Ad Clicks</th><th>CTR</th></tr></thead>
-    <tbody id="adv-platforms"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody></table>
+    <table><thead><tr><th>Platform</th><th>Impressions</th><th>Ad Clicks</th><th>Ad CTR</th></tr></thead>
+    <tbody id="adv-platforms"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody></table>
   </section>
   <section>
     <h2>Search Queries That Drove Clicks</h2>
@@ -155,7 +155,7 @@ module.exports = function handler(req, res) {
 </main>
 
 <script>
-let opData = null, advData = null, pubData = null;
+let opData = null, advData = null, pubData = null, formLoaded = false;
 
 function switchTab(id, btn) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -232,20 +232,31 @@ function renderAdvertiser() {
   ].map(([l,v,s,c]) => \`<div class="card"><div class="lbl">\${l}</div><div class="val \${c}">\${v}</div><div class="sub">\${s}</div></div>\`).join('');
 
   const pt = imp.byPlatform || [];
-  document.getElementById('adv-platforms').innerHTML = pt.length ? pt.filter(p=>p.impressions>0).map(p => \`<tr>
-    <td>\${p.platform}</td>
-    <td>\${fmt(p.impressions)}</td>
-    <td>\${fmt(p.pubClicks)} \${p.pubClicks > 0 ? \`<small style="color:#aaa">(\${p.ctr})</small>\` : ''}</td>
-    <td>\${fmt((pc.byPlatform||{})[p.platform]||0)}</td>
-    <td>\${p.ctr}</td>
-  </tr>\`).join('') : '<tr><td colspan="5" class="empty">No impressions yet</td></tr>';
+  const advClickByPlatform = {};
+  (ac.recentClicks||[]).forEach(e => {
+    if (!e || !e.advertiser) return;
+    advClickByPlatform[e.advertiser] = (advClickByPlatform[e.advertiser]||0)+1;
+  });
+  document.getElementById('adv-platforms').innerHTML = pt.length ? pt.filter(p=>p.impressions>0).map(p => {
+    const adCl = (pc.byPlatform||{})[p.platform] || 0;
+    const adCtr = p.impressions > 0 ? (adCl/p.impressions*100).toFixed(1)+'%' : '—';
+    return \`<tr>
+      <td>\${p.platform}</td>
+      <td>\${fmt(p.impressions)}</td>
+      <td>\${fmt(adCl)}</td>
+      <td>\${adCtr}</td>
+    </tr>\`;
+  }).join('') : '<tr><td colspan="4" class="empty">No impressions yet</td></tr>';
 
   const q = (pc.queries || []);
   document.getElementById('adv-queries').innerHTML = q.length ? q.map(q => \`<tr>
     <td>\${q.query}</td><td>\${q.platform}</td><td>\${ago(q.time)}</td>
   </tr>\`).join('') : '<tr><td colspan="3" class="empty">Queries appear when Perplexity or Google clicks are tracked</td></tr>';
 
-  loadCurrentCreative();
+  if (!formLoaded) {
+    loadCurrentCreative();
+    formLoaded = true;
+  }
 }
 
 function renderPublisher() {

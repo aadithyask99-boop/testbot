@@ -24,6 +24,7 @@ module.exports = async function handler(req, res) {
       recentPubClickLogs,
       recentAdvClickLogs,
       currentCreative,
+      platformTotals,
     ] = await Promise.all([
       kvGet('stats:impressions:total'),
       kvGet(`stats:impressions:date:${today}`),
@@ -37,6 +38,7 @@ module.exports = async function handler(req, res) {
       kvListGet('log:clicks', 20),
       kvListGet('log:adclicks', 20),
       kvGet('creative:finance_investing'),
+      kvGet('stats:platform_totals'),
     ]);
 
     const impressions  = n(totalImpressions);
@@ -46,12 +48,15 @@ module.exports = async function handler(req, res) {
     const training     = n(trainingCount);
     const revenueGBP   = ((retrieval * 18) + (training * 5)) / 1000;
 
-    // Compute platform breakdown from log (covers ALL platforms)
-    const platformCounts = {};
-    (recentBotLogs || []).forEach(e => {
-      if (!e || !e.platform) return;
-      platformCounts[e.platform] = (platformCounts[e.platform] || 0) + 1;
-    });
+    // Platform breakdown — use accurate KV totals, fall back to log
+    const platformCounts = platformTotals || {};
+    // If no totals stored yet, compute from log as fallback
+    if (Object.keys(platformCounts).length === 0) {
+      (recentBotLogs || []).forEach(e => {
+        if (!e || !e.platform) return;
+        platformCounts[e.platform] = (platformCounts[e.platform] || 0) + 1;
+      });
+    }
 
     // Compute pub click platform breakdown from log
     const pubClickByPlatform = {};
