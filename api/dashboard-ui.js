@@ -98,11 +98,11 @@ module.exports = function handler(req, res) {
   <div class="grid" id="adv-cards"><div class="empty">Loading…</div></div>
   <section>
     <h2>Performance by AI Platform</h2>
-    <table><thead><tr><th>Platform</th><th>Impressions</th><th>Ad Clicks</th><th>Ad CTR</th></tr></thead>
-    <tbody id="adv-platforms"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody></table>
+    <table><thead><tr><th>Platform</th><th>Impressions</th><th>Total Visits</th><th>Unique Visits</th><th>CTR</th></tr></thead>
+    <tbody id="adv-platforms"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody></table>
   </section>
   <section>
-    <h2>Search Queries That Drove Clicks</h2>
+    <h2>Search Queries That Drove AI-Driven Visits</h2>
     <table><thead><tr><th>Query</th><th>Platform</th><th>When</th></tr></thead>
     <tbody id="adv-queries"><tr><td colspan="3" class="empty">No query data yet</td></tr></tbody></table>
   </section>
@@ -180,7 +180,8 @@ function renderOverview() {
   const r = opData.revenue || {};
   document.getElementById('ov-cards').innerHTML = [
     ['Total Impressions', fmt(s.totalImpressions), s.todayImpressions + ' today', ''],
-    ['Publisher Clicks', fmt(s.pubClicks), s.todayPubClicks + ' today', 'blue'],
+    ['Total Visits (AI)', fmt(s.pubClicks), s.todayPubClicks + ' today', 'blue'],
+    ['Unique Visits (AI)', fmt(s.uniqueClicks || 0), s.todayUniqueClicks + ' today', 'blue'],
     ['Ad Clicks', fmt(s.advClicks), s.todayAdvClicks + ' today', 'purple'],
     ['Pub CTR', s.pubCTR || '0%', 'pub clicks / impressions', 'green'],
     ['Ad CTR', s.advCTR || '0%', 'ad clicks / impressions', ''],
@@ -226,8 +227,8 @@ function renderAdvertiser() {
 
   document.getElementById('adv-cards').innerHTML = [
     ['Impressions', fmt(imp.total), imp.today + ' today', ''],
-    ['Publisher Clicks', fmt(pc.total), pc.overallCTR + ' CTR', 'blue'],
-    ['Ad Clicks', fmt(ac.total), ac.overallCTR + ' CTR', 'purple'],
+    ['Total AI Visits', fmt(pc.total), pc.overallCTR + ' CTR', 'blue'],
+    ['Unique AI Visits', fmt(pc.unique || 0), pc.uniqueCTR + ' unique CTR', 'green'],
     ['Est. Spend', '£' + sp.estimatedTotalGBP, '£' + sp.cpmGBP + ' CPM', ''],
   ].map(([l,v,s,c]) => \`<div class="card"><div class="lbl">\${l}</div><div class="val \${c}">\${v}</div><div class="sub">\${s}</div></div>\`).join('');
 
@@ -274,7 +275,8 @@ function renderPublisher() {
   document.getElementById('pub-cards').innerHTML = [
     ['Impressions', fmt(t.totalImpressions), t.today + ' today', ''],
     ['Your Earnings', '£' + e.estimatedGBP, '60% share', 'green'],
-    ['Visitors from AI', fmt(cl.total), cl.overallCTR + ' CTR', 'blue'],
+    ['Total AI Visits', fmt(cl.total), cl.overallCTR + ' CTR', 'blue'],
+    ['Unique AI Visits', fmt(cl.unique || 0), cl.uniqueCTR + ' unique CTR', 'green'],
     ['Gross Revenue', '£' + e.grossGBP, 'before split', ''],
   ].map(([l,v,s,c]) => \`<div class="card"><div class="lbl">\${l}</div><div class="val \${c}">\${v}</div><div class="sub">\${s}</div></div>\`).join('');
 
@@ -363,7 +365,7 @@ async function loadData() {
 }
 
 loadData();
-setInterval(loadData, 30000);
+setInterval(loadData, 5000);
 </script>
 </body>
 </html>`);

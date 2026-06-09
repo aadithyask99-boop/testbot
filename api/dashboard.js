@@ -25,6 +25,10 @@ module.exports = async function handler(req, res) {
       recentAdvClickLogs,
       currentCreative,
       platformTotals,
+      clickPlatformTotals,
+      uniqueClicksTotal,
+      todayUniqueClicks,
+      uniqueClickPlatformTotals,
     ] = await Promise.all([
       kvGet('stats:impressions:total'),
       kvGet(`stats:impressions:date:${today}`),
@@ -39,10 +43,15 @@ module.exports = async function handler(req, res) {
       kvListGet('log:adclicks', 20),
       kvGet('creative:finance_investing'),
       kvGet('stats:platform_totals'),
+      kvGet('stats:click_platform_totals'),
+      kvGet('stats:unique_clicks:total'),
+      kvGet(`stats:unique_clicks:date:${today}`),
+      kvGet('stats:unique_click_platform_totals'),
     ]);
 
     const impressions  = n(totalImpressions);
     const pubClicks    = n(totalPubClicks);
+    const uniqueClicks = n(uniqueClicksTotal);
     const advClicks    = n(totalAdvClicks);
     const retrieval    = n(retrievalCount);
     const training     = n(trainingCount);
@@ -58,12 +67,14 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    // Compute pub click platform breakdown from log
-    const pubClickByPlatform = {};
-    (recentPubClickLogs || []).forEach(e => {
-      if (!e || !e.platform) return;
-      pubClickByPlatform[e.platform] = (pubClickByPlatform[e.platform] || 0) + 1;
-    });
+    // Per-platform click breakdown — accurate KV totals, fallback to log
+    const pubClickByPlatform = clickPlatformTotals || {};
+    if (Object.keys(pubClickByPlatform).length === 0) {
+      (recentPubClickLogs || []).forEach(e => {
+        if (!e || !e.platform) return;
+        pubClickByPlatform[e.platform] = (pubClickByPlatform[e.platform] || 0) + 1;
+      });
+    }
 
     // Extract queries from pub clicks
     const queries = (recentPubClickLogs || [])
@@ -111,8 +122,12 @@ module.exports = async function handler(req, res) {
           total:       pubClicks,
           today:       n(todayPubClicks),
           description: 'Humans who visited the publisher page from an AI platform citation',
+          unique:      uniqueClicks,
+          todayUnique: n(todayUniqueClicks),
           overallCTR:  pct(pubClicks, impressions),
+          uniqueCTR:   pct(uniqueClicks, impressions),
           byPlatform:  pubClickByPlatform,
+          uniqueByPlatform: uniqueClickPlatformTotals || {},
           queries,
         },
         // Advertiser clicks = humans who clicked your ad link in the content
@@ -156,7 +171,9 @@ module.exports = async function handler(req, res) {
           total:       pubClicks,
           today:       n(todayPubClicks),
           description: 'Humans landing on your page after an AI cited it',
+          unique:      uniqueClicks,
           overallCTR:  pct(pubClicks, impressions),
+          uniqueCTR:   pct(uniqueClicks, impressions),
         },
         recentVisits: (recentBotLogs || []).slice(0, 10),
       });
@@ -171,8 +188,10 @@ module.exports = async function handler(req, res) {
         totalImpressions:  impressions,
         todayImpressions:  n(todayImpressions),
         pubClicks,
+        uniqueClicks,
         advClicks,
         todayPubClicks:    n(todayPubClicks),
+        todayUniqueClicks: n(todayUniqueClicks),
         todayAdvClicks:    n(todayAdvClicks),
         pubCTR:            pct(pubClicks, impressions),
         advCTR:            pct(advClicks, impressions),

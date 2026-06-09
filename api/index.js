@@ -1,7 +1,7 @@
 const { analyseRequest } = require('../lib/combined-detector');
 const { injectSponsoredContent } = require('../lib/injector');
 const { detectAIReferrer } = require('../lib/referrer');
-const { kvGet, kvIncr, kvListPush, kvJsonUpdate } = require('../lib/kv');
+const { kvGet, kvSet, kvIncr, kvListPush, kvJsonUpdate } = require('../lib/kv');
 const config = require('../lib/config');
 
 const ORIGINAL_PAGE = `<!DOCTYPE html>
@@ -113,20 +113,46 @@ module.exports = async function handler(req, res) {
     const aiClick = detectAIReferrer(referer);
 
     if (aiClick) {
-      // Human arrived from an AI platform citation — log the click
       try {
-        await Promise.all([
+        // Check if this IP has clicked in the last 30 minutes (session dedup)
+        const sessionKey = `session:click:${ip.split(',')[0].trim()}`;
+        const sessionExists = await kvGet(sessionKey).catch(() => null);
+        const isUnique = !sessionExists;
+
+        const ops = [
+          // Always count total clicks
           kvIncr('stats:clicks:total'),
           kvIncr(`stats:clicks:platform:${aiClick.platform}`),
           kvIncr(`stats:clicks:date:${today}`),
+          kvJsonUpdate('stats:click_platform_totals', (totals) => {
+            const p = aiClick.platform;
+            totals[p] = (totals[p] || 0) + 1;
+            return totals;
+          }),
           kvListPush('log:clicks', {
             time: new Date().toISOString(),
             ip,
             platform: aiClick.platform,
             query: aiClick.query,
             referrer: aiClick.referrerUrl.substring(0, 200),
+            unique: isUnique,
           }, 100),
-        ]);
+        ];
+
+        if (isUnique) {
+          // Mark this IP as seen for 30 minutes (1800 seconds)
+          ops.push(kvSet(sessionKey, '1', 1800));
+          // Count unique clicks separately
+          ops.push(kvIncr('stats:unique_clicks:total'));
+          ops.push(kvIncr(`stats:unique_clicks:date:${today}`));
+          ops.push(kvJsonUpdate('stats:unique_click_platform_totals', (totals) => {
+            const p = aiClick.platform;
+            totals[p] = (totals[p] || 0) + 1;
+            return totals;
+          }));
+        }
+
+        await Promise.all(ops);
       } catch (e) {}
     }
 
