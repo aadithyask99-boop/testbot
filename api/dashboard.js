@@ -1,4 +1,4 @@
-const { kvGet, kvSet, kvListGet } = require('../lib/kv');
+const { kvGet, kvSet, kvListGet, kvHashGetAll } = require('../lib/kv');
 
 module.exports = async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json');
@@ -45,9 +45,9 @@ module.exports = async function handler(req, res) {
       kvListGet('log:clicks', 20),
       kvListGet('log:adclicks', 20),
       kvGet('creative:finance_investing'),
-      kvGet('stats:platform_totals'),
-      kvGet('stats:click_platform_totals'),
-      kvGet('stats:unique_click_platform_totals'),
+      kvHashGetAll('stats:impr_by_platform'),
+      kvHashGetAll('stats:click_by_platform'),
+      kvHashGetAll('stats:uniq_click_by_platform'),
     ]);
 
     // Core counts

@@ -130,9 +130,7 @@ var html = '<!DOCTYPE html>' +
 '    card("Retrieval Crawlers",fmt(s.retrieval),"15-25 CPM","")+' +
 '    card("Gross Revenue","£"+r.grossGBP,"Publisher: £"+r.publisherShare60,"")' +
 '  );' +
-'  var bots=(opData.recentImpressions||[]).map(function(e){return{time:e.time,platform:e.platform,detail:e.crawlerType||"—",_t:"impression"};});' +
-'  var pclk=(opData.recentPubClicks||[]).map(function(e){return{time:e.time,platform:e.platform,detail:e.query||"—",_t:"pubclick"};});' +
-'  var all=[].concat(bots,pclk).sort(function(a,b){return new Date(b.time)-new Date(a.time);}).slice(0,15);' +
+'  var all=(opData.recentImpressions||[]).slice(0,15);' +
 '  set("ov-activity",all.length?all.map(function(e){' +
 '    return "<tr><td>"+ago(e.time)+"</td><td>"+tag(e._t==="impression"?"impression":"visit",e._t)+"</td><td>"+(e.platform||"—")+"</td><td style=\'color:#aaa;font-size:12px\'>"+(e.detail||"—")+"</td></tr>";' +
 '  }).join(""):"<tr><td colspan=\'4\' class=\'empty\'>No activity yet</td></tr>");' +

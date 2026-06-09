@@ -1,7 +1,7 @@
 const { analyseRequest } = require('../lib/combined-detector');
 const { injectSponsoredContent } = require('../lib/injector');
 const { detectAIReferrer } = require('../lib/referrer');
-const { kvGet, kvSet, kvIncr, kvListPush, kvJsonUpdate } = require('../lib/kv');
+const { kvGet, kvSet, kvIncr, kvListPush, kvJsonUpdate, kvHashIncr } = require('../lib/kv');
 const config = require('../lib/config');
 
 const ORIGINAL_PAGE = `<!DOCTYPE html>
@@ -83,11 +83,7 @@ module.exports = async function handler(req, res) {
         kvIncr(`stats:impressions:platform:${detection.platform || 'unknown'}`),
         kvIncr(`stats:impressions:type:${detection.crawlerType || 'unknown'}`),
         kvIncr(`stats:impressions:date:${today}`),
-        kvJsonUpdate('stats:platform_totals', (totals) => {
-          const p = detection.platform || 'unknown';
-          totals[p] = (totals[p] || 0) + 1;
-          return totals;
-        }),
+        kvHashIncr('stats:impr_by_platform', detection.platform || 'unknown'),
         kvListPush('log:recent', {
           time: new Date().toISOString(),
           ip,
@@ -124,11 +120,7 @@ module.exports = async function handler(req, res) {
           kvIncr('stats:clicks:total'),
           kvIncr(`stats:clicks:platform:${aiClick.platform}`),
           kvIncr(`stats:clicks:date:${today}`),
-          kvJsonUpdate('stats:click_platform_totals', (totals) => {
-            const p = aiClick.platform;
-            totals[p] = (totals[p] || 0) + 1;
-            return totals;
-          }),
+          kvHashIncr('stats:click_by_platform', aiClick.platform),
           kvListPush('log:clicks', {
             time: new Date().toISOString(),
             ip,
