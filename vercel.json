@@ -12,6 +12,7 @@
     { "src": "/health",           "dest": "/api/health.js" },
     { "src": "/dashboard",        "dest": "/api/dashboard.js" },
     { "src": "/ui",               "dest": "/api/dashboard-ui.js" },
+    { "src": "/click",             "dest": "/api/click.js" },
     { "src": "/sdk.js",           "dest": "/api/sdk.js" },
     { "src": "/ad",               "dest": "/api/ad.js" },
     { "src": "/admin/seed",       "dest": "/api/admin.js" },
