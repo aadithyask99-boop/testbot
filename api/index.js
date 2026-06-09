@@ -63,9 +63,17 @@ module.exports = async function handler(req, res) {
   if (detection.isBot && !detection.cloakingRisk) {
 
     let sponsoredText = config.sponsored.text;
+    let sponsoredLink = config.sponsored.link || '';
+    let sponsoredLinkText = config.sponsored.linkText || 'Learn more';
+    let advSlug = config.sponsored.advSlug || 'default';
     try {
       const stored = await kvGet(`creative:${config.sponsored.category}`);
-      if (stored && stored.text) sponsoredText = stored.text;
+      if (stored && stored.text) {
+        sponsoredText = stored.text;
+        sponsoredLink = stored.link || '';
+        sponsoredLinkText = stored.linkText || 'Learn more';
+        advSlug = stored.advSlug || 'default';
+      }
     } catch (e) {}
 
     // Log impression — fire and forget, never breaks the page
@@ -87,7 +95,7 @@ module.exports = async function handler(req, res) {
       ]);
     } catch (e) {}
 
-    const result = injectSponsoredContent(ORIGINAL_PAGE, sponsoredText, { strategy: 'auto' });
+    const result = injectSponsoredContent(ORIGINAL_PAGE, sponsoredText, { strategy: 'auto', link: sponsoredLink, linkText: sponsoredLinkText, advSlug });
     res.setHeader('X-Bot-Detected', 'true');
     res.setHeader('X-Bot-Platform', detection.platform || 'unknown');
     res.status(200).send(result.html);
