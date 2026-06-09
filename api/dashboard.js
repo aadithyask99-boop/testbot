@@ -4,114 +4,193 @@ module.exports = async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Access-Control-Allow-Origin', '*');
 
+  const view = req.query && req.query.view;
+
   try {
     const today = new Date().toISOString().split('T')[0];
 
+    // Fetch all stats in parallel
     const [
-      // Impressions
       totalImpressions,
-      perplexityImpressions,
-      chatgptImpressions,
-      claudeImpressions,
-      googleAgentImpressions,
-      unknownImpressions,
+      todayImpressions,
       retrievalCount,
       trainingCount,
-      todayImpressions,
-      recentBotLogs,
+      // Impressions by platform
+      pImpr,   // Perplexity
+      cgImpr,  // ChatGPT
+      clImpr,  // Claude
+      gaImpr,  // Google Agent
+      grImpr,  // Grok
+      ukImpr,  // unknown
       // Clicks
       totalClicks,
-      perplexityClicks,
-      chatgptClicks,
-      googleClicks,
-      bingClicks,
       todayClicks,
+      pClicks,
+      cgClicks,
+      gClicks,
+      bClicks,
+      // Logs
+      recentBotLogs,
       recentClickLogs,
+      // Current creative
+      currentCreative,
     ] = await Promise.all([
       kvGet('stats:impressions:total'),
+      kvGet(`stats:impressions:date:${today}`),
+      kvGet('stats:impressions:type:retrieval'),
+      kvGet('stats:impressions:type:training'),
       kvGet('stats:impressions:platform:Perplexity'),
       kvGet('stats:impressions:platform:ChatGPT Browse'),
       kvGet('stats:impressions:platform:Claude (Anthropic retrieval)'),
       kvGet('stats:impressions:platform:Google Agent (Gemini retrieval)'),
+      kvGet('stats:impressions:platform:xAI Grok'),
       kvGet('stats:impressions:platform:unknown'),
-      kvGet('stats:impressions:type:retrieval'),
-      kvGet('stats:impressions:type:training'),
-      kvGet(`stats:impressions:date:${today}`),
-      kvListGet('log:recent', 20),
       kvGet('stats:clicks:total'),
+      kvGet(`stats:clicks:date:${today}`),
       kvGet('stats:clicks:platform:Perplexity'),
       kvGet('stats:clicks:platform:ChatGPT'),
       kvGet('stats:clicks:platform:Google'),
       kvGet('stats:clicks:platform:Bing'),
-      kvGet(`stats:clicks:date:${today}`),
+      kvListGet('log:recent', 20),
       kvListGet('log:clicks', 20),
+      kvGet('creative:finance_investing'),
     ]);
 
-    const impressions = parseInt(totalImpressions) || 0;
-    const clicks = parseInt(totalClicks) || 0;
-    const retrieval = parseInt(retrievalCount) || 0;
-    const training = parseInt(trainingCount) || 0;
+    // Helpers
+    const n = v => parseInt(v) || 0;
+    const pct = (c, i) => i === 0 ? '0.0%' : (n(c) / i * 100).toFixed(1) + '%';
+    const cpm = v => v === 'high' ? 18 : v === 'medium' ? 10 : 5;
 
-    // Revenue estimate: retrieval at £18 CPM, training at £5 CPM
-    const estimatedRevenueGBP = ((retrieval * 18) + (training * 5)) / 1000;
+    const impressions    = n(totalImpressions);
+    const clicks         = n(totalClicks);
+    const retrieval      = n(retrievalCount);
+    const training       = n(trainingCount);
+    const revenueGBP     = ((retrieval * 18) + (training * 5)) / 1000;
 
-    // CTR per platform — safe divide
-    function ctr(c, i) {
-      if (!i || i === 0) return '0.0%';
-      return ((parseInt(c) || 0) / i * 100).toFixed(1) + '%';
+    // Platform impressions
+    const byPlatformImpressions = {
+      'Perplexity':      n(pImpr),
+      'ChatGPT':         n(cgImpr),
+      'Claude':          n(clImpr),
+      'Google Agent':    n(gaImpr),
+      'Grok':            n(grImpr),
+      'Unknown':         n(ukImpr),
+    };
+
+    // Platform clicks
+    const byPlatformClicks = {
+      'Perplexity':  n(pClicks),
+      'ChatGPT':     n(cgClicks),
+      'Google':      n(gClicks),
+      'Bing':        n(bClicks),
+    };
+
+    // Per-platform CTR (only where we have both signals)
+    const platformCTR = {
+      'Perplexity': pct(pClicks, n(pImpr)),
+      'ChatGPT':    pct(cgClicks, n(cgImpr)),
+    };
+
+    // Extract unique queries from click logs
+    const queries = recentClickLogs
+      .filter(c => c && c.query)
+      .map(c => ({ query: c.query, platform: c.platform, time: c.time }))
+      .slice(0, 10);
+
+    // --------------------------------------------------------
+    // ADVERTISER VIEW — /dashboard?view=advertiser
+    // --------------------------------------------------------
+    if (view === 'advertiser') {
+      return res.status(200).json({
+        _view: 'advertiser',
+        _description: 'Campaign performance from advertiser perspective',
+
+        campaign: {
+          advertiser: currentCreative ? currentCreative.advertiser : 'Not set',
+          category:   currentCreative ? currentCreative.category   : 'Not set',
+          cpmGBP:     currentCreative ? currentCreative.cpmGBP     : 0,
+          updatedAt:  currentCreative ? currentCreative.updatedAt  : null,
+        },
+
+        reach: {
+          totalImpressions: impressions,
+          todayImpressions: n(todayImpressions),
+          description: 'Number of times your brand message was served to an AI crawler',
+          byAIModel: Object.entries(byPlatformImpressions)
+            .filter(([, v]) => v > 0)
+            .map(([platform, count]) => ({ platform, impressions: count }))
+            .sort((a, b) => b.impressions - a.impressions),
+        },
+
+        engagement: {
+          totalClicks: clicks,
+          todayClicks: n(todayClicks),
+          description: 'Number of humans who clicked through to your page from an AI platform citation',
+          overallCTR: pct(clicks, impressions),
+          byAIModel: Object.entries(byPlatformClicks)
+            .filter(([, v]) => v > 0)
+            .map(([platform, count]) => ({
+              platform,
+              clicks: count,
+              ctr: platformCTR[platform] || 'n/a',
+            }))
+            .sort((a, b) => b.clicks - a.clicks),
+        },
+
+        searchQueries: {
+          description: 'Queries that brought users to your page from AI platforms',
+          recentQueries: queries,
+        },
+
+        spend: {
+          estimatedTotalGBP: parseFloat(revenueGBP.toFixed(4)),
+          cpmGBP: currentCreative ? currentCreative.cpmGBP : 18,
+          model: 'CPM charged on retrieval crawler impressions only',
+        },
+
+        recentActivity: recentClickLogs.slice(0, 5).map(c => ({
+          time: c.time,
+          event: 'click',
+          platform: c.platform,
+          query: c.query || null,
+        })),
+      });
     }
 
-    const pImpressions = parseInt(perplexityImpressions) || 0;
-    const cImpressions = parseInt(chatgptImpressions) || 0;
-    const pClicks = parseInt(perplexityClicks) || 0;
-    const cClicks = parseInt(chatgptClicks) || 0;
+    // --------------------------------------------------------
+    // PUBLISHER VIEW — /dashboard (default)
+    // --------------------------------------------------------
+    return res.status(200).json({
+      _view: 'publisher',
+      _description: 'Revenue and traffic data for publisher',
+      _advertiserView: 'Add ?view=advertiser for advertiser report',
 
-    res.status(200).json({
-      publisher: 'Finance Weekly Demo',
-      date: today,
-
-      impressions: {
-        total: impressions,
-        today: parseInt(todayImpressions) || 0,
-        retrieval,
-        training,
-        byPlatform: {
-          Perplexity: pImpressions,
-          ChatGPT: cImpressions,
-          Claude: parseInt(claudeImpressions) || 0,
-          GoogleAgent: parseInt(googleAgentImpressions) || 0,
-          unknown: parseInt(unknownImpressions) || 0,
-        },
-      },
-
-      clicks: {
-        total: clicks,
-        today: parseInt(todayClicks) || 0,
-        byPlatform: {
-          Perplexity: pClicks,
-          ChatGPT: cClicks,
-          Google: parseInt(googleClicks) || 0,
-          Bing: parseInt(bingClicks) || 0,
-        },
-      },
-
-      ctr: {
-        overall: ctr(clicks, impressions),
-        byPlatform: {
-          Perplexity: ctr(pClicks, pImpressions),
-          ChatGPT: ctr(cClicks, cImpressions),
-        },
-        note: 'CTR = clicks from AI platform referrer ÷ bot impressions. Perplexity and ChatGPT only where both signals are tracked.',
+      summary: {
+        totalImpressions: impressions,
+        todayImpressions: n(todayImpressions),
+        totalClicks: clicks,
+        todayClicks: n(todayClicks),
+        overallCTR: pct(clicks, impressions),
+        retrievalCrawlers: retrieval,
+        trainingCrawlers: training,
       },
 
       revenue: {
-        estimatedGBP: parseFloat(estimatedRevenueGBP.toFixed(4)),
-        publisherShare60pct: parseFloat((estimatedRevenueGBP * 0.6).toFixed(4)),
-        platformShare40pct: parseFloat((estimatedRevenueGBP * 0.4).toFixed(4)),
+        estimatedGBP: parseFloat(revenueGBP.toFixed(4)),
+        publisherShare60pct: parseFloat((revenueGBP * 0.6).toFixed(4)),
+        platformShare40pct: parseFloat((revenueGBP * 0.4).toFixed(4)),
       },
 
-      recentImpressions: recentBotLogs,
-      recentClicks: recentClickLogs,
+      impressionsByPlatform: byPlatformImpressions,
+      clicksByPlatform: byPlatformClicks,
+
+      ctr: {
+        overall: pct(clicks, impressions),
+        byPlatform: platformCTR,
+      },
+
+      recentImpressions: recentBotLogs.slice(0, 10),
+      recentClicks: recentClickLogs.slice(0, 10),
     });
 
   } catch (e) {
