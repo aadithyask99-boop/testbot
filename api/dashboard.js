@@ -4,98 +4,80 @@ module.exports = async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Access-Control-Allow-Origin', '*');
 
-  const view = req.query && req.query.view;
+  const view  = req.query && req.query.view;
 
   try {
     const today = new Date().toISOString().split('T')[0];
+    const n = v => parseInt(v) || 0;
+    const pct = (c, i) => !i ? '0.0%' : (n(c) / i * 100).toFixed(1) + '%';
 
-    // Fetch all stats in parallel
     const [
       totalImpressions,
       todayImpressions,
       retrievalCount,
       trainingCount,
-      // Impressions by platform
-      pImpr,   // Perplexity
-      cgImpr,  // ChatGPT
-      clImpr,  // Claude
-      gaImpr,  // Google Agent
-      grImpr,  // Grok
-      ukImpr,  // unknown
-      // Clicks
-      totalClicks,
-      todayClicks,
-      pClicks,
-      cgClicks,
-      gClicks,
-      bClicks,
-      // Logs
+      totalPubClicks,       // humans landing from AI citation
+      todayPubClicks,
+      totalAdvClicks,       // humans clicking advertiser link
+      todayAdvClicks,
       recentBotLogs,
-      recentClickLogs,
-      // Current creative
+      recentPubClickLogs,
+      recentAdvClickLogs,
       currentCreative,
     ] = await Promise.all([
       kvGet('stats:impressions:total'),
       kvGet(`stats:impressions:date:${today}`),
       kvGet('stats:impressions:type:retrieval'),
       kvGet('stats:impressions:type:training'),
-      kvGet('stats:impressions:platform:Perplexity'),
-      kvGet('stats:impressions:platform:ChatGPT Browse'),
-      kvGet('stats:impressions:platform:Claude (Anthropic retrieval)'),
-      kvGet('stats:impressions:platform:Google Agent (Gemini retrieval)'),
-      kvGet('stats:impressions:platform:xAI Grok'),
-      kvGet('stats:impressions:platform:unknown'),
       kvGet('stats:clicks:total'),
       kvGet(`stats:clicks:date:${today}`),
-      kvGet('stats:clicks:platform:Perplexity'),
-      kvGet('stats:clicks:platform:ChatGPT'),
-      kvGet('stats:clicks:platform:Google'),
-      kvGet('stats:clicks:platform:Bing'),
-      kvListGet('log:recent', 20),
+      kvGet('stats:adclicks:total'),
+      kvGet(`stats:adclicks:date:${today}`),
+      kvListGet('log:recent', 100),
       kvListGet('log:clicks', 20),
+      kvListGet('log:adclicks', 20),
       kvGet('creative:finance_investing'),
     ]);
 
-    // Helpers
-    const n = v => parseInt(v) || 0;
-    const pct = (c, i) => i === 0 ? '0.0%' : (n(c) / i * 100).toFixed(1) + '%';
-    const cpm = v => v === 'high' ? 18 : v === 'medium' ? 10 : 5;
+    const impressions  = n(totalImpressions);
+    const pubClicks    = n(totalPubClicks);
+    const advClicks    = n(totalAdvClicks);
+    const retrieval    = n(retrievalCount);
+    const training     = n(trainingCount);
+    const revenueGBP   = ((retrieval * 18) + (training * 5)) / 1000;
 
-    const impressions    = n(totalImpressions);
-    const clicks         = n(totalClicks);
-    const retrieval      = n(retrievalCount);
-    const training       = n(trainingCount);
-    const revenueGBP     = ((retrieval * 18) + (training * 5)) / 1000;
+    // Compute platform breakdown from log (covers ALL platforms)
+    const platformCounts = {};
+    (recentBotLogs || []).forEach(e => {
+      if (!e || !e.platform) return;
+      platformCounts[e.platform] = (platformCounts[e.platform] || 0) + 1;
+    });
 
-    // Platform impressions
-    const byPlatformImpressions = {
-      'Perplexity':      n(pImpr),
-      'ChatGPT':         n(cgImpr),
-      'Claude':          n(clImpr),
-      'Google Agent':    n(gaImpr),
-      'Grok':            n(grImpr),
-      'Unknown':         n(ukImpr),
-    };
+    // Compute pub click platform breakdown from log
+    const pubClickByPlatform = {};
+    (recentPubClickLogs || []).forEach(e => {
+      if (!e || !e.platform) return;
+      pubClickByPlatform[e.platform] = (pubClickByPlatform[e.platform] || 0) + 1;
+    });
 
-    // Platform clicks
-    const byPlatformClicks = {
-      'Perplexity':  n(pClicks),
-      'ChatGPT':     n(cgClicks),
-      'Google':      n(gClicks),
-      'Bing':        n(bClicks),
-    };
-
-    // Per-platform CTR (only where we have both signals)
-    const platformCTR = {
-      'Perplexity': pct(pClicks, n(pImpr)),
-      'ChatGPT':    pct(cgClicks, n(cgImpr)),
-    };
-
-    // Extract unique queries from click logs
-    const queries = recentClickLogs
+    // Extract queries from pub clicks
+    const queries = (recentPubClickLogs || [])
       .filter(c => c && c.query)
       .map(c => ({ query: c.query, platform: c.platform, time: c.time }))
       .slice(0, 10);
+
+    // Build platform table with both impressions + pub clicks + CTR
+    const allPlatforms = [...new Set([
+      ...Object.keys(platformCounts),
+      ...Object.keys(pubClickByPlatform),
+    ])].sort((a, b) => (platformCounts[b] || 0) - (platformCounts[a] || 0));
+
+    const platformTable = allPlatforms.map(p => ({
+      platform:    p,
+      impressions: platformCounts[p] || 0,
+      pubClicks:   pubClickByPlatform[p] || 0,
+      ctr:         pct(pubClickByPlatform[p] || 0, platformCounts[p] || 0),
+    }));
 
     // --------------------------------------------------------
     // ADVERTISER VIEW — /dashboard?view=advertiser
@@ -103,94 +85,104 @@ module.exports = async function handler(req, res) {
     if (view === 'advertiser') {
       return res.status(200).json({
         _view: 'advertiser',
-        _description: 'Campaign performance from advertiser perspective',
-
         campaign: {
           advertiser: currentCreative ? currentCreative.advertiser : 'Not set',
-          category:   currentCreative ? currentCreative.category   : 'Not set',
+          text:       currentCreative ? currentCreative.text       : '',
+          link:       currentCreative ? currentCreative.link       : '',
+          linkText:   currentCreative ? currentCreative.linkText   : '',
+          advSlug:    currentCreative ? currentCreative.advSlug    : '',
+          category:   currentCreative ? currentCreative.category   : '',
           cpmGBP:     currentCreative ? currentCreative.cpmGBP     : 0,
           updatedAt:  currentCreative ? currentCreative.updatedAt  : null,
         },
-
-        reach: {
-          totalImpressions: impressions,
-          todayImpressions: n(todayImpressions),
-          description: 'Number of times your brand message was served to an AI crawler',
-          byAIModel: Object.entries(byPlatformImpressions)
-            .filter(([, v]) => v > 0)
-            .map(([platform, count]) => ({ platform, impressions: count }))
-            .sort((a, b) => b.impressions - a.impressions),
+        impressions: {
+          total:       impressions,
+          today:       n(todayImpressions),
+          description: 'Times your brand message was served to an AI crawler',
+          byPlatform:  platformTable,
         },
-
-        engagement: {
-          totalClicks: clicks,
-          todayClicks: n(todayClicks),
-          description: 'Number of humans who clicked through to your page from an AI platform citation',
-          overallCTR: pct(clicks, impressions),
-          byAIModel: Object.entries(byPlatformClicks)
-            .filter(([, v]) => v > 0)
-            .map(([platform, count]) => ({
-              platform,
-              clicks: count,
-              ctr: platformCTR[platform] || 'n/a',
-            }))
-            .sort((a, b) => b.clicks - a.clicks),
+        // Publisher clicks = humans landing on publisher page after AI cited it
+        publisherClicks: {
+          total:       pubClicks,
+          today:       n(todayPubClicks),
+          description: 'Humans who visited the publisher page from an AI platform citation',
+          overallCTR:  pct(pubClicks, impressions),
+          byPlatform:  pubClickByPlatform,
+          queries,
         },
-
-        searchQueries: {
-          description: 'Queries that brought users to your page from AI platforms',
-          recentQueries: queries,
+        // Advertiser clicks = humans who clicked your ad link in the content
+        advertiserClicks: {
+          total:       advClicks,
+          today:       n(todayAdvClicks),
+          description: 'Humans who clicked your link in the injected content',
+          overallCTR:  pct(advClicks, impressions),
+          recentClicks: recentAdvClickLogs.slice(0, 10),
         },
-
         spend: {
           estimatedTotalGBP: parseFloat(revenueGBP.toFixed(4)),
-          cpmGBP: currentCreative ? currentCreative.cpmGBP : 18,
-          model: 'CPM charged on retrieval crawler impressions only',
+          cpmGBP:            currentCreative ? currentCreative.cpmGBP : 18,
+          model:             'CPM charged on retrieval impressions only',
         },
-
-        recentActivity: recentClickLogs.slice(0, 5).map(c => ({
-          time: c.time,
-          event: 'click',
-          platform: c.platform,
-          query: c.query || null,
-        })),
       });
     }
 
     // --------------------------------------------------------
-    // PUBLISHER VIEW — /dashboard (default)
+    // PUBLISHER VIEW — /dashboard?view=publisher
+    // --------------------------------------------------------
+    if (view === 'publisher') {
+      return res.status(200).json({
+        _view: 'publisher',
+        campaign: {
+          advertiser: currentCreative ? currentCreative.advertiser : 'No campaign',
+          category:   currentCreative ? currentCreative.category   : '',
+          cpmGBP:     currentCreative ? currentCreative.cpmGBP     : 0,
+        },
+        earnings: {
+          estimatedGBP:     parseFloat((revenueGBP * 0.6).toFixed(4)),
+          revenueSharePct:  60,
+          grossGBP:         parseFloat(revenueGBP.toFixed(4)),
+        },
+        traffic: {
+          totalImpressions: impressions,
+          today:            n(todayImpressions),
+          byPlatform:       platformTable,
+        },
+        clicks: {
+          total:       pubClicks,
+          today:       n(todayPubClicks),
+          description: 'Humans landing on your page after an AI cited it',
+          overallCTR:  pct(pubClicks, impressions),
+        },
+        recentVisits: (recentBotLogs || []).slice(0, 10),
+      });
+    }
+
+    // --------------------------------------------------------
+    // OPERATOR VIEW — /dashboard (default)
     // --------------------------------------------------------
     return res.status(200).json({
-      _view: 'publisher',
-      _description: 'Revenue and traffic data for publisher',
-      _advertiserView: 'Add ?view=advertiser for advertiser report',
-
+      _view: 'operator',
       summary: {
-        totalImpressions: impressions,
-        todayImpressions: n(todayImpressions),
-        totalClicks: clicks,
-        todayClicks: n(todayClicks),
-        overallCTR: pct(clicks, impressions),
-        retrievalCrawlers: retrieval,
-        trainingCrawlers: training,
+        totalImpressions:  impressions,
+        todayImpressions:  n(todayImpressions),
+        pubClicks,
+        advClicks,
+        todayPubClicks:    n(todayPubClicks),
+        todayAdvClicks:    n(todayAdvClicks),
+        pubCTR:            pct(pubClicks, impressions),
+        advCTR:            pct(advClicks, impressions),
+        retrieval,
+        training,
       },
-
       revenue: {
-        estimatedGBP: parseFloat(revenueGBP.toFixed(4)),
-        publisherShare60pct: parseFloat((revenueGBP * 0.6).toFixed(4)),
-        platformShare40pct: parseFloat((revenueGBP * 0.4).toFixed(4)),
+        grossGBP:           parseFloat(revenueGBP.toFixed(4)),
+        publisherShare60:   parseFloat((revenueGBP * 0.6).toFixed(4)),
+        platformShare40:    parseFloat((revenueGBP * 0.4).toFixed(4)),
       },
-
-      impressionsByPlatform: byPlatformImpressions,
-      clicksByPlatform: byPlatformClicks,
-
-      ctr: {
-        overall: pct(clicks, impressions),
-        byPlatform: platformCTR,
-      },
-
-      recentImpressions: recentBotLogs.slice(0, 10),
-      recentClicks: recentClickLogs.slice(0, 10),
+      platformBreakdown:   platformTable,
+      recentImpressions:   (recentBotLogs || []).slice(0, 20),
+      recentPubClicks:     recentPubClickLogs.slice(0, 10),
+      recentAdvClicks:     recentAdvClickLogs.slice(0, 10),
     });
 
   } catch (e) {
