@@ -1,5 +1,6 @@
 const { analyseRequest } = require('../lib/combined-detector');
 const { injectSponsoredContent } = require('../lib/injector');
+const { detectAIReferrer } = require('../lib/referrer');
 const { kvGet, kvIncr, kvListPush } = require('../lib/kv');
 const config = require('../lib/config');
 
@@ -38,6 +39,7 @@ module.exports = async function handler(req, res) {
 
   const ip = req.headers['x-forwarded-for'] || 'unknown';
   const ua = req.headers['user-agent'] || '';
+  const referer = req.headers['referer'] || req.headers['referrer'] || '';
   const today = new Date().toISOString().split('T')[0];
 
   console.log(JSON.stringify({
@@ -49,22 +51,24 @@ module.exports = async function handler(req, res) {
     crawlerType: detection.crawlerType,
     cpmMin: detection.suggestedCPM?.min,
     cpmMax: detection.suggestedCPM?.max,
+    referer: referer.substring(0, 150),
   }));
 
   res.setHeader('Content-Type', 'text/html');
 
-  if (detection.isBot) {
+  // --------------------------------------------------------
+  // BOT PATH — detected crawler, not a cloaking risk
+  // Fetch live creative, inject, log impression
+  // --------------------------------------------------------
+  if (detection.isBot && !detection.cloakingRisk) {
 
-    // Fetch live creative from database (falls back to config)
     let sponsoredText = config.sponsored.text;
     try {
       const stored = await kvGet(`creative:${config.sponsored.category}`);
       if (stored && stored.text) sponsoredText = stored.text;
-    } catch (e) {
-      // Silent fallback — never break the page
-    }
+    } catch (e) {}
 
-    // Log impression to database (fire and forget)
+    // Log impression — fire and forget, never breaks the page
     try {
       await Promise.all([
         kvIncr('stats:impressions:total'),
@@ -81,16 +85,38 @@ module.exports = async function handler(req, res) {
           cpmMax: detection.suggestedCPM?.max,
         }, 100),
       ]);
-    } catch (e) {
-      // Silent fallback — impression logging never breaks the page
-    }
+    } catch (e) {}
 
     const result = injectSponsoredContent(ORIGINAL_PAGE, sponsoredText, { strategy: 'auto' });
     res.setHeader('X-Bot-Detected', 'true');
     res.setHeader('X-Bot-Platform', detection.platform || 'unknown');
     res.status(200).send(result.html);
 
+  // --------------------------------------------------------
+  // HUMAN PATH — check for AI platform referrer (click tracking)
+  // --------------------------------------------------------
   } else {
+
+    const aiClick = detectAIReferrer(referer);
+
+    if (aiClick) {
+      // Human arrived from an AI platform citation — log the click
+      try {
+        await Promise.all([
+          kvIncr('stats:clicks:total'),
+          kvIncr(`stats:clicks:platform:${aiClick.platform}`),
+          kvIncr(`stats:clicks:date:${today}`),
+          kvListPush('log:clicks', {
+            time: new Date().toISOString(),
+            ip,
+            platform: aiClick.platform,
+            query: aiClick.query,
+            referrer: aiClick.referrerUrl.substring(0, 200),
+          }, 100),
+        ]);
+      } catch (e) {}
+    }
+
     res.status(200).send(ORIGINAL_PAGE);
   }
 };
