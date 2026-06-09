@@ -81,9 +81,12 @@ module.exports = function handler(req, res) {
       { strategy: 'auto' }
     );
 
+    // Remove the debug notice entirely from bot-facing HTML
+    // Human notice stays for humans. Bots get clean HTML with no fingerprints.
+    // Detection info is logged server-side only — never exposed in the response.
     const botHTML = injectionResult.html.replace(
-      'HUMAN VIEW — original unmodified page',
-      `BOT DETECTED | Platform: ${detection.platform} | Type: ${detection.crawlerType} | Confidence: ${detection.confidence}% | CPM: £${detection.suggestedCPM?.min}-${detection.suggestedCPM?.max} | IP: ${ip}`
+      '<div class="notice">\n    HUMAN VIEW — original unmodified page\n  </div>',
+      ''
     );
 
     res.setHeader('X-Bot-Detected', 'true');
