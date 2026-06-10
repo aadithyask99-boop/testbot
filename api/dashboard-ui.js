@@ -81,7 +81,12 @@ var html = '<!DOCTYPE html>' +
 '<div style="font-size:12px;color:#888;line-height:1.6;border-left:2px solid #e5e5e5;padding-left:10px">' +
 '<b style="color:#555">Independent verification:</b> Each impression is logged with timestamp, platform, and detection confidence. Raw data stored in Upstash Redis and available on request. Verify by asking Perplexity or ChatGPT about ISA platforms and checking for your brand in the response.</div>' +
 '</div></section>' +
-'<section><h2>Update Creative</h2><div class="fbody">' +
+'<section><h2>Campaigns <span style="font-size:12px;color:#888;font-weight:400">(auction order — top of list wins)</span></h2>' +
+'<table><thead><tr><th>Advertiser</th><th>CPM</th><th>Daily Budget</th><th>Spent Today</th><th>Status</th><th></th></tr></thead>' +
+'<tbody id="camp-list"><tr><td colspan="6" class="empty">Loading...</td></tr></tbody></table>' +
+'<div style="margin-top:10px"><button class="btn" onclick="addCampaign()">+ Add Campaign</button></div>' +
+'</section>' +
+'<section><h2 id="form-title">Add / Edit Campaign</h2><div class="fbody">' +
 '<div class="frow"><div class="field"><label>Campaign ID</label><input type="text" id="f-id" placeholder="e.g. camp_002"></div>' +
 '<div class="field"><label>Advertiser</label><input type="text" id="f-adv" placeholder="e.g. Hargreaves Lansdown"></div></div>' +
 '<div class="frow"><div class="field"><label>Category</label><select id="f-cat"><option value="finance">finance</option><option value="tech">tech</option></select></div>' +
@@ -94,8 +99,8 @@ var html = '<!DOCTYPE html>' +
 '<div class="frow"><div class="field"><label>Daily Budget (GBP)</label><input type="number" id="f-bd" value="50" min="0"></div>' +
 '<div class="field"><label>Total Budget (GBP)</label><input type="number" id="f-bt" value="500" min="0"></div></div>' +
 '<div style="display:flex;gap:8px;align-items:center">' +
-'<button class="btn" onclick="saveCreative()">Save Creative</button>' +
-'<button class="btn btnsec" onclick="resetForm()">Reset to Current</button>' +
+'<button class="btn" onclick="saveCreative()">Save Campaign</button>' +
+'<button class="btn btnsec" onclick="addCampaign()">Clear Form</button>' +
 '<span id="fmsg"></span></div>' +
 '</div></section></div>' +
 
@@ -151,27 +156,27 @@ var html = '<!DOCTYPE html>' +
 '    (c.text?"<div class=\'ccopy\'>"+c.text+"</div>":"")+' +
 '    (c.link?"<div style=\'font-size:11px;color:#2563eb\'>Link: "+c.link+"</div>":"<div style=\'font-size:11px;color:#ccc\'>No link set</div>")' +
 '  );' +
+'  var cl=advData.campaigns||[];' +
+'  var winner=cl.filter(function(x){return x.isWinner;})[0];' +
 '  set("adv-cards",' +
+'    card("Active Campaigns",fmt(cl.filter(function(x){return x.active;}).length),fmt(cl.length)+" total","")+' +
+'    card("Now Winning",winner?winner.advertiser:"None",winner?("£"+winner.cpmGBP+" CPM"):"no eligible campaign","green")+' +
 '    card("Impressions",fmt(imp.total),fmt(imp.today)+" today","")+' +
-'    card("Total AI Visits",fmt(vis.total||0),(vis.overallCTR||"0.0%")+" CTR","blue")+' +
-'    card("Unique Visits",fmt(vis.unique||0),(vis.uniqueCTR||"0.0%")+" CTR","green")+' +
 '    card("Est. Spend","£"+(sp.estimatedTotalGBP||0),"£"+(sp.cpmGBP||0)+" CPM","")' +
 '  );' +
+'  renderCampaignList(cl);' +
 '  var pt=imp.byPlatform||[];' +
 '  set("adv-platforms",pt.filter(function(p){return p.impressions>0;}).map(function(p){' +
 '    return "<tr><td>"+p.platform+"</td><td>"+fmt(p.impressions)+"</td><td>"+fmt(p.clicks||0)+"</td><td>"+fmt(p.uniqueClicks||0)+"</td><td>"+p.ctr+"</td></tr>";' +
 '  }).join("")||"<tr><td colspan=\'5\' class=\'empty\'>No impressions yet</td></tr>");' +
-'  var q=vis.queries||[];' +
-'  set("adv-queries",q.length?q.map(function(q){' +
-'    return "<tr><td>"+q.query+"</td><td>"+q.platform+"</td><td>"+ago(q.time)+"</td></tr>";' +
-'  }).join(""):"<tr><td colspan=\'3\' class=\'empty\'>Queries from Perplexity and Google will appear here</td></tr>");' +
+'  set("adv-queries","<tr><td colspan=\'3\' class=\'empty\'>Query data shown in Operator view</td></tr>");' +
 '  if(ver.selfTest){var st=document.getElementById("adv-selftest");if(st)st.textContent=ver.selfTest.command;}' +
 '  var vl=ver.recentImpressions||[];' +
 '  set("adv-verify",vl.length?vl.map(function(e){' +
 '    var conf=parseInt(e.confidence||0);' +
 '    return "<tr><td>"+ago(e.time)+"</td><td>"+(e.platform||"—")+"</td><td>"+tag(e.crawlerType||"—",e.crawlerType||"")+"</td><td style=\'color:"+(conf>=85?"#16a34a":"#f59e0b")+"\'>"+e.confidence+"</td><td style=\'font-family:monospace;font-size:11px;color:#aaa\'>"+(e.ipPrefix||"—")+"</td></tr>";' +
 '  }).join(""):"<tr><td colspan=\'5\' class=\'empty\'>No impressions yet</td></tr>");' +
-'  if(!formLoaded){resetForm();formLoaded=true;}' +
+'  if(!formLoaded){addCampaign();formLoaded=true;}' +
 '}' +
 'function renderPublisher(){' +
 '  if(!pubData)return;' +
@@ -193,15 +198,52 @@ var html = '<!DOCTYPE html>' +
 '    return "<tr><td>"+ago(e.time)+"</td><td>"+(e.platform||"—")+"</td><td>"+tag(e.crawlerType||"—",e.crawlerType||"")+"</td><td>"+(e.confidence||0)+"%</td><td>£"+(e.cpmMin||0)+"–"+(e.cpmMax||0)+"</td></tr>";' +
 '  }).join(""):"<tr><td colspan=\'5\' class=\'empty\'>No visits yet</td></tr>");' +
 '}' +
-'function resetForm(){' +
-'  if(!advData||!advData.campaign)return;' +
-'  var c=advData.campaign;' +
-'  var f=function(id,v){var el=document.getElementById(id);if(el)el.value=v||"";};' +
-'  f("f-id",c.id);f("f-adv",c.advertiser);f("f-cat",c.category||"finance");' +
+'function renderCampaignList(cl){' +
+'  if(!cl||!cl.length){set("camp-list","<tr><td colspan=\'6\' class=\'empty\'>No campaigns yet — click + Add Campaign</td></tr>");return;}' +
+'  set("camp-list",cl.map(function(c){' +
+'    var badge=c.isWinner?" <span style=\'background:#16a34a;color:#fff;font-size:10px;padding:2px 6px;border-radius:3px;margin-left:6px\'>WINNING</span>":"";' +
+'    var status=c.active?"<span style=\'color:#16a34a\'>Active</span>":"<span style=\'color:#999\'>Paused</span>";' +
+'    var toggle=c.active?"Pause":"Activate";' +
+'    var spentPct=c.dailyBudgetUsedPct||0;' +
+'    return "<tr><td><b>"+c.advertiser+"</b>"+badge+"<br><span style=\'font-size:11px;color:#999\'>"+c.id+" · "+c.category+"</span></td>"+' +
+'      "<td>£"+c.cpmGBP+"</td>"+' +
+'      "<td>£"+c.budgetDailyGBP+"</td>"+' +
+'      "<td>£"+(c.dailySpendGBP||0).toFixed(2)+" <span style=\'font-size:10px;color:#999\'>("+spentPct+"%)</span></td>"+' +
+'      "<td>"+status+"</td>"+' +
+'      "<td style=\'white-space:nowrap\'><button class=\'btn btnsec camp-edit\' style=\'padding:4px 10px;font-size:11px\' data-id=\'"+c.id+"\'>Edit</button> "+' +
+'      "<button class=\'btn btnsec camp-toggle\' style=\'padding:4px 10px;font-size:11px\' data-id=\'"+c.id+"\' data-active=\'"+(c.active?"1":"0")+"\'>"+toggle+"</button></td></tr>";' +
+'  }).join(""));' +
+'  var eds=document.querySelectorAll(".camp-edit");' +
+'  for(var i=0;i<eds.length;i++){eds[i].addEventListener("click",function(){editCampaign(this.getAttribute("data-id"));});}' +
+'  var tgs=document.querySelectorAll(".camp-toggle");' +
+'  for(var j=0;j<tgs.length;j++){tgs[j].addEventListener("click",function(){toggleCampaign(this.getAttribute("data-id"),this.getAttribute("data-active")==="0");});}' +
+'}' +
+'function fillForm(c){' +
+'  var f=function(id,v){var el=document.getElementById(id);if(el)el.value=(v===undefined||v===null)?"":v;};' +
+'  f("f-id",c.id);f("f-adv",c.advertiser);' +
 '  f("f-kw",(c.keywords||[]).join(", "));' +
 '  f("f-text",c.text);f("f-link",c.link);f("f-lt",c.linkText||"Learn more");' +
-'  f("f-slug",c.advSlug);f("f-cpm",c.cpmGBP||18);' +
-'  f("f-bd",c.budgetDailyGBP||50);f("f-bt",c.budgetTotalGBP||500);' +
+'  f("f-slug",c.advSlug);f("f-cpm",c.cpmGBP);' +
+'  f("f-bd",c.budgetDailyGBP);f("f-bt",c.budgetTotalGBP);' +
+'  var sel=document.getElementById("f-cat");if(sel)sel.value=c.category||"finance";' +
+'}' +
+'function addCampaign(){' +
+'  fillForm({id:"",advertiser:"",category:"finance",keywords:[],text:"",link:"",linkText:"Learn more",advSlug:"",cpmGBP:18,budgetDailyGBP:50,budgetTotalGBP:500});' +
+'  var t=document.getElementById("form-title");if(t)t.textContent="Add Campaign";' +
+'  var m=document.getElementById("fmsg");if(m)m.textContent="";' +
+'  var idel=document.getElementById("f-id");if(idel)idel.focus();' +
+'}' +
+'function editCampaign(id){' +
+'  var cl=(advData&&advData.campaigns)||[];' +
+'  var c=cl.filter(function(x){return x.id===id;})[0];' +
+'  if(!c)return;' +
+'  fillForm(c);' +
+'  var t=document.getElementById("form-title");if(t){t.textContent="Edit Campaign: "+c.advertiser;t.scrollIntoView({behavior:"smooth"});}' +
+'}' +
+'function toggleCampaign(id,makeActive){' +
+'  fetch("/admin/campaign/pause",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:id,active:makeActive})})' +
+'  .then(function(r){return r.json();}).then(function(d){load();})' +
+'  .catch(function(){});' +
 '}' +
 'function saveCreative(){' +
 '  var g=function(id){var el=document.getElementById(id);return el?el.value:"";};' +

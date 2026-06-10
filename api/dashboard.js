@@ -64,6 +64,40 @@ module.exports = async function handler(req, res) {
     const campaignCPM  = ((currentCreative && currentCreative.cpmGBP) || 18);
     const revenueGBP   = ((retrieval * campaignCPM) + (training * campaignCPM * 0.3)) / 1000;
 
+    // ── SHARED CAMPAIGN LIST (auction order + winner badge) ──────
+    // Built once, used by operator AND advertiser views. isWinner is
+    // tied to the SINGLE runAuction() result above (currentCreative)
+    // so equal-CPM ties never badge two rows or flicker.
+    const winnerId = (currentCreative && currentCreative.id) || null;
+    const allCampaignIds = [];
+    for (const cat of config.categories) {
+      const cids = (await kvGet('campaigns:' + cat)) || [];
+      allCampaignIds.push(...cids);
+    }
+    const campaignList = [];
+    for (const id of [...new Set(allCampaignIds)]) {
+      const c = await kvGet('campaign:' + id);
+      if (!c) continue;
+      const spend = await getCampaignSpend(c);
+      const dailyBudgetUsedPct = c.budgetDailyGBP ? Math.min(100, (spend.dailySpendGBP / c.budgetDailyGBP) * 100) : 0;
+      campaignList.push({
+        id: c.id, advertiser: c.advertiser, category: c.category,
+        cpmGBP: c.cpmGBP, active: c.active === true,
+        budgetDailyGBP: c.budgetDailyGBP, budgetTotalGBP: c.budgetTotalGBP,
+        keywords: c.keywords || [],
+        text: c.text, link: c.link, linkText: c.linkText, advSlug: c.advSlug,
+        matchingDescription: c.matchingDescription || '',
+        startDate: c.startDate, endDate: c.endDate,
+        dailySpendGBP: parseFloat(spend.dailySpendGBP.toFixed(4)),
+        totalSpendGBP: parseFloat(spend.totalSpendGBP.toFixed(4)),
+        dailyBudgetUsedPct: parseFloat(dailyBudgetUsedPct.toFixed(1)),
+        impressions: spend.totalImpressions,
+        isWinner: winnerId === c.id,
+      });
+    }
+    // Auction order: active first, then CPM descending (the waterfall order)
+    campaignList.sort((a, b) => (b.active - a.active) || (b.cpmGBP - a.cpmGBP));
+
     // Platform impression breakdown
     // Merge KV totals (accurate, post-deploy) with log (last 100, historical)
     const logImprByPlatform = {};
@@ -127,6 +161,7 @@ module.exports = async function handler(req, res) {
     if (view === 'advertiser') {
       return res.status(200).json({
         _view: 'advertiser',
+        campaigns: campaignList,
         campaign: {
           advertiser: (currentCreative && currentCreative.advertiser) || 'Not set',
           text:       (currentCreative && currentCreative.text)       || '',
@@ -143,17 +178,9 @@ module.exports = async function handler(req, res) {
           description: 'Times your brand message was served to an AI crawler',
           byPlatform:  platformTable,
         },
-        visits: {
-          total:       pubClicks,
-          today:       n(todayPubClicks),
-          unique:      uniqClicks,
-          todayUnique: n(todayUniqClicks),
-          overallCTR:  pct(pubClicks, impressions),
-          uniqueCTR:   pct(uniqClicks, impressions),
-          description: 'Humans who visited the publisher page from an AI platform citation',
-          byPlatform:  clicksByPlatform,
-          queries,
-        },
+        // NOTE: publisher "visits" intentionally removed from advertiser view.
+        // Humans landing on the PUBLISHER page is a publisher/operator metric.
+        // Advertisers care about impressions of THEIR creative + spend.
         spend: {
           estimatedTotalGBP: parseFloat(revenueGBP.toFixed(4)),
           cpmGBP:            (currentCreative && currentCreative.cpmGBP) || 18,
@@ -180,10 +207,15 @@ module.exports = async function handler(req, res) {
     if (view === 'publisher') {
       return res.status(200).json({
         _view: 'publisher',
-        campaign: {
-          advertiser: (currentCreative && currentCreative.advertiser) || 'No campaign',
-          category:   (currentCreative && currentCreative.category)   || '',
-          cpmGBP:     (currentCreative && currentCreative.cpmGBP)     || 0,
+        campaign: currentCreative ? {
+          advertiser: currentCreative.advertiser,
+          category:   currentCreative.category,
+          cpmGBP:     currentCreative.cpmGBP,
+        } : {
+          advertiser: 'No active campaign',
+          category:   '',
+          cpmGBP:     null,
+          note:       'No campaign is currently winning the auction (none active, in-budget, and in-date).',
         },
         earnings: {
           estimatedGBP:    parseFloat((revenueGBP * 0.8).toFixed(4)),
@@ -199,36 +231,17 @@ module.exports = async function handler(req, res) {
           total:      pubClicks,
           unique:     uniqClicks,
           today:      n(todayPubClicks),
-          overallCTR: pct(pubClicks, impressions),
-          uniqueCTR:  pct(uniqClicks, impressions),
+          // CTR only meaningful once real referrer clicks exist. Showing a
+          // CTR computed from zero (or stale) clicks produced a misleading
+          // 100% figure — suppress until there is genuine click data.
+          overallCTR: pubClicks > 0 ? pct(pubClicks, impressions) : null,
+          uniqueCTR:  uniqClicks > 0 ? pct(uniqClicks, impressions) : null,
         },
         recentVisits: (recentBotLogs || []).slice(0, 10),
       });
     }
 
     // ── OPERATOR VIEW (default) ─────────────────────────────────
-    // Fetch all campaigns with spend for the operator view
-    const allCampaignIds = [];
-    for (const cat of config.categories) {
-      const ids = (await kvGet('campaigns:' + cat)) || [];
-      allCampaignIds.push(...ids);
-    }
-    const campaignList = [];
-    for (const id of [...new Set(allCampaignIds)]) {
-      const c = await kvGet('campaign:' + id);
-      if (!c) continue;
-      const spend = await getCampaignSpend(c);
-      campaignList.push({
-        id: c.id, advertiser: c.advertiser, category: c.category,
-        cpmGBP: c.cpmGBP, active: c.active,
-        budgetDailyGBP: c.budgetDailyGBP, budgetTotalGBP: c.budgetTotalGBP,
-        dailySpendGBP: parseFloat(spend.dailySpendGBP.toFixed(4)),
-        totalSpendGBP: parseFloat(spend.totalSpendGBP.toFixed(4)),
-        isWinner: !!(currentCreative && currentCreative.id === c.id),
-      });
-    }
-    campaignList.sort((a, b) => (b.active - a.active) || (b.cpmGBP - a.cpmGBP));
-
     return res.status(200).json({
       _view: 'operator',
       campaigns: campaignList,

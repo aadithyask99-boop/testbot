@@ -12,7 +12,7 @@
 // ============================================================
 
 const config = require('../lib/config');
-const { kvGet, kvSet } = require('../lib/kv');
+const { kvGet, kvSet, kvDel } = require('../lib/kv');
 const { runAuction, getCampaignSpend } = require('../lib/auction');
 
 async function readBody(req) {
@@ -62,6 +62,71 @@ module.exports = async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const url = req.url || '';
+
+  // ---- RESET STATS (destructive: zeroes counters + logs, keeps campaigns) ----
+  if (req.method === 'POST' && url.includes('/admin/reset-stats')) {
+    const today = new Date().toISOString().split('T')[0];
+    // Delete known counter + log keys. Campaign objects and category
+    // indexes are NOT touched. Per-campaign impression counters are
+    // cleared for all known campaigns so spend resets to zero too.
+    const keys = [
+      'stats:impressions:total', `stats:impressions:date:${today}`,
+      'stats:impressions:type:retrieval', 'stats:impressions:type:training',
+      'stats:impr_by_platform', 'stats:platform_totals',
+      'stats:clicks:total', `stats:clicks:date:${today}`, 'stats:click_by_platform',
+      'stats:unique_clicks:total', `stats:unique_clicks:date:${today}`, 'stats:uniq_click_by_platform',
+      'stats:adclicks:total', `stats:adclicks:date:${today}`,
+      'log:recent', 'log:clicks', 'log:adclicks',
+    ];
+    // Add per-campaign impression counters for every campaign
+    for (const cat of config.categories) {
+      const ids = (await kvGet(`campaigns:${cat}`)) || [];
+      for (const id of ids) {
+        keys.push(`impr:retrieval:${id}:total`, `impr:training:${id}:total`,
+                  `impr:retrieval:${id}:${today}`, `impr:training:${id}:${today}`);
+      }
+    }
+    await Promise.all(keys.map(k => kvDel(k)));
+    return res.status(200).json({ message: 'Stats reset', clearedKeys: keys.length });
+  }
+
+  // ---- RESET STATS (destructive: wipes impression/click counters) ----
+  // Does NOT touch campaigns. Clears all stats counters, per-campaign
+  // impression counters, platform hashes, and logs — for a clean baseline.
+  if (req.method === 'POST' && url.includes('/admin/reset-stats')) {
+    // Gather per-campaign impression keys to delete
+    const campaignKeys = [];
+    for (const cat of config.categories) {
+      const ids = (await kvGet('campaigns:' + cat)) || [];
+      for (const id of ids) {
+        // delete a window of recent daily keys + totals
+        campaignKeys.push('impr:retrieval:' + id + ':total', 'impr:training:' + id + ':total');
+        for (let d = 0; d < 14; d++) {
+          const day = new Date(Date.now() - d * 86400000).toISOString().split('T')[0];
+          campaignKeys.push('impr:retrieval:' + id + ':' + day, 'impr:training:' + id + ':' + day);
+        }
+      }
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    const statKeys = [
+      'stats:impressions:total', 'stats:impressions:date:' + today,
+      'stats:impressions:type:retrieval', 'stats:impressions:type:training',
+      'stats:clicks:total', 'stats:clicks:date:' + today,
+      'stats:unique_clicks:total', 'stats:unique_clicks:date:' + today,
+      'stats:adclicks:total', 'stats:adclicks:date:' + today,
+      'stats:impr_by_platform', 'stats:click_by_platform',
+      'stats:uniq_click_by_platform', 'log:recent', 'log:clicks', 'log:adclicks',
+    ];
+
+    const allKeys = [...new Set([...statKeys, ...campaignKeys])];
+    await Promise.all(allKeys.map(k => kvDel(k)));
+    return res.status(200).json({
+      message: 'Stats reset. Campaigns preserved.',
+      keysCleared: allKeys.length,
+      note: 'Impression counters, click counters, platform breakdowns, and logs cleared.',
+    });
+  }
 
   // ---- SEED default campaign ----
   if (req.method === 'POST' && url.includes('/admin/seed')) {
