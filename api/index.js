@@ -2,6 +2,7 @@ const { analyseRequest } = require('../lib/combined-detector');
 const { injectSponsoredContent } = require('../lib/injector');
 const { detectAIReferrer } = require('../lib/referrer');
 const { kvGet, kvSet, kvIncr, kvListPush, kvHashIncr } = require('../lib/kv');
+const { runAuction, recordImpression } = require('../lib/auction');
 const config = require('../lib/config');
 
 const ORIGINAL_PAGE = `<!DOCTYPE html>
@@ -34,11 +35,10 @@ const ORIGINAL_PAGE = `<!DOCTYPE html>
 module.exports = async function handler(req, res) {
   const detection = analyseRequest({
     headers: req.headers,
-    // NOTE: requestsPerMinute is not measured per-IP in this implementation.
-    // The behavioural rate signal (+30 pts) therefore never fires.
-    // For production: track per-IP request counts in KV with 60s TTL.
-    // For now: UA + anonymous_crawler detection handles the important cases.
-    meta: { visitCount: 1, requestsPerMinute: 1 }
+    // Rate signal removed from behavioural.js (Session 2) — no longer
+    // need to pass requestsPerMinute. UA + anonymous_crawler detection
+    // handle the cases that matter.
+    meta: { visitCount: 1 }
   });
 
   const ip = req.headers['x-forwarded-for'] || 'unknown';
@@ -66,23 +66,40 @@ module.exports = async function handler(req, res) {
   // --------------------------------------------------------
   if (detection.isBot && !detection.cloakingRisk) {
 
-    let sponsoredText = config.sponsored.text;
-    let sponsoredLink = config.sponsored.link || '';
-    let sponsoredLinkText = config.sponsored.linkText || 'Learn more';
-    let advSlug = config.sponsored.advSlug || 'default';
-    try {
-      const stored = await kvGet(`creative:${config.sponsored.category}`);
-      if (stored && stored.text) {
-        sponsoredText = stored.text;
-        sponsoredLink = stored.link || '';
-        sponsoredLinkText = stored.linkText || 'Learn more';
-        advSlug = stored.advSlug || 'default';
-      }
-    } catch (e) {}
+    // --------------------------------------------------------
+    // AUCTION (Session 2): CPM waterfall picks the winning
+    // campaign for this page's category. Until contextual
+    // matching (api/match.js) exists, the demo page category
+    // comes from config. No winner → serve the CLEAN page,
+    // log the bot visit, bill nothing.
+    // --------------------------------------------------------
+    const winner = await runAuction(config.demoPageCategory);
+
+    if (!winner) {
+      res.setHeader('X-Bot-Detected', 'true');
+      res.setHeader('X-Bot-Platform', detection.platform || 'unknown');
+      try {
+        await kvListPush('log:recent', {
+          time: new Date().toISOString(),
+          ip,
+          platform: detection.platform,
+          crawlerType: detection.crawlerType,
+          confidence: detection.confidence,
+          served: 'none',
+        }, 100);
+      } catch (e) {}
+      return res.status(200).send(ORIGINAL_PAGE);
+    }
+
+    const sponsoredText = winner.text;
+    const sponsoredLink = winner.link || '';
+    const sponsoredLinkText = winner.linkText || 'Learn more';
+    const advSlug = winner.advSlug || 'default';
 
     // Log impression — fire and forget, never breaks the page
     try {
       await Promise.all([
+        recordImpression(winner, detection.crawlerType),
         kvIncr('stats:impressions:total'),
         kvIncr(`stats:impressions:platform:${detection.platform || 'unknown'}`),
         kvIncr(`stats:impressions:type:${detection.crawlerType || 'unknown'}`),
@@ -94,8 +111,9 @@ module.exports = async function handler(req, res) {
           platform: detection.platform,
           crawlerType: detection.crawlerType,
           confidence: detection.confidence,
-          cpmMin: detection.suggestedCPM?.min,
-          cpmMax: detection.suggestedCPM?.max,
+          campaignId: winner.id,
+          advertiser: winner.advertiser,
+          cpmGBP: winner.cpmGBP,
         }, 100),
       ]);
     } catch (e) {}

@@ -1,4 +1,6 @@
 const { kvGet, kvSet, kvListGet, kvHashGetAll } = require('../lib/kv');
+const { runAuction, getCampaignSpend } = require('../lib/auction');
+const config = require('../lib/config');
 
 module.exports = async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json');
@@ -44,7 +46,7 @@ module.exports = async function handler(req, res) {
       kvListGet('log:recent', 100),
       kvListGet('log:clicks', 20),
       kvListGet('log:adclicks', 20),
-      kvGet('creative:finance_investing'),
+      runAuction(config.demoPageCategory), // current auction winner (was creative:finance_investing)
       kvHashGetAll('stats:impr_by_platform'),
       kvHashGetAll('stats:click_by_platform'),
       kvHashGetAll('stats:uniq_click_by_platform'),
@@ -205,8 +207,31 @@ module.exports = async function handler(req, res) {
     }
 
     // ── OPERATOR VIEW (default) ─────────────────────────────────
+    // Fetch all campaigns with spend for the operator view
+    const allCampaignIds = [];
+    for (const cat of config.categories) {
+      const ids = (await kvGet('campaigns:' + cat)) || [];
+      allCampaignIds.push(...ids);
+    }
+    const campaignList = [];
+    for (const id of [...new Set(allCampaignIds)]) {
+      const c = await kvGet('campaign:' + id);
+      if (!c) continue;
+      const spend = await getCampaignSpend(c);
+      campaignList.push({
+        id: c.id, advertiser: c.advertiser, category: c.category,
+        cpmGBP: c.cpmGBP, active: c.active,
+        budgetDailyGBP: c.budgetDailyGBP, budgetTotalGBP: c.budgetTotalGBP,
+        dailySpendGBP: parseFloat(spend.dailySpendGBP.toFixed(4)),
+        totalSpendGBP: parseFloat(spend.totalSpendGBP.toFixed(4)),
+        isWinner: !!(currentCreative && currentCreative.id === c.id),
+      });
+    }
+    campaignList.sort((a, b) => (b.active - a.active) || (b.cpmGBP - a.cpmGBP));
+
     return res.status(200).json({
       _view: 'operator',
+      campaigns: campaignList,
       summary: {
         totalImpressions:  impressions,
         todayImpressions:  n(todayImpressions),

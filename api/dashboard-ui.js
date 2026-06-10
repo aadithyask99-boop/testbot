@@ -82,13 +82,17 @@ var html = '<!DOCTYPE html>' +
 '<b style="color:#555">Independent verification:</b> Each impression is logged with timestamp, platform, and detection confidence. Raw data stored in Upstash Redis and available on request. Verify by asking Perplexity or ChatGPT about ISA platforms and checking for your brand in the response.</div>' +
 '</div></section>' +
 '<section><h2>Update Creative</h2><div class="fbody">' +
-'<div class="frow"><div class="field"><label>Advertiser</label><input type="text" id="f-adv" placeholder="e.g. Hargreaves Lansdown"></div>' +
-'<div class="field"><label>Category</label><input type="text" id="f-cat" value="finance_investing"></div></div>' +
+'<div class="frow"><div class="field"><label>Campaign ID</label><input type="text" id="f-id" placeholder="e.g. camp_002"></div>' +
+'<div class="field"><label>Advertiser</label><input type="text" id="f-adv" placeholder="e.g. Hargreaves Lansdown"></div></div>' +
+'<div class="frow"><div class="field"><label>Category</label><select id="f-cat"><option value="finance">finance</option><option value="tech">tech</option></select></div>' +
+'<div class="field"><label>Keywords (comma-separated)</label><input type="text" id="f-kw" placeholder="isa, pension, stocks"></div></div>' +
 '<div class="field"><label>Ad Copy</label><textarea id="f-text" placeholder="Your sponsored text (40-80 words)..."></textarea></div>' +
 '<div class="frow"><div class="field"><label>Destination Link (optional)</label><input type="url" id="f-link" placeholder="https://advertiser.com"></div>' +
 '<div class="field"><label>Link Label</label><input type="text" id="f-lt" value="Learn more"></div></div>' +
 '<div class="frow"><div class="field"><label>Advertiser Slug</label><input type="text" id="f-slug" placeholder="e.g. hargreaves-lansdown"></div>' +
 '<div class="field"><label>CPM (GBP)</label><input type="number" id="f-cpm" value="18" min="1" max="100"></div></div>' +
+'<div class="frow"><div class="field"><label>Daily Budget (GBP)</label><input type="number" id="f-bd" value="50" min="0"></div>' +
+'<div class="field"><label>Total Budget (GBP)</label><input type="number" id="f-bt" value="500" min="0"></div></div>' +
 '<div style="display:flex;gap:8px;align-items:center">' +
 '<button class="btn" onclick="saveCreative()">Save Creative</button>' +
 '<button class="btn btnsec" onclick="resetForm()">Reset to Current</button>' +
@@ -193,17 +197,20 @@ var html = '<!DOCTYPE html>' +
 '  if(!advData||!advData.campaign)return;' +
 '  var c=advData.campaign;' +
 '  var f=function(id,v){var el=document.getElementById(id);if(el)el.value=v||"";};' +
-'  f("f-adv",c.advertiser);f("f-cat",c.category||"finance_investing");' +
+'  f("f-id",c.id);f("f-adv",c.advertiser);f("f-cat",c.category||"finance");' +
+'  f("f-kw",(c.keywords||[]).join(", "));' +
 '  f("f-text",c.text);f("f-link",c.link);f("f-lt",c.linkText||"Learn more");' +
 '  f("f-slug",c.advSlug);f("f-cpm",c.cpmGBP||18);' +
+'  f("f-bd",c.budgetDailyGBP||50);f("f-bt",c.budgetTotalGBP||500);' +
 '}' +
 'function saveCreative(){' +
 '  var g=function(id){var el=document.getElementById(id);return el?el.value:"";};' +
-'  var body={advertiser:g("f-adv"),category:g("f-cat"),text:g("f-text"),link:g("f-link"),linkText:g("f-lt"),advSlug:g("f-slug"),cpmGBP:parseFloat(g("f-cpm"))};' +
+'  var kw=g("f-kw").split(",").map(function(s){return s.trim().toLowerCase();}).filter(function(s){return s;});' +
+'  var body={id:g("f-id"),advertiser:g("f-adv"),category:g("f-cat"),text:g("f-text"),link:g("f-link"),linkText:g("f-lt"),advSlug:g("f-slug"),cpmGBP:parseFloat(g("f-cpm")),budgetDailyGBP:parseFloat(g("f-bd")),budgetTotalGBP:parseFloat(g("f-bt")),keywords:kw,active:true};' +
 '  var msg=document.getElementById("fmsg");' +
-'  fetch("/admin/creative",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})' +
+'  fetch("/admin/campaign",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})' +
 '  .then(function(r){return r.json();}).then(function(d){' +
-'    if(d.creative){msg.className="msg ok";msg.textContent="Creative updated — live immediately";setTimeout(load,1000);}' +
+'    if(d.campaign){msg.className="msg ok";msg.textContent="Campaign saved — live in auction immediately";setTimeout(load,1000);}' +
 '    else{msg.className="msg err";msg.textContent=d.error||"Failed";}' +
 '  }).catch(function(){msg.className="msg err";msg.textContent="Network error";});' +
 '}' +
