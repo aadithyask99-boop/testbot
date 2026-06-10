@@ -18,6 +18,7 @@
     { "src": "/click",           "dest": "/api/click.js" },
     { "src": "/sdk.js",          "dest": "/api/sdk.js" },
     { "src": "/ad",              "dest": "/api/admin.js" },
+    { "src": "/admin/reset-stats",    "dest": "/api/admin.js" },
     { "src": "/admin/seed",           "dest": "/api/admin.js" },
     { "src": "/admin/campaign/pause", "dest": "/api/admin.js" },
     { "src": "/admin/campaign",       "dest": "/api/admin.js" },
