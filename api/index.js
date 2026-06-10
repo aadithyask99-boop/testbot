@@ -105,6 +105,7 @@ module.exports = async function handler(req, res) {
         recordImpression(winner, detection.crawlerType),
         kvIncr('stats:bot_visits:total'),   // fill-rate denominator
         kvIncr('stats:bot_served:total'),   // fill-rate numerator
+        kvHashIncr('stats:impr_by_camp_plat:' + winner.id, detection.platform || 'unknown'),
         kvIncr('stats:impressions:total'),
         kvIncr(`stats:impressions:platform:${detection.platform || 'unknown'}`),
         kvIncr(`stats:impressions:type:${detection.crawlerType || 'unknown'}`),
