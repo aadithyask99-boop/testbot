@@ -1,0 +1,27 @@
+{
+  "version": 2,
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "index, follow" }
+      ]
+    }
+  ],
+  "routes": [
+    { "src": "/health",           "dest": "/api/health.js" },
+    { "src": "/dashboard",        "dest": "/api/dashboard.js" },
+    { "src": "/ui",               "dest": "/api/dashboard-ui.js" },
+    { "src": "/click",             "dest": "/api/click.js" },
+    { "src": "/sdk.js",           "dest": "/api/sdk.js" },
+    { "src": "/ad",               "dest": "/api/ad.js" },
+    { "src": "/admin/seed",       "dest": "/api/admin.js" },
+    { "src": "/admin/creative",   "dest": "/api/admin.js" },
+    { "src": "/admin",            "dest": "/api/admin.js" },
+    { "src": "/robots.txt",       "dest": "/api/robots.js" },
+    { "src": "/sitemap.xml",      "dest": "/api/sitemap.js" },
+    { "src": "/ping",             "dest": "/api/ping.js" },
+    { "src": "/BingSiteAuth.xml", "dest": "/api/BingSiteAuth.js" },
+    { "src": "/",                 "dest": "/api/index.js" }
+  ]
+}
