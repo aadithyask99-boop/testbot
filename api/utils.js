@@ -40,16 +40,21 @@ Sitemap: https://testbot-two-psi.vercel.app/sitemap.xml`
 
   // ── /sitemap.xml ──────────────────────────────────────────
   if (url === '/sitemap.xml') {
+    const { listPaths } = require('../lib/demo-pages');
+    const today = new Date().toISOString().split('T')[0];
+    const urls = listPaths().map(p =>
+      `  <url>
+    <loc>https://testbot-two-psi.vercel.app${p}</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>${p === '/' ? '1.0' : '0.8'}</priority>
+  </url>`
+    ).join('\n');
     res.setHeader('Content-Type', 'application/xml');
     return res.status(200).send(
 `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>https://testbot-two-psi.vercel.app/</loc>
-    <lastmod>${new Date().toISOString().split('T')[0]}</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
-  </url>
+${urls}
 </urlset>`
     );
   }
