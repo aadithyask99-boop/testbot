@@ -100,7 +100,7 @@ module.exports = async function handler(req, res) {
       const ids = (await kvGet('campaigns:' + cat)) || [];
       for (const id of ids) {
         // delete a window of recent daily keys + totals
-        campaignKeys.push('impr:retrieval:' + id + ':total', 'impr:training:' + id + ':total');
+        campaignKeys.push('impr:retrieval:' + id + ':total', 'impr:training:' + id + ':total', 'stats:impr_by_camp_plat:' + id);
         for (let d = 0; d < 14; d++) {
           const day = new Date(Date.now() - d * 86400000).toISOString().split('T')[0];
           campaignKeys.push('impr:retrieval:' + id + ':' + day, 'impr:training:' + id + ':' + day);

@@ -104,6 +104,9 @@ var html = '<!DOCTYPE html>' +
 '<section><h2>Crawler Traffic by Platform</h2>' +
 '<table><thead><tr><th>Platform</th><th>Impressions</th><th>Type</th></tr></thead>' +
 '<tbody id="pub-crawlers"><tr><td colspan="3" class="empty">Loading...</td></tr></tbody></table></section>' +
+'<section><h2>Recent Bot Visits</h2>' +
+'<table><thead><tr><th>When</th><th>Platform</th><th>Type</th><th>Confidence</th><th>Served</th></tr></thead>' +
+'<tbody id="pub-visits"><tr><td colspan="5" class="empty">Loading...</td></tr></tbody></table></section>' +
 '</div></main>' +
 
 '<script>' +
@@ -182,6 +185,10 @@ var html = '<!DOCTYPE html>' +
 '  if(!c){set("camp-detail","<div class=\'empty\'>Select a campaign</div>");return;}' +
 '  var split=c.viewableImpressions+c.trainingImpressions;' +
 '  var retPct=split>0?Math.round(c.viewableImpressions/split*100):0;' +
+'  var pb=c.platformBreakdown||[];' +
+'  var platTable=pb.length?("<table style=\'margin-top:10px\'><thead><tr><th>AI Platform</th><th>Impressions</th></tr></thead><tbody>"+' +
+'    pb.map(function(p){return "<tr><td>"+p.platform+"</td><td>"+fmt(p.impressions)+"</td></tr>";}).join("")+"</tbody></table>"):' +
+'    "<div class=\'empty\' style=\'padding:14px\'>No platform data yet for this campaign</div>";' +
 '  set("camp-detail",' +
 '    "<div class=\'cname\'>"+c.advertiser+(c.isWinner?" <span class=\'winbadge\'>WINNING</span>":"")+"</div>"+' +
 '    "<div class=\'cmeta\'>"+c.id+" · "+c.category+" · £"+c.cpmGBP+" CPM · updated "+(c.updatedAt?ago(c.updatedAt):"—")+"</div>"+' +
@@ -193,7 +200,9 @@ var html = '<!DOCTYPE html>' +
 '      card("Spend",money(c.totalSpendGBP),money(c.dailySpendGBP)+" today","")+' +
 '      card("vCPM",money(c.vcpmGBP),"vs £"+c.cpmGBP+" CPM","green")+' +
 '    "</div>"+' +
-'    "<div><button class=\'btn camp-editbtn\' data-id=\'"+c.id+"\'>Edit Campaign</button></div>"' +
+'    "<div class=\'lbl\' style=\'margin-top:14px\'>Crawlers that saw this ad</div>"+' +
+'    platTable+' +
+'    "<div style=\'margin-top:14px\'><button class=\'btn camp-editbtn\' data-id=\'"+c.id+"\'>Edit Campaign</button></div>"' +
 '  );' +
 '  var eb=document.querySelector(".camp-editbtn");' +
 '  if(eb)eb.addEventListener("click",function(){editCampaign(this.getAttribute("data-id"));});' +
@@ -244,12 +253,13 @@ var html = '<!DOCTYPE html>' +
 '}' +
 'function renderPublisher(){' +
 '  if(!pubData)return;' +
-'  var c=pubData.campaign||{},e=pubData.earnings||{},t=pubData.traffic||{},au=pubData.auction||{};' +
+'  var c=pubData.campaign||{},e=pubData.earnings||{},t=pubData.traffic||{},au=pubData.auction||{},cl=pubData.clicks||{};' +
 '  set("pub-cards",' +
 '    card("Your Earnings",money(e.estimatedGBP),"80% share · "+money(e.vcpmGBP)+" vCPM","green")+' +
 '    card("Impressions",fmt(t.totalImpressions),fmt(t.today)+" today","")+' +
 '    card("Viewable",fmt(t.viewableImpressions),"retrieval crawlers","blue")+' +
-'    card("Fill Rate",(t.fillRatePct===null||t.fillRatePct===undefined)?"—":(t.fillRatePct+"%"),"served / bot visits","purple")' +
+'    card("Fill Rate",(t.fillRatePct===null||t.fillRatePct===undefined)?"—":(t.fillRatePct+"%"),"served / bot visits","purple")+' +
+'    card("AI Visits",fmt(cl.total||0),fmt(cl.today||0)+" today · "+fmt(cl.unique||0)+" unique","purple")' +
 '  );' +
 '  set("pub-winning",' +
 '    "<div class=\'cname\'>"+(c.advertiser||"No active campaign")+"</div>"+' +
@@ -262,6 +272,11 @@ var html = '<!DOCTYPE html>' +
 '    var isTr=p.platform.indexOf("training")>-1||p.platform.indexOf("Bot")>-1;' +
 '    return "<tr><td>"+p.platform+"</td><td>"+fmt(p.impressions)+"</td><td>"+tag(isTr?"training":"retrieval",isTr?"training":"retrieval")+"</td></tr>";' +
 '  }).join("")||"<tr><td colspan=\'3\' class=\'empty\'>No visits yet</td></tr>");' +
+'  var rv=pubData.recentVisits||[];' +
+'  set("pub-visits",rv.length?rv.map(function(e){' +
+'    var what=e.served==="none"?"<span style=\'color:#999\'>no campaign</span>":(e.advertiser||"—");' +
+'    return "<tr><td>"+ago(e.time)+"</td><td>"+(e.platform||"—")+"</td><td>"+tag(e.crawlerType||"—",e.crawlerType||"")+"</td><td>"+(e.confidence||0)+"%</td><td>"+what+"</td></tr>";' +
+'  }).join(""):"<tr><td colspan=\'5\' class=\'empty\'>No visits yet</td></tr>");' +
 '}' +
 'function load(){' +
 '  Promise.all([fetch("/dashboard"),fetch("/dashboard?view=advertiser"),fetch("/dashboard?view=publisher")])' +

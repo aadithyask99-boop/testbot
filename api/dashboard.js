@@ -89,6 +89,12 @@ module.exports = async function handler(req, res) {
       // when training traffic exists (training billed but not viewable).
       const viewable = spend.retrievalTotal;
       const vcpm = viewable > 0 ? (spend.totalSpendGBP / viewable) * 1000 : 0;
+      // Per-campaign platform breakdown (which AI crawlers saw THIS specific ad)
+      const platHash = (await kvHashGetAll('stats:impr_by_camp_plat:' + c.id)) || {};
+      const platformBreakdown = Object.keys(platHash)
+        .map(k => ({ platform: k, impressions: parseInt(platHash[k]) || 0 }))
+        .filter(x => x.impressions > 0)
+        .sort((a, b) => b.impressions - a.impressions);
       campaignList.push({
         id: c.id, advertiser: c.advertiser, category: c.category,
         cpmGBP: c.cpmGBP, active: c.active === true,
@@ -101,6 +107,7 @@ module.exports = async function handler(req, res) {
         totalSpendGBP: parseFloat(spend.totalSpendGBP.toFixed(4)),
         dailyBudgetUsedPct: parseFloat(dailyBudgetUsedPct.toFixed(1)),
         impressions: spend.totalImpressions,
+        platformBreakdown,
         viewableImpressions: viewable,
         trainingImpressions: spend.trainingTotal,
         vcpmGBP: parseFloat(vcpm.toFixed(2)),
