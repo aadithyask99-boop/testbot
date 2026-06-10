@@ -117,6 +117,7 @@ module.exports = async function handler(req, res) {
       'stats:adclicks:total', 'stats:adclicks:date:' + today,
       'stats:impr_by_platform', 'stats:click_by_platform',
       'stats:uniq_click_by_platform', 'log:recent', 'log:clicks', 'log:adclicks',
+      'stats:bot_visits:total', 'stats:bot_served:total',
     ];
 
     const allKeys = [...new Set([...statKeys, ...campaignKeys])];

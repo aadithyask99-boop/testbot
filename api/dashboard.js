@@ -32,6 +32,8 @@ module.exports = async function handler(req, res) {
       platformTotals,
       clickPlatformTotals,
       uniqClickPlatformTotals,
+      botVisitsTotal,
+      botServedTotal,
     ] = await Promise.all([
       kvGet('stats:impressions:total'),
       kvGet('stats:impressions:date:' + today),
@@ -50,6 +52,8 @@ module.exports = async function handler(req, res) {
       kvHashGetAll('stats:impr_by_platform'),
       kvHashGetAll('stats:click_by_platform'),
       kvHashGetAll('stats:uniq_click_by_platform'),
+      kvGet('stats:bot_visits:total'),
+      kvGet('stats:bot_served:total'),
     ]);
 
     // Core counts
@@ -80,6 +84,11 @@ module.exports = async function handler(req, res) {
       if (!c) continue;
       const spend = await getCampaignSpend(c);
       const dailyBudgetUsedPct = c.budgetDailyGBP ? Math.min(100, (spend.dailySpendGBP / c.budgetDailyGBP) * 100) : 0;
+      // Viewable = retrieval impressions (reached a live retrieval crawler).
+      // vCPM = spend per 1000 viewable impressions. Runs slightly above CPM
+      // when training traffic exists (training billed but not viewable).
+      const viewable = spend.retrievalTotal;
+      const vcpm = viewable > 0 ? (spend.totalSpendGBP / viewable) * 1000 : 0;
       campaignList.push({
         id: c.id, advertiser: c.advertiser, category: c.category,
         cpmGBP: c.cpmGBP, active: c.active === true,
@@ -87,16 +96,40 @@ module.exports = async function handler(req, res) {
         keywords: c.keywords || [],
         text: c.text, link: c.link, linkText: c.linkText, advSlug: c.advSlug,
         matchingDescription: c.matchingDescription || '',
-        startDate: c.startDate, endDate: c.endDate,
+        startDate: c.startDate, endDate: c.endDate, updatedAt: c.updatedAt,
         dailySpendGBP: parseFloat(spend.dailySpendGBP.toFixed(4)),
         totalSpendGBP: parseFloat(spend.totalSpendGBP.toFixed(4)),
         dailyBudgetUsedPct: parseFloat(dailyBudgetUsedPct.toFixed(1)),
         impressions: spend.totalImpressions,
+        viewableImpressions: viewable,
+        trainingImpressions: spend.trainingTotal,
+        vcpmGBP: parseFloat(vcpm.toFixed(2)),
         isWinner: winnerId === c.id,
       });
     }
     // Auction order: active first, then CPM descending (the waterfall order)
     campaignList.sort((a, b) => (b.active - a.active) || (b.cpmGBP - a.cpmGBP));
+
+    // Fill rate = bot visits that were served a creative / all bot visits.
+    // Tells a publisher how well-monetised their AI traffic is.
+    const botVisits = n(botVisitsTotal);
+    const botServed = n(botServedTotal);
+    const fillRatePct = botVisits > 0 ? parseFloat(((botServed / botVisits) * 100).toFixed(1)) : null;
+
+    // Eligible competitors = campaigns that COULD serve on the demo category
+    // right now (active, in-date). Mirrors the auction eligibility filter.
+    // Note: does not re-check budget here (cheap approximation for display).
+    const todayStr = today;
+    const eligibleCount = campaignList.filter(c =>
+      c.active && c.category === config.demoPageCategory &&
+      (!c.startDate || c.startDate <= todayStr) &&
+      (!c.endDate || c.endDate >= todayStr)
+    ).length;
+
+    // Aggregate viewable impressions across all campaigns (for KPI strips)
+    const totalViewable = campaignList.reduce((s, c) => s + (c.viewableImpressions || 0), 0);
+    const blendedVcpm = totalViewable > 0
+      ? parseFloat(((revenueGBP / totalViewable) * 1000).toFixed(2)) : 0;
 
     // Platform impression breakdown
     // Merge KV totals (accurate, post-deploy) with log (last 100, historical)
@@ -162,6 +195,10 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({
         _view: 'advertiser',
         campaigns: campaignList,
+        aggregate: {
+          totalViewable: totalViewable,
+          blendedVcpmGBP: blendedVcpm,
+        },
         campaign: {
           advertiser: (currentCreative && currentCreative.advertiser) || 'Not set',
           text:       (currentCreative && currentCreative.text)       || '',
@@ -211,20 +248,32 @@ module.exports = async function handler(req, res) {
           advertiser: currentCreative.advertiser,
           category:   currentCreative.category,
           cpmGBP:     currentCreative.cpmGBP,
+          text:       currentCreative.text,      // publisher sees what's injected on their pages
+          advSlug:    currentCreative.advSlug,
         } : {
           advertiser: 'No active campaign',
           category:   '',
           cpmGBP:     null,
+          text:       '',
           note:       'No campaign is currently winning the auction (none active, in-budget, and in-date).',
+        },
+        // Publisher sees the WINNING CPM and how many advertisers are competing —
+        // not the itemised bid list (competitors' pricing stays private).
+        auction: {
+          competitorCount: eligibleCount,
+          winningCPM:      currentCreative ? currentCreative.cpmGBP : null,
         },
         earnings: {
           estimatedGBP:    parseFloat((revenueGBP * 0.8).toFixed(4)),
           revenueSharePct: 80,
           grossGBP:        parseFloat(revenueGBP.toFixed(4)),
+          vcpmGBP:         blendedVcpm,
         },
         traffic: {
           totalImpressions: impressions,
+          viewableImpressions: totalViewable,
           today:            n(todayImpressions),
+          fillRatePct:      fillRatePct,
           byPlatform:       platformTable,
         },
         clicks: {

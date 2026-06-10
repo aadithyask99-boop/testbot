@@ -79,14 +79,17 @@ module.exports = async function handler(req, res) {
       res.setHeader('X-Bot-Detected', 'true');
       res.setHeader('X-Bot-Platform', detection.platform || 'unknown');
       try {
-        await kvListPush('log:recent', {
-          time: new Date().toISOString(),
-          ip,
-          platform: detection.platform,
-          crawlerType: detection.crawlerType,
-          confidence: detection.confidence,
-          served: 'none',
-        }, 100);
+        await Promise.all([
+          kvIncr('stats:bot_visits:total'),   // fill-rate denominator
+          kvListPush('log:recent', {
+            time: new Date().toISOString(),
+            ip,
+            platform: detection.platform,
+            crawlerType: detection.crawlerType,
+            confidence: detection.confidence,
+            served: 'none',
+          }, 100),
+        ]);
       } catch (e) {}
       return res.status(200).send(ORIGINAL_PAGE);
     }
@@ -100,6 +103,8 @@ module.exports = async function handler(req, res) {
     try {
       await Promise.all([
         recordImpression(winner, detection.crawlerType),
+        kvIncr('stats:bot_visits:total'),   // fill-rate denominator
+        kvIncr('stats:bot_served:total'),   // fill-rate numerator
         kvIncr('stats:impressions:total'),
         kvIncr(`stats:impressions:platform:${detection.platform || 'unknown'}`),
         kvIncr(`stats:impressions:type:${detection.crawlerType || 'unknown'}`),
