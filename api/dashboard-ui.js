@@ -211,6 +211,44 @@ var html = '<!DOCTYPE html>' +
 '    return "<tr "+rowStyle+"><td style=\'white-space:nowrap\'>"+ago(m.time)+"</td><td style=\'font-family:monospace;font-size:11px;color:#555\'>"+urlShort+"</td><td>"+(m.platform||"—")+"</td><td>"+methodTag+"</td><td>"+outcome+"</td></tr>";' +
 '  }).join(""));' +
 '}' +
+'function whyWon(page){' +
+'  if(!page)return "";' +
+'  var cands=page.candidates||[];' +
+'  var fh=cands.filter(function(c){return c.outcome==="filtered_haiku";});' +
+'  var fk=cands.filter(function(c){return c.outcome==="filtered_keyword";});' +
+'  var el=cands.filter(function(c){return c.outcome==="eligible";});' +
+'  if(!page.servingId){' +
+'    if(page.reason==="other_category")return "Page classified as off-topic ("+( page.category||"other")+") — no campaigns compete here.";' +
+'    if(page.reason==="haiku_filtered_all"){' +
+'      var names=cands.map(function(c){return c.advertiser;}).join(", ");' +
+'      return "Haiku reviewed "+cands.length+" candidate"+(cands.length===1?"":"s")+" ("+names+") and found none relevant. Strict mode: nothing served.";' +
+'    }' +
+'    if(page.reason==="all_over_budget")return "All relevant campaigns exhausted their budget for today.";' +
+'    if(page.reason==="no_relevant_campaign"){' +
+'      if(fk.length)return "All "+fk.length+" campaign"+(fk.length===1?"":"s")+" scored below the keyword relevance threshold. Check campaign keywords match the page vocabulary.";' +
+'      return "No campaigns found for this category.";' +
+'    }' +
+'    return page.reason?page.reason.replace(/_/g," "):"No campaign served.";' +
+'  }' +
+'  var winner=cands.find(function(c){return c.outcome==="won";});' +
+'  if(!winner)return page.servingAdv+" served.";' +
+'  var parts=[];' +
+'  if(page.method==="keyword")parts.push("Page classified as "+(page.category||"?")+" via keyword scoring (score "+(page.relevanceScore||"?")+").");' +
+'  else if(page.method==="haiku"&&!page.cached)parts.push("Page classified as "+(page.category||"?")+" via Haiku (fresh call).");' +
+'  else if(page.method==="haiku"&&page.cached)parts.push("Classification cached as "+(page.category||"?")+". ");' +
+'  if(fh.length){' +
+'    var hnames=fh.map(function(c){return c.advertiser+" (\\u00a3"+c.cpmGBP+")";}).join(", ");' +
+'    parts.push("Haiku filtered out "+fh.length+" higher-bidder"+(fh.length===1?"":"s")+": "+hnames+".");' +
+'  }' +
+'  if(fk.length)parts.push(fk.length+" campaign"+(fk.length===1?"":"s")+" below keyword threshold.");' +
+'  if(el.length){' +
+'    var enames=el.map(function(c){return c.advertiser+" (\\u00a3"+c.cpmGBP+")";}).join(", ");' +
+'    parts.push(page.servingAdv+" won at \\u00a3"+winner.cpmGBP+" CPM against "+enames+".");' +
+'  }else{' +
+'    parts.push(page.servingAdv+" was the only relevant candidate at \\u00a3"+winner.cpmGBP+" CPM.");' +
+'  }' +
+'  return parts.join(" ");' +
+'}' +
 'function renderLiveBoard(board){' +
 '  if(!board||!board.length){set("live-board","<div class=\'empty\'>No crawls yet — crawl a page as a bot to see the auction</div>");return;}' +
 '  set("live-board",board.map(function(p){' +
@@ -238,7 +276,7 @@ var html = '<!DOCTYPE html>' +
 '        return "<div style=\'display:flex;justify-content:space-between;font-size:12px;padding:2px 0\'><span style=\'color:#333\'>"+c.advertiser+" <span style=\'color:#bbb;font-size:10px\'>£"+c.cpmGBP+" · rel "+(c.relevanceScore!=null?c.relevanceScore:"?")+"</span></span><span style=\'color:"+color+";font-size:11px\'>"+icon+"</span></div>";' +
 '      }).join("")+"</div>";' +
 '    }' +
-'    return "<div style=\'border:1px solid #e5e7eb;border-radius:8px;padding:12px;background:#fff\'>"+header+serving+cand+"</div>";' +
+'    return "<div style=\'border:1px solid #e5e7eb;border-radius:8px;padding:12px;background:#fff\'>"+header+serving+cand+"<div style=\\\'margin-top:8px;padding:8px;background:#f8f9fa;border-radius:4px;font-size:11px;color:#555;line-height:1.5\\\'><b style=\\\'color:#374151\\\'>Why:</b> "+whyWon(p)+"</div></div>";' +
 '  }).join(""));' +
 '}' +
 'function selectCampaign(id){' +
@@ -256,6 +294,7 @@ var html = '<!DOCTYPE html>' +
 '    "<div class=\'cname\'>"+c.advertiser+(c.isWinner?" <span class=\'winbadge\'>WINNING</span>":"")+"</div>"+' +
 '    "<div class=\'cmeta\'>"+c.id+" · "+c.category+" · £"+c.cpmGBP+" CPM · updated "+(c.updatedAt?ago(c.updatedAt):"—")+"</div>"+' +
 '    "<div class=\'ccopy\'>"+(c.text||"(no creative text)")+"</div>"+' +
+'    "<div class=\\\'cdesc\\\'>"+(c.matchingDescription?"<b style=\\\'color:#374151;margin-right:4px\\\'>Targeting:</b> "+c.matchingDescription:"<b style=\\\'color:#374151;margin-right:4px\\\'>Targeting:</b> <span style=\\\'color:#f59e0b\\\'>Not set — fill in Targeting Description</span>")+"</div>"+' +
 '    (c.link?"<div style=\'font-size:11px;color:#2563eb;margin-bottom:10px\'>Link: "+c.link+"</div>":"<div style=\'font-size:11px;color:#ccc;margin-bottom:10px\'>No link set</div>")+' +
 '    "<div class=\'grid\' style=\'margin-bottom:10px\'>"+' +
 '      card("Impressions",fmt(c.impressions),fmt(c.viewableImpressions)+" viewable","")+' +
