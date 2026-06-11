@@ -40,6 +40,7 @@ var html = '<!DOCTYPE html>' +
 '.field textarea{min-height:80px;resize:vertical;line-height:1.5}' +
 '.btn{background:#111;color:#fff;border:none;border-radius:4px;padding:9px 18px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500}' +
 '.btnsec{background:#fff;color:#111;border:1px solid #e5e5e5}' +
+'.btndanger{background:#fff;color:#dc2626;border:1px solid #fca5a5}' +
 '.msg{font-size:12px;padding:8px 10px;border-radius:4px;margin-top:8px}' +
 '.msg.ok{background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0}' +
 '.msg.err{background:#fef2f2;color:#dc2626;border:1px solid #fecaca}' +
@@ -90,6 +91,7 @@ var html = '<!DOCTYPE html>' +
 '<div class="field"><label>Advertiser</label><input type="text" id="f-adv" placeholder="e.g. Hargreaves Lansdown"></div></div>' +
 '<div class="frow"><div class="field"><label>Category</label><select id="f-cat"><option value="finance">finance</option><option value="tech">tech</option></select></div>' +
 '<div class="field"><label>Keywords (comma-separated)</label><input type="text" id="f-kw" placeholder="isa, pension, stocks"></div></div>' +
+'<div class="field"><label>Targeting Description <span style="font-size:11px;color:#888;font-weight:400">(helps Haiku match correctly — one sentence, be specific about geography and topic)</span></label><input type="text" id="f-desc" placeholder="e.g. UK pension and ISA investing platform for retail investors"></div>' +
 '<div class="field"><label>Ad Copy</label><textarea id="f-text" placeholder="Your sponsored text (40-80 words)..."></textarea></div>' +
 '<div class="frow"><div class="field"><label>Destination Link (optional)</label><input type="url" id="f-link" placeholder="https://advertiser.com"></div>' +
 '<div class="field"><label>Link Label</label><input type="text" id="f-lt" value="Learn more"></div></div>' +
@@ -263,10 +265,10 @@ var html = '<!DOCTYPE html>' +
 '    "</div>"+' +
 '    "<div class=\'lbl\' style=\'margin-top:14px\'>Crawlers that saw this ad</div>"+' +
 '    platTable+' +
-'    "<div style=\'margin-top:14px\'><button class=\'btn camp-editbtn\' data-id=\'"+c.id+"\'>Edit Campaign</button></div>"' +
+'    "<div style=\'margin-top:14px\'><button class=\'btn camp-editbtn\' data-id=\'"+c.id+"\'>Edit Campaign</button>" + "<button class=\\\'btn btndanger camp-delbtn\\\' style=\\\'margin-left:8px\\\' data-id=\\\'"+c.id+"\\\'>Delete</button></div>"' +
 '  );' +
 '  var eb=document.querySelector(".camp-editbtn");' +
-'  if(eb)eb.addEventListener("click",function(){editCampaign(this.getAttribute("data-id"));});' +
+'  if(eb)eb.addEventListener("click",function(){editCampaign(this.getAttribute("data-id"));});var db=document.querySelector(".camp-delbtn");if(db)db.addEventListener("click",function(e){e.stopPropagation();deleteCampaign(this.getAttribute("data-id"));});' +
 '  renderCampaignList(cl);' +
 '}' +
 'function setFilter(cat,btn){' +
@@ -278,7 +280,7 @@ var html = '<!DOCTYPE html>' +
 'function fillForm(c){' +
 '  var f=function(id,v){var el=document.getElementById(id);if(el)el.value=(v===undefined||v===null)?"":v;};' +
 '  f("f-id",c.id);f("f-adv",c.advertiser);' +
-'  f("f-kw",(c.keywords||[]).join(", "));' +
+'  f("f-kw",(c.keywords||[]).join(", "));f("f-desc",c.matchingDescription||"");' +
 '  f("f-text",c.text);f("f-link",c.link);f("f-lt",c.linkText||"Learn more");' +
 '  f("f-slug",c.advSlug);f("f-cpm",c.cpmGBP);' +
 '  f("f-bd",c.budgetDailyGBP);f("f-bt",c.budgetTotalGBP);' +
@@ -297,6 +299,13 @@ var html = '<!DOCTYPE html>' +
 '  fillForm(c);' +
 '  var t=document.getElementById("form-title");if(t){t.textContent="Edit Campaign: "+c.advertiser;t.scrollIntoView({behavior:"smooth"});}' +
 '}' +
+'function deleteCampaign(id){' +
+'  if(!confirm("Delete campaign "+id+"? This cannot be undone."))return;' +
+'  fetch("/admin/campaign/delete",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:id})})' +
+'  .then(function(r){return r.json();})' +
+'  .then(function(){set("camp-detail","<div class=\'empty\'>Campaign deleted</div>");load();})' +
+'  .catch(function(e){alert("Delete failed: "+e.message);});' +
+'}' +
 'function toggleCampaign(id,makeActive){' +
 '  fetch("/admin/campaign/pause",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:id,active:makeActive})})' +
 '  .then(function(r){return r.json();}).then(function(d){load();}).catch(function(){});' +
@@ -304,7 +313,7 @@ var html = '<!DOCTYPE html>' +
 'function saveCreative(){' +
 '  var g=function(id){var el=document.getElementById(id);return el?el.value:"";};' +
 '  var kw=g("f-kw").split(",").map(function(s){return s.trim().toLowerCase();}).filter(function(s){return s;});' +
-'  var body={id:g("f-id"),advertiser:g("f-adv"),category:g("f-cat"),text:g("f-text"),link:g("f-link"),linkText:g("f-lt"),advSlug:g("f-slug"),cpmGBP:parseFloat(g("f-cpm")),budgetDailyGBP:parseFloat(g("f-bd")),budgetTotalGBP:parseFloat(g("f-bt")),keywords:kw,active:true};' +
+'  var body={id:g("f-id"),advertiser:g("f-adv"),category:g("f-cat"),text:g("f-text"),link:g("f-link"),linkText:g("f-lt"),advSlug:g("f-slug"),cpmGBP:parseFloat(g("f-cpm")),budgetDailyGBP:parseFloat(g("f-bd")),budgetTotalGBP:parseFloat(g("f-bt")),keywords:kw,matchingDescription:g("f-desc"),active:true};' +
 '  var msg=document.getElementById("fmsg");' +
 '  fetch("/admin/campaign",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})' +
 '  .then(function(r){return r.json();}).then(function(d){' +

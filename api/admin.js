@@ -141,10 +141,27 @@ module.exports = async function handler(req, res) {
     if (!data || !data.id) return res.status(400).json({ error: 'id required' });
     const campaign = await kvGet(`campaign:${data.id}`);
     if (!campaign) return res.status(404).json({ error: 'campaign not found' });
-    campaign.active = data.active === true; // explicit: pause sets false unless active:true sent
+    campaign.active = data.active === true;
     campaign.updatedAt = new Date().toISOString();
     await kvSet(`campaign:${campaign.id}`, campaign);
     return res.status(200).json({ message: campaign.active ? 'Campaign activated' : 'Campaign paused', campaign });
+  }
+
+  // ---- DELETE campaign ----
+  // Removes campaign:{id} AND removes from campaigns:{category} index.
+  // POST /admin/campaign/delete  { id: 'camp_001' }
+  if (req.method === 'POST' && url.includes('/admin/campaign/delete')) {
+    const data = await readBody(req);
+    if (!data || !data.id) return res.status(400).json({ error: 'id required' });
+    const campaign = await kvGet(`campaign:${data.id}`);
+    if (!campaign) return res.status(404).json({ error: 'campaign not found' });
+    // Remove from campaign store
+    await kvDel(`campaign:${data.id}`);
+    // Remove from category index
+    const ids = (await kvGet(`campaigns:${campaign.category}`)) || [];
+    const updated = ids.filter(i => i !== data.id);
+    await kvSet(`campaigns:${campaign.category}`, updated);
+    return res.status(200).json({ message: `Campaign deleted: ${data.id}`, id: data.id });
   }
 
   // ---- CREATE / UPDATE campaign ----
