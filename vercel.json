@@ -20,6 +20,7 @@
     { "src": "/ad",              "dest": "/api/admin.js" },
     { "src": "/admin/reset-stats",    "dest": "/api/admin.js" },
     { "src": "/admin/seed",           "dest": "/api/admin.js" },
+    { "src": "/admin/campaign/delete", "dest": "/api/admin.js" },
     { "src": "/admin/campaign/pause", "dest": "/api/admin.js" },
     { "src": "/admin/campaign",       "dest": "/api/admin.js" },
     { "src": "/admin",                "dest": "/api/admin.js" },
