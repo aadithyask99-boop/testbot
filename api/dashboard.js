@@ -1,5 +1,5 @@
 const { kvGet, kvSet, kvListGet, kvHashGetAll } = require('../lib/kv');
-const { runAuction, getCampaignSpend } = require('../lib/auction');
+const { getCampaignSpend } = require('../lib/auction');
 const config = require('../lib/config');
 
 module.exports = async function handler(req, res) {
@@ -28,7 +28,6 @@ module.exports = async function handler(req, res) {
       recentBotLogs,
       recentPubClicks,
       recentAdvClicks,
-      currentCreative,
       platformTotals,
       clickPlatformTotals,
       uniqClickPlatformTotals,
@@ -48,13 +47,79 @@ module.exports = async function handler(req, res) {
       kvListGet('log:recent', 100),
       kvListGet('log:clicks', 20),
       kvListGet('log:adclicks', 20),
-      runAuction(config.demoPageCategory), // current auction winner (was creative:finance_investing)
       kvHashGetAll('stats:impr_by_platform'),
       kvHashGetAll('stats:click_by_platform'),
       kvHashGetAll('stats:uniq_click_by_platform'),
       kvGet('stats:bot_visits:total'),
       kvGet('stats:bot_served:total'),
     ]);
+
+    // ── PER-PAGE SERVING STATE (Option A — derived from real logs) ──
+    // There is NO single "current winner". Each page runs its own auction
+    // at crawl time. We reconstruct what's actually serving per URL from
+    // the most recent SERVED log entry for that URL. The dashboard never
+    // re-runs the auction — it reports what genuinely happened.
+    const servedLogs = (recentBotLogs || []).filter(e => e && e.campaignId && e.served !== 'none');
+    const pageServingMap = {};   // url -> most recent served log entry
+    for (const e of servedLogs) {
+      const url = e.url || '/';
+      if (!pageServingMap[url]) pageServingMap[url] = e; // logs are newest-first
+    }
+    // Build the per-page board: every page seen in logs, with its latest
+    // resolved auction (winner + full candidate breakdown + method + when).
+    const pageBoard = Object.keys(pageServingMap).map(url => {
+      const e = pageServingMap[url];
+      return {
+        url,
+        category:       e.matchCategory || null,
+        servingId:      e.campaignId,
+        servingAdv:     e.advertiser,
+        servingCpmGBP:  e.cpmGBP || null,
+        method:         e.matchMethod || null,
+        cached:         !!e.matchCached,
+        relevanceScore: e.relevanceScore || null,
+        lastPlatform:   e.platform || null,
+        lastCrawl:      e.time || null,
+        candidates:     e.candidates || null,
+      };
+    });
+    // Also capture pages where the latest crawl served NOTHING (strict mode,
+    // off-topic, all over budget) so the board shows them honestly too.
+    const latestByUrl = {};
+    for (const e of (recentBotLogs || [])) {
+      const url = e.url || '/';
+      if (!latestByUrl[url]) latestByUrl[url] = e;
+    }
+    for (const url of Object.keys(latestByUrl)) {
+      const e = latestByUrl[url];
+      if (e.served === 'none' && !pageServingMap[url]) {
+        pageBoard.push({
+          url,
+          category:      e.matchCategory || null,
+          servingId:     null,
+          servingAdv:    null,
+          method:        e.matchMethod || null,
+          reason:        e.matchReason || null,
+          lastPlatform:  e.platform || null,
+          lastCrawl:     e.time || null,
+          candidates:    e.candidates || null,
+        });
+      }
+    }
+
+    // currentCreative is now derived from the SINGLE most-recent served
+    // impression across all pages — used only for legacy aggregate displays
+    // (headline CPM estimate, publisher "what's injected" sample). It is NOT
+    // a re-run auction. When multiple pages serve different ads, this simply
+    // reflects the most recent one; the per-page board shows the full truth.
+    const currentCreative = servedLogs.length > 0
+      ? {
+          id:         servedLogs[0].campaignId,
+          advertiser: servedLogs[0].advertiser,
+          cpmGBP:     servedLogs[0].cpmGBP,
+          category:   servedLogs[0].matchCategory,
+        }
+      : null;
 
     // Core counts
     const impressions  = n(totalImpressions);
@@ -68,11 +133,12 @@ module.exports = async function handler(req, res) {
     const campaignCPM  = ((currentCreative && currentCreative.cpmGBP) || 18);
     const revenueGBP   = ((retrieval * campaignCPM) + (training * campaignCPM * 0.3)) / 1000;
 
-    // ── SHARED CAMPAIGN LIST (auction order + winner badge) ──────
-    // Built once, used by operator AND advertiser views. isWinner is
-    // tied to the SINGLE runAuction() result above (currentCreative)
-    // so equal-CPM ties never badge two rows or flicker.
-    const winnerId = (currentCreative && currentCreative.id) || null;
+    // ── SHARED CAMPAIGN LIST (auction order + serving badge) ──────
+    // Built once, used by operator AND advertiser views. In the per-page
+    // model there is no single winner: a campaign is "serving" if it's the
+    // latest-served creative on ANY page. We derive that set from the real
+    // page board (logs), never from a re-run auction.
+    const servingIds = new Set(pageBoard.filter(p => p.servingId).map(p => p.servingId));
     const allCampaignIds = [];
     for (const cat of config.categories) {
       const cids = (await kvGet('campaigns:' + cat)) || [];
@@ -111,11 +177,29 @@ module.exports = async function handler(req, res) {
         viewableImpressions: viewable,
         trainingImpressions: spend.trainingTotal,
         vcpmGBP: parseFloat(vcpm.toFixed(2)),
-        isWinner: winnerId === c.id,
+        isWinner: servingIds.has(c.id),
       });
     }
     // Auction order: active first, then CPM descending (the waterfall order)
     campaignList.sort((a, b) => (b.active - a.active) || (b.cpmGBP - a.cpmGBP));
+
+    // Enrich the log-derived currentCreative with full campaign fields
+    // (text, link, advSlug) so the publisher "what's injected" sample works.
+    // Still log-derived — we look up the campaign that ACTUALLY served, not
+    // a re-run auction winner.
+    let currentCreativeFull = null;
+    if (currentCreative && currentCreative.id) {
+      const match = campaignList.find(c => c.id === currentCreative.id);
+      if (match) {
+        currentCreativeFull = {
+          id: match.id, advertiser: match.advertiser, category: match.category,
+          cpmGBP: match.cpmGBP, text: match.text, link: match.link,
+          linkText: match.linkText, advSlug: match.advSlug, updatedAt: match.updatedAt,
+        };
+      }
+    }
+    // Use the enriched version everywhere currentCreative was referenced.
+    const cc = currentCreativeFull || currentCreative;
 
     // Fill rate = bot visits that were served a creative / all bot visits.
     // Tells a publisher how well-monetised their AI traffic is.
@@ -201,6 +285,9 @@ module.exports = async function handler(req, res) {
     if (view === 'advertiser') {
       return res.status(200).json({
         _view: 'advertiser',
+        // Per-page live board: what's actually serving on each page right now,
+        // with the full candidate breakdown per resolved auction. Real logs.
+        pageBoard,
         campaigns: campaignList,
         // Session 3 diagnostic: surface match decisions at top level so the
         // dashboard's "Recent Match Decisions" table can read them directly.
@@ -225,14 +312,14 @@ module.exports = async function handler(req, res) {
           blendedVcpmGBP: blendedVcpm,
         },
         campaign: {
-          advertiser: (currentCreative && currentCreative.advertiser) || 'Not set',
-          text:       (currentCreative && currentCreative.text)       || '',
-          link:       (currentCreative && currentCreative.link)       || '',
-          linkText:   (currentCreative && currentCreative.linkText)   || '',
-          advSlug:    (currentCreative && currentCreative.advSlug)    || '',
-          category:   (currentCreative && currentCreative.category)   || '',
-          cpmGBP:     (currentCreative && currentCreative.cpmGBP)     || 0,
-          updatedAt:  (currentCreative && currentCreative.updatedAt)  || null,
+          advertiser: (cc && cc.advertiser) || 'Not set',
+          text:       (cc && cc.text)       || '',
+          link:       (cc && cc.link)       || '',
+          linkText:   (cc && cc.linkText)   || '',
+          advSlug:    (cc && cc.advSlug)    || '',
+          category:   (cc && cc.category)   || '',
+          cpmGBP:     (cc && cc.cpmGBP)     || 0,
+          updatedAt:  (cc && cc.updatedAt)  || null,
         },
         impressions: {
           total:       impressions,
@@ -245,7 +332,7 @@ module.exports = async function handler(req, res) {
         // Advertisers care about impressions of THEIR creative + spend.
         spend: {
           estimatedTotalGBP: parseFloat(revenueGBP.toFixed(4)),
-          cpmGBP:            (currentCreative && currentCreative.cpmGBP) || 18,
+          cpmGBP:            (cc && cc.cpmGBP) || 18,
           model:             'CPM charged on retrieval crawler impressions only',
         },
         verification: {
@@ -269,12 +356,12 @@ module.exports = async function handler(req, res) {
     if (view === 'publisher') {
       return res.status(200).json({
         _view: 'publisher',
-        campaign: currentCreative ? {
-          advertiser: currentCreative.advertiser,
-          category:   currentCreative.category,
-          cpmGBP:     currentCreative.cpmGBP,
-          text:       currentCreative.text,      // publisher sees what's injected on their pages
-          advSlug:    currentCreative.advSlug,
+        campaign: cc ? {
+          advertiser: cc.advertiser,
+          category:   cc.category,
+          cpmGBP:     cc.cpmGBP,
+          text:       cc.text,      // publisher sees what's injected on their pages
+          advSlug:    cc.advSlug,
         } : {
           advertiser: 'No active campaign',
           category:   '',
@@ -286,7 +373,7 @@ module.exports = async function handler(req, res) {
         // not the itemised bid list (competitors' pricing stays private).
         auction: {
           competitorCount: eligibleCount,
-          winningCPM:      currentCreative ? currentCreative.cpmGBP : null,
+          winningCPM:      cc ? cc.cpmGBP : null,
         },
         earnings: {
           estimatedGBP:    parseFloat((revenueGBP * 0.8).toFixed(4)),
@@ -318,6 +405,7 @@ module.exports = async function handler(req, res) {
     // ── OPERATOR VIEW (default) ─────────────────────────────────
     return res.status(200).json({
       _view: 'operator',
+      pageBoard,
       campaigns: campaignList,
       summary: {
         totalImpressions:  impressions,

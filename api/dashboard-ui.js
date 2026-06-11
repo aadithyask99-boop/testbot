@@ -64,6 +64,8 @@ var html = '<!DOCTYPE html>' +
 
 '<div id="tab-advertiser" class="tab">' +
 '<div class="grid" id="adv-cards"></div>' +
+'<section><h2>Live Auction Board <span style="font-size:12px;color:#888;font-weight:400">(per-page — each page runs its own auction at crawl time · updates every 5s)</span></h2>' +
+'<div id="live-board" style="display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(320px,1fr))"><div class="empty">Loading...</div></div></section>' +
 '<section><h2>Campaigns <span style="font-size:12px;color:#888;font-weight:400">(auction order — top wins · click a row for detail)</span></h2>' +
 '<div style="padding:10px 16px;border-bottom:1px solid #f0f0f0">' +
 '<button class="filt active" onclick="setFilter(\'all\',this)">All</button>' +
@@ -159,6 +161,7 @@ var html = '<!DOCTYPE html>' +
 '    card("Total Spend",money(totalSpend),"£"+(agg.blendedVcpmGBP||0)+" vCPM","")' +
 '  );' +
 '  renderCampaignList(cl);' +
+'  renderLiveBoard(advData.pageBoard||[]);' +
 '  renderMatchDecisions(advData.recentMatches||[]);' +
 '}' +
 'function renderCampaignList(cl){' +
@@ -204,6 +207,36 @@ var html = '<!DOCTYPE html>' +
 '    }' +
 '    var rowStyle=m.served?"":"style=\'opacity:0.65\'";' +
 '    return "<tr "+rowStyle+"><td style=\'white-space:nowrap\'>"+ago(m.time)+"</td><td style=\'font-family:monospace;font-size:11px;color:#555\'>"+urlShort+"</td><td>"+(m.platform||"—")+"</td><td>"+methodTag+"</td><td>"+outcome+"</td></tr>";' +
+'  }).join(""));' +
+'}' +
+'function renderLiveBoard(board){' +
+'  if(!board||!board.length){set("live-board","<div class=\'empty\'>No crawls yet — crawl a page as a bot to see the auction</div>");return;}' +
+'  set("live-board",board.map(function(p){' +
+'    var urlShort=p.url?p.url.replace(/^https?:\\/\\/[^\\/]+/,""):"/";' +
+'    var cat=p.category||"?";' +
+'    var catColor=cat==="finance"?"#16a34a":cat==="tech"?"#2563eb":"#999";' +
+'    var header="<div style=\'display:flex;justify-content:space-between;align-items:center;margin-bottom:8px\'><span style=\'font-family:monospace;font-size:12px;color:#333\'>"+urlShort+"</span><span style=\'background:"+catColor+"22;color:"+catColor+";font-size:10px;padding:2px 7px;border-radius:3px\'>"+cat+"</span></div>";' +
+'    var serving;' +
+'    if(p.servingId){' +
+'      var methodLabel=p.method==="haiku"?(p.cached?"haiku · cached":"haiku · fresh"):(p.method||"—");' +
+'      serving="<div style=\'font-size:15px;font-weight:600;color:#111;margin-bottom:2px\'>"+p.servingAdv+" <span style=\'font-size:12px;color:#16a34a\'>£"+(p.servingCpmGBP||0)+" CPM</span></div><div style=\'font-size:11px;color:#888;margin-bottom:8px\'>via "+methodLabel+(p.lastPlatform?(" · "+p.lastPlatform):"")+(p.lastCrawl?(" · "+ago(p.lastCrawl)):"")+"</div>";' +
+'    }else{' +
+'      serving="<div style=\'font-size:14px;font-weight:600;color:#ef4444;margin-bottom:2px\'>Nothing served</div><div style=\'font-size:11px;color:#888;margin-bottom:8px\'>"+((p.reason||"no_winner").replace(/_/g," "))+(p.lastPlatform?(" · "+p.lastPlatform):"")+(p.lastCrawl?(" · "+ago(p.lastCrawl)):"")+"</div>";' +
+'    }' +
+'    var cand="";' +
+'    if(p.candidates&&p.candidates.length){' +
+'      cand="<div style=\'border-top:1px solid #eee;padding-top:7px;margin-top:4px\'><div style=\'font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:#aaa;margin-bottom:5px\'>Competed ("+p.candidates.length+")</div>"+p.candidates.map(function(c){' +
+'        var icon,color;' +
+'        if(c.outcome==="won"){icon="✓ won";color="#16a34a";}' +
+'        else if(c.outcome==="eligible"){icon="· lost CPM";color="#888";}' +
+'        else if(c.outcome==="filtered_haiku"){icon="✗ Haiku: off-topic";color="#f59e0b";}' +
+'        else if(c.outcome==="filtered_keyword"){icon="✗ low relevance";color="#cbd5e1";}' +
+'        else if(c.outcome==="over_budget"){icon="✗ over budget";color="#ef4444";}' +
+'        else{icon=c.outcome;color="#888";}' +
+'        return "<div style=\'display:flex;justify-content:space-between;font-size:12px;padding:2px 0\'><span style=\'color:#333\'>"+c.advertiser+" <span style=\'color:#bbb;font-size:10px\'>£"+c.cpmGBP+" · rel "+(c.relevanceScore!=null?c.relevanceScore:"?")+"</span></span><span style=\'color:"+color+";font-size:11px\'>"+icon+"</span></div>";' +
+'      }).join("")+"</div>";' +
+'    }' +
+'    return "<div style=\'border:1px solid #e5e7eb;border-radius:8px;padding:12px;background:#fff\'>"+header+serving+cand+"</div>";' +
 '  }).join(""));' +
 '}' +
 'function selectCampaign(id){' +

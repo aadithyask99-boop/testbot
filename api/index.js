@@ -110,6 +110,7 @@ module.exports = async function handler(req, res) {
             matchReason: matchResult.reason || null,
             matchCategory: matchResult.category || null,
             matchCached: matchResult.cached || false,
+            candidates: matchResult.candidates || null,
           }, 100),
         ]);
       } catch (e) {}
@@ -147,6 +148,7 @@ module.exports = async function handler(req, res) {
           matchCached: matchResult.cached || false,
           relevanceScore: matchResult.relevanceScore || null,
           matchCategory: matchResult.category || null,
+          candidates: matchResult.candidates || null,
         }, 100),
       ]);
     } catch (e) {}
