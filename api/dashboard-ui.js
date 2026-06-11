@@ -73,6 +73,9 @@ var html = '<!DOCTYPE html>' +
 '<table><thead><tr><th>Advertiser</th><th>CPM</th><th>Daily Budget</th><th>Impr</th><th>Viewable</th><th>Status</th><th></th></tr></thead>' +
 '<tbody id="camp-list"><tr><td colspan="7" class="empty">Loading...</td></tr></tbody></table></section>' +
 '<section><h2>Campaign Detail</h2><div class="cbox" id="camp-detail"><div class="empty">Click a campaign above to see its creative and stats</div></div></section>' +
+'<section><h2>Recent Match Decisions <span style="font-size:12px;color:#888;font-weight:400">(diagnostic — last 15 crawls, served + unserved)</span></h2>' +
+'<table><thead><tr><th>When</th><th>URL</th><th>Platform</th><th>Method</th><th>Outcome</th></tr></thead>' +
+'<tbody id="match-decisions"><tr><td colspan="5" class="empty">Loading...</td></tr></tbody></table></section>' +
 '<section><h2>Verification</h2><div style="padding:14px;display:grid;gap:12px">' +
 '<div><div class="lbl" style="margin-bottom:6px">Self-Test Command</div>' +
 '<div class="mono">curl -H "User-Agent: Mozilla/5.0 (compatible; PerplexityBot/1.0)" https://testbot-two-psi.vercel.app/</div>' +
@@ -156,6 +159,7 @@ var html = '<!DOCTYPE html>' +
 '    card("Total Spend",money(totalSpend),"£"+(agg.blendedVcpmGBP||0)+" vCPM","")' +
 '  );' +
 '  renderCampaignList(cl);' +
+'  renderMatchDecisions(advData.recentMatches||[]);' +
 '}' +
 'function renderCampaignList(cl){' +
 '  var filtered=cl.filter(function(c){return campFilter==="all"||c.category===campFilter;});' +
@@ -177,6 +181,30 @@ var html = '<!DOCTYPE html>' +
 '  for(var i=0;i<rows.length;i++){rows[i].addEventListener("click",function(e){if(e.target.classList.contains("camp-toggle"))return;selectCampaign(this.getAttribute("data-id"));});}' +
 '  var tgs=document.querySelectorAll(".camp-toggle");' +
 '  for(var j=0;j<tgs.length;j++){tgs[j].addEventListener("click",function(e){e.stopPropagation();toggleCampaign(this.getAttribute("data-id"),this.getAttribute("data-active")==="0");});}' +
+'}' +
+'function renderMatchDecisions(matches){' +
+'  if(!matches||!matches.length){set("match-decisions","<tr><td colspan=\'5\' class=\'empty\'>No crawls yet</td></tr>");return;}' +
+'  set("match-decisions",matches.map(function(m){' +
+'    var urlShort=m.url?m.url.replace(/^.*\\/articles\\//,"/articles/").slice(0,32):"—";' +
+'    var methodLabel="—";var methodColor="#999";' +
+'    if(m.matchMethod==="haiku"){methodLabel=m.matchCached?"haiku · cached":"haiku · fresh";methodColor=m.matchCached?"#7dd3fc":"#2563eb";}' +
+'    else if(m.matchMethod==="keyword"){methodLabel="keyword";methodColor="#666";}' +
+'    else if(m.matchMethod==="publisher_tag"){methodLabel="publisher tag";methodColor="#8b5cf6";}' +
+'    else if(m.matchMethod==="keyword_haiku_fallback"){methodLabel="keyword (haiku down)";methodColor="#f59e0b";}' +
+'    var methodTag="<span style=\'background:"+methodColor+"22;color:"+methodColor+";font-size:11px;padding:2px 8px;border-radius:3px;border:1px solid "+methodColor+"55\'>"+methodLabel+"</span>";' +
+'    var outcome;' +
+'    if(m.served){' +
+'      var score=m.relevanceScore?(" <span style=\'font-size:10px;color:#999\'>score "+m.relevanceScore.toFixed(2)+"</span>"):"";' +
+'      outcome="<b>"+m.served+"</b>"+score;' +
+'    }else{' +
+'      var reasonLabel=m.matchReason||"no_winner";' +
+'      var reasonColor="#ef4444";' +
+'      if(reasonLabel==="other_category"||reasonLabel==="no_campaigns_in_category")reasonColor="#999";' +
+'      outcome="<span style=\'color:"+reasonColor+";font-size:11px\'>no campaign · "+reasonLabel.replace(/_/g," ")+"</span>";' +
+'    }' +
+'    var rowStyle=m.served?"":"style=\'opacity:0.65\'";' +
+'    return "<tr "+rowStyle+"><td style=\'white-space:nowrap\'>"+ago(m.time)+"</td><td style=\'font-family:monospace;font-size:11px;color:#555\'>"+urlShort+"</td><td>"+(m.platform||"—")+"</td><td>"+methodTag+"</td><td>"+outcome+"</td></tr>";' +
+'  }).join(""));' +
 '}' +
 'function selectCampaign(id){' +
 '  selectedCampaign=id;' +

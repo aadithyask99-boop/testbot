@@ -3,6 +3,7 @@ const { injectSponsoredContent } = require('../lib/injector');
 const { detectAIReferrer } = require('../lib/referrer');
 const { kvGet, kvSet, kvIncr, kvListPush, kvHashIncr } = require('../lib/kv');
 const { runAuction, recordImpression } = require('../lib/auction');
+const { runMatch } = require('../lib/relevance');
 const config = require('../lib/config');
 
 const { getPage } = require('../lib/demo-pages');
@@ -61,14 +62,35 @@ module.exports = async function handler(req, res) {
   if (detection.isBot && !detection.cloakingRisk) {
 
     // --------------------------------------------------------
-    // AUCTION: CPM waterfall picks the winning campaign for
-    // THIS PAGE'S category (looked up per URL). No winner →
-    // serve the CLEAN page, log the bot visit, bill nothing.
-    //
-    // TOMORROW: pageCategory comes from /match (a real
-    // classification) instead of demo-pages.js (hardcoded).
+    // MATCH + AUCTION (Session 3): the hybrid cascade.
+    // runMatch() does: cache → publisher tag → keyword → Haiku
+    // → per-campaign relevance filter → runAuctionFromList().
+    // Returns the winning campaign for THIS specific page, with
+    // contextual relevance (the E*TRADE-on-UK-ISA bug is fixed
+    // by Layer 4: irrelevant campaigns drop out before auction).
     // --------------------------------------------------------
-    const winner = await runAuction(pageCategory);
+    // Extract a representative text sample from the page body.
+    // We use the FIRST PARAGRAPH for Haiku classification (token efficiency)
+    // but pass a LONGER sample (first ~1500 chars of body text) to the
+    // relevance filter, because Layer 4 scores per-campaign keyword overlap
+    // and short samples cause perfectly-relevant campaigns to score low.
+    // Real publisher SDK (Phase 4) does the same: limited sample to Haiku,
+    // fuller sample to relevance scoring.
+    const allParas = [...((page.body || '').matchAll(/<p>([\s\S]*?)<\/p>/g))]
+      .map(m => m[1].replace(/<[^>]+>/g, '').trim());
+    const firstParagraph = (allParas[0] || '').slice(0, 500);
+    const bodySample = allParas.join(' ').slice(0, 1500);
+
+    const matchResult = await runMatch({
+      url: 'https://testbot-two-psi.vercel.app' + (page.path || req.url || '/'),
+      title: page.title,
+      metaDescription: page.metaDescription,
+      firstParagraph,
+      bodySample,
+      publisherCategory: null,
+    });
+
+    const winner = matchResult.winner;
 
     if (!winner) {
       res.setHeader('X-Bot-Detected', 'true');
@@ -79,10 +101,15 @@ module.exports = async function handler(req, res) {
           kvListPush('log:recent', {
             time: new Date().toISOString(),
             ip,
+            url: req.url || '/',
             platform: detection.platform,
             crawlerType: detection.crawlerType,
             confidence: detection.confidence,
             served: 'none',
+            matchMethod: matchResult.method || null,
+            matchReason: matchResult.reason || null,
+            matchCategory: matchResult.category || null,
+            matchCached: matchResult.cached || false,
           }, 100),
         ]);
       } catch (e) {}
@@ -109,12 +136,17 @@ module.exports = async function handler(req, res) {
         kvListPush('log:recent', {
           time: new Date().toISOString(),
           ip,
+          url: req.url || '/',
           platform: detection.platform,
           crawlerType: detection.crawlerType,
           confidence: detection.confidence,
           campaignId: winner.id,
           advertiser: winner.advertiser,
           cpmGBP: winner.cpmGBP,
+          matchMethod: matchResult.method || null,
+          matchCached: matchResult.cached || false,
+          relevanceScore: matchResult.relevanceScore || null,
+          matchCategory: matchResult.category || null,
         }, 100),
       ]);
     } catch (e) {}

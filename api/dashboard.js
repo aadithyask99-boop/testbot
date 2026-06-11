@@ -202,6 +202,24 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({
         _view: 'advertiser',
         campaigns: campaignList,
+        // Session 3 diagnostic: surface match decisions at top level so the
+        // dashboard's "Recent Match Decisions" table can read them directly.
+        // Includes served AND unserved entries — the diagnostic value is
+        // seeing WHY matching rejects things, not just successes.
+        recentMatches: (recentBotLogs || []).slice(0, 15).map(e => ({
+          time:           e.time,
+          url:            e.url || null,
+          platform:       e.platform,
+          crawlerType:    e.crawlerType,
+          campaignId:     e.campaignId || null,
+          advertiser:     e.advertiser || null,
+          served:         e.served === 'none' ? null : (e.advertiser || null),
+          matchMethod:    e.matchMethod || null,
+          matchCached:    !!e.matchCached,
+          matchReason:    e.matchReason || null,
+          matchCategory:  e.matchCategory || null,
+          relevanceScore: e.relevanceScore || null,
+        })),
         aggregate: {
           totalViewable: totalViewable,
           blendedVcpmGBP: blendedVcpm,
