@@ -88,11 +88,22 @@ ${urls}
   }
 
   // ── /health ───────────────────────────────────────────────
+  // Reports environment readiness — env-var PRESENCE only, never values.
+  // Used to diagnose "is the Anthropic key actually loaded in this env?"
+  // without ever logging or returning the secret itself.
   return res.status(200).json({
     status: 'ok',
     timestamp: new Date().toISOString(),
     platform: 'vercel',
     version: '1.0.0',
     region: process.env.VERCEL_REGION || 'unknown',
+    env: {
+      anthropic_key_set: !!process.env.ANTHROPIC_API_KEY,
+      anthropic_key_prefix: process.env.ANTHROPIC_API_KEY
+        ? process.env.ANTHROPIC_API_KEY.slice(0, 10) + '...'
+        : null,
+      kv_url_set: !!process.env.KV_REST_API_URL,
+      kv_token_set: !!process.env.KV_REST_API_TOKEN,
+    },
   });
 };
