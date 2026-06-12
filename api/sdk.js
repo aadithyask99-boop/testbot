@@ -108,7 +108,15 @@
   fetch(adServerUrl + '/ad?pub=' + publisherId + '&url=' + encodeURIComponent(window.location.href))
     .then(function(response) { return response.json(); })
     .then(function(data) {
-      if (!data || !data.text) return;
+      // Session 5: campaign.text removed, replaced by variants[].
+      // This client-side placeholder path doesn't run the variant-
+      // selection Haiku call (that's server-side in lib/relevance.js,
+      // Layer 6) — it just takes the first variant. Real server-side
+      // crawler injection (api/index.js) is the path that matters;
+      // this SDK only matters for headless-browser bots.
+      const campaign = data && data.campaign;
+      const variant = campaign && Array.isArray(campaign.variants) && campaign.variants[0];
+      if (!variant || !variant.text) return;
 
       // Find the best injection point in the DOM
       const paragraphs = document.querySelectorAll('article p, main p, .content p, p');
@@ -118,7 +126,7 @@
         const targetParagraph = paragraphs[1];
         const sponsoredEl = document.createElement('p');
         // No class — plain <p> tag, identical to editorial content
-        sponsoredEl.textContent = data.text;
+        sponsoredEl.textContent = variant.text;
         targetParagraph.parentNode.insertBefore(sponsoredEl, targetParagraph.nextSibling);
       }
     })

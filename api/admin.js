@@ -30,7 +30,50 @@ async function addToCategoryIndex(category, id) {
   }
 }
 
+// Validate a variants array against config.variantLimits.
+// Throws with a human-readable message on failure — caller returns 400.
+function validateVariants(variants) {
+  const { min, max, maxTextLength } = config.variantLimits;
+  if (!Array.isArray(variants)) {
+    throw new Error('variants must be an array');
+  }
+  if (variants.length < min || variants.length > max) {
+    throw new Error(`variants must contain between ${min} and ${max} entries (got ${variants.length})`);
+  }
+  const seenAngles = new Set();
+  let duplicateAngle = null;
+  variants.forEach((v, i) => {
+    if (!v || typeof v !== 'object') {
+      throw new Error(`variant ${i + 1} is invalid`);
+    }
+    if (!v.text || typeof v.text !== 'string' || !v.text.trim()) {
+      throw new Error(`variant ${i + 1} is missing text`);
+    }
+    if (v.text.length > maxTextLength) {
+      throw new Error(`variant ${i + 1} text exceeds ${maxTextLength} characters (got ${v.text.length})`);
+    }
+    if (!v.angle || typeof v.angle !== 'string' || !v.angle.trim()) {
+      throw new Error(`variant ${i + 1} is missing angle`);
+    }
+    const angleKey = v.angle.trim().toLowerCase();
+    if (seenAngles.has(angleKey) && !duplicateAngle) duplicateAngle = v.angle;
+    seenAngles.add(angleKey);
+  });
+  return { duplicateAngleWarning: duplicateAngle };
+}
+
+// Assign stable v1..vN ids in order. Existing ids are discarded and
+// reassigned — simple and stable at this scale (max 15 variants).
+function normalizeVariants(variants) {
+  return variants.map((v, i) => ({
+    id: 'v' + (i + 1),
+    angle: v.angle.trim(),
+    text: v.text.trim(),
+  }));
+}
+
 async function saveCampaign(data) {
+  const validation = validateVariants(data.variants);
   const campaign = {
     id: data.id,
     advertiser: data.advertiser || 'Unknown',
@@ -40,7 +83,7 @@ async function saveCampaign(data) {
     budgetTotalGBP: parseFloat(data.budgetTotalGBP) || 0,
     keywords: Array.isArray(data.keywords) ? data.keywords : [],
     matchingDescription: data.matchingDescription || '',
-    text: data.text,
+    variants: normalizeVariants(data.variants),
     link: data.link || '',
     linkText: data.linkText || 'Learn more',
     advSlug: data.advSlug || (data.advertiser || 'unknown').toLowerCase().replace(/\s+/g, '-'),
@@ -51,7 +94,7 @@ async function saveCampaign(data) {
   };
   await kvSet(`campaign:${campaign.id}`, campaign);
   await addToCategoryIndex(campaign.category, campaign.id);
-  return campaign;
+  return { campaign, duplicateAngleWarning: validation.duplicateAngleWarning };
 }
 
 module.exports = async function handler(req, res) {
@@ -131,8 +174,12 @@ module.exports = async function handler(req, res) {
 
   // ---- SEED default campaign ----
   if (req.method === 'POST' && url.includes('/admin/seed')) {
-    const campaign = await saveCampaign(config.defaultCampaign);
-    return res.status(200).json({ message: 'Seeded default campaign', campaign });
+    try {
+      const { campaign } = await saveCampaign(config.defaultCampaign);
+      return res.status(200).json({ message: 'Seeded default campaign', campaign });
+    } catch (e) {
+      return res.status(500).json({ error: 'Seed failed: ' + e.message });
+    }
   }
 
   // ---- PAUSE / UNPAUSE ----
@@ -168,15 +215,23 @@ module.exports = async function handler(req, res) {
   if (req.method === 'POST' && url.includes('/admin/campaign')) {
     const data = await readBody(req);
     if (!data) return res.status(400).json({ error: 'Invalid JSON' });
-    const { id, category, text } = data;
-    if (!id || !category || !text) {
-      return res.status(400).json({ error: 'id, category and text are required' });
+    const { id, category, variants } = data;
+    if (!id || !category || !variants) {
+      return res.status(400).json({ error: 'id, category and variants are required' });
     }
     if (!config.categories.includes(category)) {
       return res.status(400).json({ error: `category must be one of: ${config.categories.join(', ')}` });
     }
-    const campaign = await saveCampaign(data);
-    return res.status(200).json({ message: `Campaign saved: ${campaign.id}`, campaign });
+    try {
+      const { campaign, duplicateAngleWarning } = await saveCampaign(data);
+      const response = { message: `Campaign saved: ${campaign.id}`, campaign };
+      if (duplicateAngleWarning) {
+        response.warning = `Duplicate variant angle detected: "${duplicateAngleWarning}". Distinct angles are recommended for variant selection to work well.`;
+      }
+      return res.status(200).json(response);
+    } catch (e) {
+      return res.status(400).json({ error: e.message });
+    }
   }
 
   // ---- GET /ad — auction winner for a category (used by SDK) ----
@@ -208,7 +263,7 @@ module.exports = async function handler(req, res) {
       count: campaigns.length,
       campaigns,
       endpoints: {
-        create: { method: 'POST', url: '/admin/campaign', body: { id: 'camp_002', advertiser: 'Brand', category: 'finance|tech', cpmGBP: 20, budgetDailyGBP: 50, budgetTotalGBP: 500, keywords: ['isa'], matchingDescription: '...', text: 'Ad copy 40-80 words', link: '', linkText: '', advSlug: '', active: true, startDate: 'YYYY-MM-DD', endDate: null } },
+        create: { method: 'POST', url: '/admin/campaign', body: { id: 'camp_002', advertiser: 'Brand', category: 'finance|tech', cpmGBP: 20, budgetDailyGBP: 50, budgetTotalGBP: 500, keywords: ['isa'], matchingDescription: '...', variants: [{ angle: 'first-home saver', text: 'Ad copy, max 200 chars' }, '...5-15 variants total'], link: '', linkText: '', advSlug: '', active: true, startDate: 'YYYY-MM-DD', endDate: null } },
         pause: { method: 'POST', url: '/admin/campaign/pause', body: { id: 'camp_002', active: false } },
         seed: { method: 'POST', url: '/admin/seed' },
       },

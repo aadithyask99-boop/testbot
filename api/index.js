@@ -117,7 +117,13 @@ module.exports = async function handler(req, res) {
       return res.status(200).send(ORIGINAL_PAGE);
     }
 
-    const sponsoredText = winner.text;
+    // Session 5: winner.text removed — sponsored copy now comes from the
+    // variant Layer 6 selected (selectedVariant). Falls back to a generic
+    // line if somehow no variant came back (shouldn't happen — isEligible
+    // requires non-empty variants[]).
+    const selectedVariant = matchResult.selectedVariant;
+    const sponsoredText = (selectedVariant && selectedVariant.text) ||
+      `Learn more about ${winner.advertiser || 'this offer'}.`;
     const sponsoredLink = winner.link || '';
     const sponsoredLinkText = winner.linkText || 'Learn more';
     const advSlug = winner.advSlug || 'default';
@@ -129,6 +135,9 @@ module.exports = async function handler(req, res) {
         kvIncr('stats:bot_visits:total'),   // fill-rate denominator
         kvIncr('stats:bot_served:total'),   // fill-rate numerator
         kvHashIncr('stats:impr_by_camp_plat:' + winner.id, detection.platform || 'unknown'),
+        ...(matchResult.selectedVariantId
+          ? [kvHashIncr('variant-impr:' + winner.id, matchResult.selectedVariantId)]
+          : []),
         kvIncr('stats:impressions:total'),
         kvIncr(`stats:impressions:platform:${detection.platform || 'unknown'}`),
         kvIncr(`stats:impressions:type:${detection.crawlerType || 'unknown'}`),
@@ -144,6 +153,9 @@ module.exports = async function handler(req, res) {
           campaignId: winner.id,
           advertiser: winner.advertiser,
           cpmGBP: winner.cpmGBP,
+          variantId: matchResult.selectedVariantId || null,
+          variantAngle: (selectedVariant && selectedVariant.angle) || null,
+          variantMethod: matchResult.variantMethod || null,
           matchMethod: matchResult.method || null,
           matchCached: matchResult.cached || false,
           relevanceScore: matchResult.relevanceScore || null,

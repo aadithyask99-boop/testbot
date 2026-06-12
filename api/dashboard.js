@@ -78,6 +78,9 @@ module.exports = async function handler(req, res) {
         method:         e.matchMethod || null,
         cached:         !!e.matchCached,
         relevanceScore: e.relevanceScore || null,
+        variantId:      e.variantId || null,
+        variantAngle:   e.variantAngle || null,
+        variantMethod:  e.variantMethod || null,
         lastPlatform:   e.platform || null,
         lastCrawl:      e.time || null,
         candidates:     e.candidates || null,
@@ -114,10 +117,12 @@ module.exports = async function handler(req, res) {
     // reflects the most recent one; the per-page board shows the full truth.
     const currentCreative = servedLogs.length > 0
       ? {
-          id:         servedLogs[0].campaignId,
-          advertiser: servedLogs[0].advertiser,
-          cpmGBP:     servedLogs[0].cpmGBP,
-          category:   servedLogs[0].matchCategory,
+          id:           servedLogs[0].campaignId,
+          advertiser:   servedLogs[0].advertiser,
+          cpmGBP:       servedLogs[0].cpmGBP,
+          category:     servedLogs[0].matchCategory,
+          variantId:    servedLogs[0].variantId || null,
+          variantAngle: servedLogs[0].variantAngle || null,
         }
       : null;
 
@@ -161,12 +166,25 @@ module.exports = async function handler(req, res) {
         .map(k => ({ platform: k, impressions: parseInt(platHash[k]) || 0 }))
         .filter(x => x.impressions > 0)
         .sort((a, b) => b.impressions - a.impressions);
+      // Session 5: per-variant impression breakdown — "your 'first-home'
+      // angle wins X% of the time" view in the campaign detail panel.
+      const variantHash = (await kvHashGetAll('variant-impr:' + c.id)) || {};
+      const variantTotal = Object.values(variantHash).reduce((sum, v) => sum + (parseInt(v) || 0), 0);
+      const variantBreakdown = (c.variants || []).map(v => {
+        const count = parseInt(variantHash[v.id]) || 0;
+        return {
+          id: v.id,
+          angle: v.angle,
+          impressions: count,
+          pct: variantTotal > 0 ? parseFloat(((count / variantTotal) * 100).toFixed(1)) : 0,
+        };
+      });
       campaignList.push({
         id: c.id, advertiser: c.advertiser, category: c.category,
         cpmGBP: c.cpmGBP, active: c.active === true,
         budgetDailyGBP: c.budgetDailyGBP, budgetTotalGBP: c.budgetTotalGBP,
         keywords: c.keywords || [],
-        text: c.text, link: c.link, linkText: c.linkText, advSlug: c.advSlug,
+        variants: c.variants || [], link: c.link, linkText: c.linkText, advSlug: c.advSlug,
         matchingDescription: c.matchingDescription || '',
         startDate: c.startDate, endDate: c.endDate, updatedAt: c.updatedAt,
         dailySpendGBP: parseFloat(spend.dailySpendGBP.toFixed(4)),
@@ -174,6 +192,7 @@ module.exports = async function handler(req, res) {
         dailyBudgetUsedPct: parseFloat(dailyBudgetUsedPct.toFixed(1)),
         impressions: spend.totalImpressions,
         platformBreakdown,
+        variantBreakdown,
         viewableImpressions: viewable,
         trainingImpressions: spend.trainingTotal,
         vcpmGBP: parseFloat(vcpm.toFixed(2)),
@@ -191,9 +210,21 @@ module.exports = async function handler(req, res) {
     if (currentCreative && currentCreative.id) {
       const match = campaignList.find(c => c.id === currentCreative.id);
       if (match) {
+        // Resolve the SPECIFIC variant that was actually served (from the log),
+        // not just the campaign's first variant — "what's injected" must
+        // reflect reality. Falls back to the first variant if the logged
+        // variantId no longer exists (campaign edited since).
+        const servedVariant =
+          (match.variants || []).find(v => v.id === currentCreative.variantId) ||
+          (match.variants || [])[0] ||
+          null;
         currentCreativeFull = {
           id: match.id, advertiser: match.advertiser, category: match.category,
-          cpmGBP: match.cpmGBP, text: match.text, link: match.link,
+          cpmGBP: match.cpmGBP,
+          text: (servedVariant && servedVariant.text) || '',
+          variantId: (servedVariant && servedVariant.id) || null,
+          variantAngle: (servedVariant && servedVariant.angle) || null,
+          link: match.link,
           linkText: match.linkText, advSlug: match.advSlug, updatedAt: match.updatedAt,
         };
       }
@@ -306,6 +337,8 @@ module.exports = async function handler(req, res) {
           matchReason:    e.matchReason || null,
           matchCategory:  e.matchCategory || null,
           relevanceScore: e.relevanceScore || null,
+          variantId:      e.variantId || null,
+          variantAngle:   e.variantAngle || null,
         })),
         aggregate: {
           totalViewable: totalViewable,
@@ -314,6 +347,7 @@ module.exports = async function handler(req, res) {
         campaign: {
           advertiser: (cc && cc.advertiser) || 'Not set',
           text:       (cc && cc.text)       || '',
+          variantAngle: (cc && cc.variantAngle) || null,
           link:       (cc && cc.link)       || '',
           linkText:   (cc && cc.linkText)   || '',
           advSlug:    (cc && cc.advSlug)    || '',

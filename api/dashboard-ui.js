@@ -41,6 +41,14 @@ var html = '<!DOCTYPE html>' +
 '.btn{background:#111;color:#fff;border:none;border-radius:4px;padding:9px 18px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:500}' +
 '.btnsec{background:#fff;color:#111;border:1px solid #e5e5e5}' +
 '.btndanger{background:#fff;color:#dc2626;border:1px solid #fca5a5}' +
+'.vrow{border:1px solid #e5e5e5;border-radius:4px;padding:10px;margin-bottom:8px;background:#fafafa}' +
+'.vrow .vrow-top{display:flex;gap:8px;align-items:center;margin-bottom:6px}' +
+'.vrow .vrow-top input{flex:1}' +
+'.vrow textarea{min-height:50px}' +
+'.vcount{font-size:11px;color:#888;margin-top:-4px;margin-bottom:4px}' +
+'.vcount.bad{color:#dc2626}' +
+'.vchar{font-size:10px;color:#aaa;text-align:right;margin-top:2px}' +
+'.vchar.bad{color:#dc2626}' +
 '.msg{font-size:12px;padding:8px 10px;border-radius:4px;margin-top:8px}' +
 '.msg.ok{background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0}' +
 '.msg.err{background:#fef2f2;color:#dc2626;border:1px solid #fecaca}' +
@@ -92,7 +100,10 @@ var html = '<!DOCTYPE html>' +
 '<div class="frow"><div class="field"><label>Category</label><select id="f-cat"><option value="finance">finance</option><option value="tech">tech</option></select></div>' +
 '<div class="field"><label>Keywords (comma-separated)</label><input type="text" id="f-kw" placeholder="isa, pension, stocks"></div></div>' +
 '<div class="field"><label>Targeting Description <span style="font-size:11px;color:#888;font-weight:400">(helps Haiku match correctly — one sentence, be specific about geography and topic)</span></label><input type="text" id="f-desc" placeholder="e.g. UK pension and ISA investing platform for retail investors"></div>' +
-'<div class="field"><label>Ad Copy</label><textarea id="f-text" placeholder="Your sponsored text (40-80 words)..."></textarea></div>' +
+'<div class="field"><label>Ad Variants <span style="font-size:11px;color:#888;font-weight:400">(5-15 required, each with a distinct angle, max 200 chars — Haiku picks the best one per page)</span></label>' +
+'<div id="vcount" class="vcount"></div>' +
+'<div id="f-variants"></div>' +
+'<button type="button" class="btn btnsec" onclick="addVariantRow()">+ Add Variant</button></div>' +
 '<div class="frow"><div class="field"><label>Destination Link (optional)</label><input type="url" id="f-link" placeholder="https://advertiser.com"></div>' +
 '<div class="field"><label>Link Label</label><input type="text" id="f-lt" value="Learn more"></div></div>' +
 '<div class="frow"><div class="field"><label>Advertiser Slug</label><input type="text" id="f-slug" placeholder="e.g. hargreaves-lansdown"></div>' +
@@ -117,7 +128,7 @@ var html = '<!DOCTYPE html>' +
 '</div></main>' +
 
 '<script>' +
-'var opData=null,advData=null,pubData=null,formLoaded=false,campFilter=\'all\',selectedCampaign=null;' +
+'var opData=null,advData=null,pubData=null,formLoaded=false,campFilter=\'all\',selectedCampaign=null,formVariants=[];' +
 'function switchTab(id,btn){' +
 '  document.querySelectorAll(".tab").forEach(function(t){t.classList.remove("active");});' +
 '  document.querySelectorAll("nav button").forEach(function(b){b.classList.remove("active");});' +
@@ -247,6 +258,14 @@ var html = '<!DOCTYPE html>' +
 '  }else{' +
 '    parts.push(page.servingAdv+" was the only relevant candidate at \\u00a3"+winner.cpmGBP+" CPM.");' +
 '  }' +
+'  if(page.variantAngle){' +
+'    var vmethod=page.variantMethod||"";' +
+'    var vsource="haiku"===vmethod?"selected via Haiku":' +
+'      ("haiku_cached"===vmethod?"selected via Haiku (cached)":' +
+'      ("round_robin"===vmethod?"selected via round-robin (Haiku unavailable)":' +
+'      ("only_option"===vmethod?"the only variant available":"selected")));' +
+'    parts.push("Variant \\""+page.variantAngle+"\\" ("+(page.variantId||"?")+") "+vsource+".");' +
+'  }' +
 '  return parts.join(" ");' +
 '}' +
 'function renderLiveBoard(board){' +
@@ -279,6 +298,24 @@ var html = '<!DOCTYPE html>' +
 '    return "<div style=\'border:1px solid #e5e7eb;border-radius:8px;padding:12px;background:#fff\'>"+header+serving+cand+"<div style=\\\'margin-top:8px;padding:8px;background:#f8f9fa;border-radius:4px;font-size:11px;color:#555;line-height:1.5\\\'><b style=\\\'color:#374151\\\'>Why:</b> "+whyWon(p)+"</div></div>";' +
 '  }).join(""));' +
 '}' +
+'function renderVariants(c){' +
+'  var variants=c.variants||[];' +
+'  var vb=c.variantBreakdown||[];' +
+'  var bhash={};' +
+'  vb.forEach(function(b){bhash[b.id]=b;});' +
+'  if(!variants.length)return "<div class=\\"ccopy\\">(no variants)</div>";' +
+'  var rows=variants.map(function(v){' +
+'    var b=bhash[v.id]||{impressions:0,pct:0};' +
+'    return "<div style=\\"border-left:2px solid #e5e5e5;padding-left:10px;margin-bottom:8px\\">"+' +
+'      "<div style=\\"display:flex;justify-content:space-between;font-size:11px;color:#888;margin-bottom:2px\\">"+' +
+'        "<span><b style=\\"color:#374151\\">"+v.angle+"</b> · "+v.id+"</span>"+' +
+'        "<span>"+fmt(b.impressions)+" impr · "+b.pct+"%</span>"+' +
+'      "</div>"+' +
+'      "<div style=\\"font-size:12px;color:#555;line-height:1.5\\">"+v.text+"</div>"+' +
+'    "</div>";' +
+'  }).join("");' +
+'  return "<div class=\\"lbl\\" style=\\"margin-top:14px\\">Ad Variants ("+variants.length+")</div>"+rows;' +
+'}' +
 'function selectCampaign(id){' +
 '  selectedCampaign=id;' +
 '  var cl=(advData&&advData.campaigns)||[];' +
@@ -293,7 +330,6 @@ var html = '<!DOCTYPE html>' +
 '  set("camp-detail",' +
 '    "<div class=\'cname\'>"+c.advertiser+(c.isWinner?" <span class=\'winbadge\'>WINNING</span>":"")+"</div>"+' +
 '    "<div class=\'cmeta\'>"+c.id+" · "+c.category+" · £"+c.cpmGBP+" CPM · updated "+(c.updatedAt?ago(c.updatedAt):"—")+"</div>"+' +
-'    "<div class=\'ccopy\'>"+(c.text||"(no creative text)")+"</div>"+' +
 '    "<div class=\\\'cdesc\\\'>"+(c.matchingDescription?"<b style=\\\'color:#374151;margin-right:4px\\\'>Targeting:</b> "+c.matchingDescription:"<b style=\\\'color:#374151;margin-right:4px\\\'>Targeting:</b> <span style=\\\'color:#f59e0b\\\'>Not set — fill in Targeting Description</span>")+"</div>"+' +
 '    (c.link?"<div style=\'font-size:11px;color:#2563eb;margin-bottom:10px\'>Link: "+c.link+"</div>":"<div style=\'font-size:11px;color:#ccc;margin-bottom:10px\'>No link set</div>")+' +
 '    "<div class=\'grid\' style=\'margin-bottom:10px\'>"+' +
@@ -304,6 +340,7 @@ var html = '<!DOCTYPE html>' +
 '    "</div>"+' +
 '    "<div class=\'lbl\' style=\'margin-top:14px\'>Crawlers that saw this ad</div>"+' +
 '    platTable+' +
+'    renderVariants(c)+' +
 '    "<div style=\'margin-top:14px\'><button class=\'btn camp-editbtn\' data-id=\'"+c.id+"\'>Edit Campaign</button>" + "<button class=\\\'btn btndanger camp-delbtn\\\' style=\\\'margin-left:8px\\\' data-id=\\\'"+c.id+"\\\'>Delete</button></div>"' +
 '  );' +
 '  var eb=document.querySelector(".camp-editbtn");' +
@@ -316,17 +353,63 @@ var html = '<!DOCTYPE html>' +
 '  btn.classList.add("active");' +
 '  renderCampaignList((advData&&advData.campaigns)||[]);' +
 '}' +
+'function renderVariantRows(){' +
+'  var html=formVariants.map(function(v,i){' +
+'    var len=(v.text||"").length;' +
+'    var over=len>200;' +
+'    return "<div class=\\"vrow\\">"+' +
+'      "<div class=\\"vrow-top\\">"+' +
+'        "<input type=\\"text\\" placeholder=\\"angle, e.g. first-home saver\\" value=\\""+escAttr(v.angle||"")+"\\" oninput=\\"updateVariant("+i+",\'angle\',this.value)\\">"+' +
+'        "<button type=\\"button\\" class=\\"btn btndanger\\" onclick=\\"removeVariantRow("+i+")\\">Remove</button>"+' +
+'      "</div>"+' +
+'      "<textarea placeholder=\\"Ad copy for this angle, max 200 chars\\" maxlength=\\"200\\" oninput=\\"updateVariant("+i+",\'text\',this.value)\\">"+escHtml(v.text||"")+"</textarea>"+' +
+'      "<div class=\\"vchar"+(over?" bad":"")+"\\">"+len+" / 200</div>"+' +
+'    "</div>";' +
+'  }).join("");' +
+'  set("f-variants",html);' +
+'  var n=formVariants.length;' +
+'  var cd=document.getElementById("vcount");' +
+'  if(cd){' +
+'    cd.className="vcount"+(n<5||n>15?" bad":"");' +
+'    cd.textContent=n+" of 5-15 variants"+(n<5?" — add "+(5-n)+" more":(n>15?" — remove "+(n-15):""));' +
+'  }' +
+'}' +
+'function escHtml(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}' +
+'function escAttr(s){return escHtml(s).replace(/"/g,"&quot;");}' +
+'function addVariantRow(){' +
+'  if(formVariants.length>=15)return;' +
+'  formVariants.push({angle:"",text:""});' +
+'  renderVariantRows();' +
+'}' +
+'function removeVariantRow(i){' +
+'  formVariants.splice(i,1);' +
+'  renderVariantRows();' +
+'}' +
+'function updateVariant(i,field,val){' +
+'  if(!formVariants[i])return;' +
+'  if(field==="text"&&val.length>200)val=val.slice(0,200);' +
+'  formVariants[i][field]=val;' +
+'  if(field==="text"){' +
+'    var n=formVariants.length;' +
+'    var rows=document.querySelectorAll("#f-variants .vrow");' +
+'    var r=rows[i];' +
+'    if(r){var vc=r.querySelector(".vchar");if(vc){var len=val.length;vc.className="vchar"+(len>200?" bad":"");vc.textContent=len+" / 200";}}' +
+'  }' +
+'}' +
 'function fillForm(c){' +
 '  var f=function(id,v){var el=document.getElementById(id);if(el)el.value=(v===undefined||v===null)?"":v;};' +
 '  f("f-id",c.id);f("f-adv",c.advertiser);' +
 '  f("f-kw",(c.keywords||[]).join(", "));f("f-desc",c.matchingDescription||"");' +
-'  f("f-text",c.text);f("f-link",c.link);f("f-lt",c.linkText||"Learn more");' +
+'  f("f-link",c.link);f("f-lt",c.linkText||"Learn more");' +
 '  f("f-slug",c.advSlug);f("f-cpm",c.cpmGBP);' +
 '  f("f-bd",c.budgetDailyGBP);f("f-bt",c.budgetTotalGBP);' +
 '  var sel=document.getElementById("f-cat");if(sel)sel.value=c.category||"finance";' +
+'  formVariants=(c.variants&&c.variants.length)?c.variants.map(function(v){return {angle:v.angle||"",text:v.text||""};}):[];' +
+'  if(formVariants.length===0){for(var i=0;i<5;i++)formVariants.push({angle:"",text:""});}' +
+'  renderVariantRows();' +
 '}' +
 'function addCampaign(){' +
-'  fillForm({id:"",advertiser:"",category:"finance",keywords:[],text:"",link:"",linkText:"Learn more",advSlug:"",cpmGBP:18,budgetDailyGBP:50,budgetTotalGBP:500});' +
+'  fillForm({id:"",advertiser:"",category:"finance",keywords:[],variants:[],link:"",linkText:"Learn more",advSlug:"",cpmGBP:18,budgetDailyGBP:50,budgetTotalGBP:500});' +
 '  var t=document.getElementById("form-title");if(t)t.textContent="Add Campaign";' +
 '  var m=document.getElementById("fmsg");if(m)m.textContent="";' +
 '  var idel=document.getElementById("f-id");if(idel)idel.focus();' +
@@ -352,11 +435,18 @@ var html = '<!DOCTYPE html>' +
 'function saveCreative(){' +
 '  var g=function(id){var el=document.getElementById(id);return el?el.value:"";};' +
 '  var kw=g("f-kw").split(",").map(function(s){return s.trim().toLowerCase();}).filter(function(s){return s;});' +
-'  var body={id:g("f-id"),advertiser:g("f-adv"),category:g("f-cat"),text:g("f-text"),link:g("f-link"),linkText:g("f-lt"),advSlug:g("f-slug"),cpmGBP:parseFloat(g("f-cpm")),budgetDailyGBP:parseFloat(g("f-bd")),budgetTotalGBP:parseFloat(g("f-bt")),keywords:kw,matchingDescription:g("f-desc"),active:true};' +
 '  var msg=document.getElementById("fmsg");' +
+'  var variants=formVariants.map(function(v){return {angle:(v.angle||"").trim(),text:(v.text||"").trim()};});' +
+'  if(variants.length<5||variants.length>15){msg.className="msg err";msg.textContent="Need 5-15 variants (have "+variants.length+")";return;}' +
+'  for(var i=0;i<variants.length;i++){' +
+'    if(!variants[i].angle){msg.className="msg err";msg.textContent="Variant "+(i+1)+" needs an angle";return;}' +
+'    if(!variants[i].text){msg.className="msg err";msg.textContent="Variant "+(i+1)+" needs ad copy";return;}' +
+'    if(variants[i].text.length>200){msg.className="msg err";msg.textContent="Variant "+(i+1)+" exceeds 200 characters";return;}' +
+'  }' +
+'  var body={id:g("f-id"),advertiser:g("f-adv"),category:g("f-cat"),variants:variants,link:g("f-link"),linkText:g("f-lt"),advSlug:g("f-slug"),cpmGBP:parseFloat(g("f-cpm")),budgetDailyGBP:parseFloat(g("f-bd")),budgetTotalGBP:parseFloat(g("f-bt")),keywords:kw,matchingDescription:g("f-desc"),active:true};' +
 '  fetch("/admin/campaign",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})' +
 '  .then(function(r){return r.json();}).then(function(d){' +
-'    if(d.campaign){msg.className="msg ok";msg.textContent="Campaign saved — live in auction immediately";setTimeout(load,1000);}' +
+'    if(d.campaign){msg.className="msg ok";msg.textContent=d.warning?("Saved, but: "+d.warning):"Campaign saved — live in auction immediately";setTimeout(load,1000);}' +
 '    else{msg.className="msg err";msg.textContent=d.error||"Failed";}' +
 '  }).catch(function(){msg.className="msg err";msg.textContent="Network error";});' +
 '}' +
