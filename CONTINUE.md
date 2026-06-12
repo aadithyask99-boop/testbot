@@ -263,3 +263,65 @@ Each phase is one focused session. Don't bundle.
 Good luck. The hard parts of the foundation are done. The Live Board is your friend — when something looks weird, the candidate breakdown will tell you the truth in five seconds.
 
 — Claude (sessions 1-4)
+
+---
+
+## Session 5 additions
+
+### The kvGet '%' bug — fixed, but watch for it elsewhere
+`lib/kv.js`'s `kvGet` used to do `JSON.parse(decodeURIComponent(result))` with
+no fallback. `decodeURIComponent` throws `URI malformed` on any string
+containing a bare `%` not part of valid percent-encoding — and ad copy like
+"0.15%" triggers this constantly. The old catch returned the RAW JSON STRING,
+and every caller does `{...c, spend}` or similar spreads — spreading a STRING
+in JS produces a character-indexed object (`{"0":"{","1":"\"",...}`). This
+looked EXACTLY like data corruption when we first hit it (camp_001 showed up
+as 1465 numbered keys instead of an object).
+
+Fixed: `kvGet` now tries `JSON.parse(result)` first (handles the case where
+Upstash returns the value already-decoded), only falling back to
+decode+parse for genuinely double-encoded values. If you see a
+character-indexed object ANYWHERE in API output again, this is the first
+thing to check — and check whether the % fix is actually deployed.
+
+### Upstash quota exhaustion looks IDENTICAL to data corruption — check this FIRST
+We spent a long time debugging what looked like progressive data loss
+(11 campaigns → 1 → 0, missing category indexes, corrupted records) before
+discovering it was the Upstash free tier hitting its 500k commands/month
+limit. Every kvGet/kvSet call was returning null because Upstash was
+returning HTTP 400 `"ERR max requests limit exceeded"`, and our kv.js
+catches ALL errors silently (by design, so a DB hiccup never breaks a
+publisher's page) — but this also means quota exhaustion is INVISIBLE to
+every endpoint except a raw debug call.
+
+**If campaigns/indexes suddenly look empty, corrupted, or wrong:** before
+assuming a code bug or data loss, do a raw Upstash roundtrip test (SET then
+GET a throwaway key, check the actual HTTP status/body, not just kvGet's
+parsed null). The 500k/month free tier is genuinely easy to exhaust once the
+dashboard is polling every 5 seconds AND running auctions AND Haiku is
+calling back with results — each of those is several KV ops.
+
+**Resolution if it happens again:** Upstash → pay-as-you-go via Vercel
+Storage tab, then redeploy (env vars only apply on a fresh deploy). In our
+case the SAME database came back once the quota cleared — nothing was
+permanently lost. Don't panic and don't start rebuilding indexes from
+memory before confirming it's actually a quota issue, not corruption.
+
+### Apostrophes in JSON payloads break single-quoted shell strings
+When generating curl commands containing ad copy like "Trading 212's Cash
+ISA" or "Vanguard's Stocks and Shares ISA", the apostrophe breaks
+`-d '...'` shell quoting (zsh: `unexpected EOF while looking for matching
+"'"`). Don't generate `-d '{...}'` one-liners when the JSON contains
+apostrophes (almost guaranteed for ad copy). Instead: write each payload to
+its own `.json` file and use `curl -d @payload.json` — completely sidesteps
+shell quoting, works in bash AND zsh.
+
+### Variant Bank: confirmed working live
+Layer 6 (`selectVariant`) is live and the Live Auction Board shows real
+Haiku variant picks, e.g. `Variant "flat-fee pricing" (v2) selected via
+Haiku.` for interactive investor ISA on the /finance page. The whole
+cascade — keyword → Haiku category → relevance filter → CPM auction →
+variant selection — is working end to end on real Perplexity crawls.
+
+— Claude (session 5)
+

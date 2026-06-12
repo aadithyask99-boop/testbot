@@ -106,60 +106,6 @@ module.exports = async function handler(req, res) {
 
   const url = req.url || '';
 
-  // ---- TEMPORARY: REPAIR CATEGORY INDEXES (Session 5 incident) ----
-  // The first /admin/seed call (before the kvGet % fix) hit
-  // addToCategoryIndex with a corrupted kvGet('campaigns:finance')
-  // read (returned null), so it wrote campaigns:finance = ['camp_001'],
-  // destroying the other 10 finance/tech campaign IDs in the index.
-  // The campaign:{id} records themselves were untouched — only the
-  // index lists were clobbered. This endpoint rebuilds both index
-  // lists from the known-good ID/category map below (taken from the
-  // /admin dump captured just before the corruption), verifying each
-  // campaign:{id} still exists before re-adding it to the index.
-  // SAFE TO REMOVE after running once successfully.
-  if (req.method === 'POST' && url.includes('/admin/repair-index')) {
-    const knownIds = {
-      finance: ['camp_001', 'Cam_03', 'camp_005', 'Cam_04', 'Cam_SmarPension', 'Cam_02', 'Cam_01'],
-      tech: ['Camp_006', 'Cam_Xiaomi', 'Cam_ExpressVPN', 'Cam_Nord'],
-    };
-    const result = { finance: { found: [], missing: [] }, tech: { found: [], missing: [] } };
-    for (const cat of Object.keys(knownIds)) {
-      for (const id of knownIds[cat]) {
-        const c = await kvGet(`campaign:${id}`);
-        if (c && c.id) {
-          result[cat].found.push(id);
-        } else {
-          result[cat].missing.push(id);
-        }
-      }
-      await kvSet(`campaigns:${cat}`, result[cat].found);
-    }
-    return res.status(200).json({ message: 'Category indexes repaired', result });
-  }
-
-  // ---- TEMPORARY: DEBUG raw KV state for category indexes ----
-  // Dumps campaigns:finance / campaigns:tech / a couple campaign records
-  // via kvGet (parsed) AND a raw kvRequest GET (unparsed) so we can see
-  // exactly what Upstash is returning, bypassing kvGet's parsing entirely.
-  // SAFE TO REMOVE after the Session 5 incident is resolved.
-  if (req.method === 'GET' && url.includes('/admin/debug-kv')) {
-    const { kvDebugRaw, kvDebugRoundtrip } = require('../lib/kv');
-    const out = {
-      env: {
-        KV_REST_API_URL_set: !!process.env.KV_REST_API_URL,
-        KV_REST_API_TOKEN_set: !!process.env.KV_REST_API_TOKEN,
-        KV_REST_API_URL_prefix: (process.env.KV_REST_API_URL || '').slice(0, 30),
-      },
-      roundtrip: await kvDebugRoundtrip(),
-    };
-    for (const key of ['campaigns:finance', 'campaigns:tech', 'campaign:camp_001', 'campaign:Cam_Nord']) {
-      out[key] = {
-        parsed: await kvGet(key),
-        raw: await kvDebugRaw(key),
-      };
-    }
-    return res.status(200).json(out);
-  }
 
   // ---- RESET STATS (destructive: zeroes counters + logs, keeps campaigns) ----
   if (req.method === 'POST' && url.includes('/admin/reset-stats')) {

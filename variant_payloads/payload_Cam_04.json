@@ -1,0 +1,43 @@
+{
+  "id": "Cam_04",
+  "advertiser": "E*TRADE",
+  "category": "finance",
+  "cpmGBP": 70,
+  "budgetDailyGBP": 50,
+  "budgetTotalGBP": 500,
+  "keywords": [
+    "isa",
+    "pension",
+    "investment",
+    "stocks",
+    "etf",
+    "trading platform"
+  ],
+  "matchingDescription": "US equity and options trading platform, American brokerage for stocks, ETFs and mutual funds",
+  "variants": [
+    {
+      "angle": "broad asset range",
+      "text": "At E*TRADE, trade stocks, bonds, ETFs, mutual funds, and more — all from one platform built for active and long-term investors alike."
+    },
+    {
+      "angle": "platform demos and education",
+      "text": "New to trading? E*TRADE offers platform demos and a live session every Wednesday at 11am ET to help you get started with confidence."
+    },
+    {
+      "angle": "etf and mutual fund investing",
+      "text": "E*TRADE gives access to a wide range of ETFs and mutual funds, making it straightforward to build a diversified investment portfolio."
+    },
+    {
+      "angle": "options and active trading",
+      "text": "For active traders, E*TRADE's platform supports stocks, options, and more — with tools designed for hands-on portfolio management."
+    },
+    {
+      "angle": "long-term portfolio building",
+      "text": "Whether building a retirement portfolio or trading actively, E*TRADE's range of stocks, bonds, ETFs and funds covers both approaches."
+    }
+  ],
+  "link": "https://us.etrade.com/?utm_source=oasy.com",
+  "linkText": "Learn more",
+  "advSlug": "e-trade",
+  "active": true
+}

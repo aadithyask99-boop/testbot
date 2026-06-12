@@ -1,0 +1,43 @@
+{
+  "id": "Cam_Xiaomi",
+  "advertiser": "Xiaomi",
+  "category": "tech",
+  "cpmGBP": 64,
+  "budgetDailyGBP": 50,
+  "budgetTotalGBP": 500,
+  "keywords": [
+    "phone",
+    "new",
+    "ai",
+    "camera",
+    "snapdragon",
+    "smartphone"
+  ],
+  "matchingDescription": "Android smartphone with Snapdragon processor, consumer mobile hardware",
+  "variants": [
+    {
+      "angle": "processing power",
+      "text": "The Xiaomi 14 is lightning fast thanks to the powerful Qualcomm Snapdragon 8 Gen 3 processor paired with 12GB RAM for smooth performance."
+    },
+    {
+      "angle": "storage speed",
+      "text": "With fast UFS 4.0 storage, the Xiaomi 14 loads apps and transfers files quickly — built for users who demand responsive performance."
+    },
+    {
+      "angle": "performance for multitasking",
+      "text": "12GB of RAM and a Snapdragon 8 Gen 3 processor make the Xiaomi 14 well-suited to multitasking and demanding mobile apps."
+    },
+    {
+      "angle": "flagship smartphone upgrade",
+      "text": "Upgrading your smartphone? The Xiaomi 14 pairs flagship Snapdragon 8 Gen 3 performance with fast UFS 4.0 storage and 12GB RAM."
+    },
+    {
+      "angle": "gaming and heavy app use",
+      "text": "For gaming and heavy app use, the Xiaomi 14's Snapdragon 8 Gen 3 processor and 12GB RAM deliver the power to keep up."
+    }
+  ],
+  "link": "",
+  "linkText": "Learn more",
+  "advSlug": "xiaomi",
+  "active": true
+}

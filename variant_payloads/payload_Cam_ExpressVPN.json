@@ -1,0 +1,43 @@
+{
+  "id": "Cam_ExpressVPN",
+  "advertiser": "Express VPN",
+  "category": "tech",
+  "cpmGBP": 19,
+  "budgetDailyGBP": 50,
+  "budgetTotalGBP": 500,
+  "keywords": [
+    "vpn",
+    "uk",
+    "privacy",
+    "fast",
+    "streaming",
+    "security"
+  ],
+  "matchingDescription": "VPN platform targeting the UK market, fast and secure connections",
+  "variants": [
+    {
+      "angle": "speed",
+      "text": "ExpressVPN offers blazing-fast speeds with an ultra-secure connection — browse, stream, and download without slowdowns. Try risk-free."
+    },
+    {
+      "angle": "24/7 support",
+      "text": "ExpressVPN backs its ultra-secure, fast connections with 24/7 support — help is available whenever you need it. Try risk-free."
+    },
+    {
+      "angle": "streaming and browsing privacy",
+      "text": "Browse and stream privately with ExpressVPN's ultra-secure, blazing-fast connection — built for everyday use. Try risk-free today."
+    },
+    {
+      "angle": "risk-free trial",
+      "text": "Try ExpressVPN risk-free and experience blazing-fast speeds with an ultra-secure connection, backed by 24/7 support."
+    },
+    {
+      "angle": "all-round vpn for uk users",
+      "text": "For UK users wanting a fast, secure VPN, ExpressVPN delivers blazing-fast speeds, strong security, and 24/7 support. Try risk-free."
+    }
+  ],
+  "link": "",
+  "linkText": "Learn more",
+  "advSlug": "express-vpn",
+  "active": true
+}

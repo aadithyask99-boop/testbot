@@ -6,14 +6,39 @@
 
 ---
 
-## Current State (end of Session 4)
+## Current State (end of Session 5)
 
 **Live URL:** https://testbot-two-psi.vercel.app  
 **Dashboard:** https://testbot-two-psi.vercel.app/ui  
 **GitHub:** https://github.com/aadithyask99-boop/testbot (main branch)  
 **Vercel:** Hobby plan — **8/12** serverless functions used, 4 free  
-**Tests:** **133 passing** (test-auction 9, test-index 8, test-dash 7, test-metrics 12, test-reset 6, test-final 10, test-multipage 10, test-hybrid 29, test-diagnostic 21, test-board 21)  
-**Anthropic API:** `claude-haiku-4-5` confirmed working against this account, key set in all three Vercel environments.
+**Database:** Upstash Redis — **now on pay-as-you-go** (was free tier, hit
+500k commands/month limit mid-Session-5; see CONTINUE.md for the incident
+writeup and how to diagnose it if it recurs)
+**Tests:** 133 passing as of Session 4 (test files live in `/tmp`, not in
+repo — not re-run this session; re-run at next session start)
+**Anthropic API:** `claude-haiku-4-5` confirmed working — now making TWO
+calls per ambiguous page (relevance filter + variant selection)
+
+### What's new this session — Variant Bank (Task 1, DONE)
+- `campaign.text` removed entirely → `variants[]` (5-15 entries, each
+  `{id, angle, text}`, text ≤200 chars)
+- Layer 6 (`lib/relevance.js`, `selectVariant`): after a campaign wins the
+  CPM auction, a SEPARATE Haiku call picks the best-fitting variant for that
+  page. Round-robin fallback (`variant-rotation:{campaignId}`) if Haiku
+  fails. Cached at `variant:{sha256(url|campaignId)}`, 24h TTL.
+- All 11 campaigns migrated to the new schema (5 variants each) and live
+- Dashboard: variant repeater in Add/Edit form, per-variant impression
+  breakdown in campaign detail, `whyWon()` shows which variant was selected
+  and how (`Variant "flat-fee pricing" (v2) selected via Haiku.`)
+- Confirmed live on real Perplexity crawls — see SESSION_LOG.md Session 5
+
+### Bugs fixed this session (found during live testing, not part of the plan)
+- `/admin` GET was shadowed by the `/ad` route (`'/admin'.startsWith('/ad')`)
+  — fixed with a stricter regex
+- `kvGet` corrupted any value whose JSON contains a bare `%` (e.g. "0.15%")
+  — `decodeURIComponent` threw, old code returned the raw string, callers
+  spread it into a character-indexed object. Fixed: try `JSON.parse` first.
 
 ### What's deployed and working
 - Bot detection + HTML injection (40+ crawlers, plain `<p>` tag, no fingerprints)
@@ -34,12 +59,11 @@
 - POST /admin/reset-stats for clean test cycles
 
 ### What is NOT yet built (architectural gaps for production)
-1. **Variant bank** — campaigns have one `text`. Should be `variants: [{id, text, angle}]` with Haiku selecting per page. Spec'd, not built. (Session 5 task)
-2. **Precompute / proactive crawling** — relevance fires at crawl time today. Should be: publisher installs tag → we crawl their sitemap → classify pages upfront → precompute match table. Lazy crawl-time works for demo testbed, fails at production scale. (Session 6 task)
-3. **Per-publisher pubId + multi-publisher support** — everything is single-tenant. KV keys need `{pubId}` namespacing. Publisher SDK (Cloudflare Worker) needs to inject pubId. (Session 6/7)
-4. **Publisher onboarding flow + floor prices** — no `publisher:{pubId}` records yet. (Session 7)
-5. **Cloudflare Worker SDK** — `api/sdk.js` is still client-side placeholder. (Session 7)
-6. **Real-world organic appearance probability** — cannot be measured on testbot-two-psi.vercel.app (zero-authority domain). Needs publisher partner with indexed traffic. NOT an engineering blocker — a business blocker.
+1. **Precompute / proactive crawling** — relevance fires at crawl time today. Should be: publisher installs tag → we crawl their sitemap → classify pages upfront → precompute match table. Lazy crawl-time works for demo testbed, fails at production scale. (Session 6 task — START HERE)
+2. **Per-publisher pubId + multi-publisher support** — everything is single-tenant. KV keys need `{pubId}` namespacing. Publisher SDK (Cloudflare Worker) needs to inject pubId. (Session 6/7)
+3. **Publisher onboarding flow + floor prices** — no `publisher:{pubId}` records yet. (Session 7)
+4. **Cloudflare Worker SDK** — `api/sdk.js` is still client-side placeholder. (Session 7)
+5. **Real-world organic appearance probability** — cannot be measured on testbot-two-psi.vercel.app (zero-authority domain). Needs publisher partner with indexed traffic. NOT an engineering blocker — a business blocker.
 
 ---
 
@@ -67,36 +91,16 @@ FREE (4/12):
 
 ## Immediate Next Tasks (in order)
 
-### Task 0: Fill in matchingDescription on every campaign (no code, ~10 min)
-**Why high priority:** every existing campaign has `"matchingDescription": ""`. Haiku is judging relevance with only keywords + ad copy. Add one specific targeting sentence per campaign via dashboard Edit → Targeting Description field. Suggested values:
-- Trading 212: `UK stocks, shares and cash ISA, commission-free investing`
-- Freetrade: `UK ISA, SIPP and GIA investing platform for retail investors`
-- Moneybox: `UK ISA, lifetime ISA, first home saving and pension consolidation`
-- Interactive Investor: `UK stocks and shares ISA, investment platform, SIPP`
-- E*TRADE: `US equity and options trading platform, American brokerage` (will keep being correctly filtered on UK pages — that's the test working)
-- OPPO / Xiaomi: `Android smartphone, AI photography features, consumer mobile hardware` (will keep being correctly filtered from VPN — until you add a real privacy/security campaign)
+### ✅ DONE — Task 0: matchingDescription
+All 11 campaigns have a populated `matchingDescription`. Confirmed in
+Session 5's migration.
 
-### Task 1: Variant Bank — campaign schema upgrade (Session 5 — START HERE)
-**Spec on paper first**, then code. The data-model decision touches schema + admin UI + match path + serve path + logging + dashboard, so a written design doc is mandatory.
+### ✅ DONE — Task 1: Variant Bank
+Built and live in Session 5. See "What's new this session" above and
+SESSION_LOG.md Session 5 for full detail. `VARIANT_BANK_SPEC.md` in repo
+root has the design doc if you need the original reasoning.
 
-**Schema change:** campaign object gets:
-```
-variants: [
-  { id: "v1", text: "...", angle: "first-home" },
-  { id: "v2", text: "...", angle: "pension-consolidation" },
-  ...up to 15
-]
-```
-- Min 5 variants per campaign, max 15. Encourage *distinct angles* not paraphrases.
-- Single `text` field deprecated but kept for back-compat (auto-migrated to one variant on next save).
-
-**Match path:** after Haiku approves a campaign for a page, a SECOND Haiku call picks the best variant for that (page × campaign). Cached by `variant:sha256(url|campaignId)`, 24h TTL.
-
-**FCA constraint (hard rule):** variant selection ONLY. NO generation. Haiku picks from approved fragments, never writes new copy. Compliance officer's view: selection from approved copy is approved copy.
-
-**Logging:** record `variantId` on each impression. Dashboard shows per-variant impression breakdown — advertiser sees "your 'first-home' angle wins 60% of the time."
-
-### Task 2: Precompute / Proactive Crawling (Session 6)
+### Task 2: Precompute / Proactive Crawling (Session 6 — START HERE)
 **The core idea:** instead of running relevance lazily at crawl time, walk the publisher's sitemap when they sign up, classify every page upfront, precompute the eligible-campaign-set per page. Bot arrives → KV lookup of "what wins on this URL" → fast inject.
 
 **New things needed:**
@@ -131,10 +135,10 @@ Publisher's site can be on ANY hosting (WordPress, Ghost, custom) — the Worker
 
 - **No campaign match → serve what?** Empty (current), house ad, fallback generic? — STILL UNDECIDED. Default behaviour: serve nothing. Honest.
 - **Campaign tiebreaker at identical CPM?** Currently random shuffle. Worked, but caused Session 4 confusion. Worth replacing with deterministic tiebreak (createdAt? round-robin?).
-- **LLM for matching: Haiku (current) or alternatives?** Haiku 4.5 working well. ~£0.06 per ambiguous-page call. Volume cost trivial at demo scale.
-- **Variant tiebreaker:** if Haiku says all variants are equally relevant, pick which? — round-robin per campaign? Random? Most-recently-edited?
+- **LLM for matching: Haiku (current) or alternatives?** Haiku 4.5 working well. ~£0.06 per ambiguous-page call, now TWO calls per ambiguous page (relevance + variant selection) since Session 5. Volume cost still trivial at demo scale.
+- **Variant tiebreaker:** ✅ DECIDED Session 5 — round-robin per campaign via `variant-rotation:{campaignId}`, used only as a fallback when Haiku is unavailable or returns an unparseable variant ID.
 - **Precompute trigger model:** cron-based (every N hours) or event-based (on campaign edit)? Cost vs freshness tradeoff.
-- **Cache invalidation on matchingDescription edit:** today the relevance cache invalidates on candidate-set change (campaign added/removed/paused) but NOT on a campaign's description being edited. Should it? Otherwise edits don't take effect until 24h TTL expires.
+- **Cache invalidation on matchingDescription edit:** today the relevance cache invalidates on candidate-set change (campaign added/removed/paused) but NOT on a campaign's description being edited. Should it? Otherwise edits don't take effect until 24h TTL expires. Same question now applies to `variant:{...}` cache if variants are edited.
 
 ---
 
@@ -154,10 +158,10 @@ Publisher's site can be on ANY hosting (WordPress, Ghost, custom) — the Worker
 # Reset all stats (impressions, spend, logs)
 curl -X POST https://testbot-two-psi.vercel.app/admin/reset-stats
 
-# Create a campaign
+# Create a campaign (Session 5+: variants required, 5-15, each text <=200 chars)
 curl -X POST https://testbot-two-psi.vercel.app/admin/campaign \
   -H "Content-Type: application/json" \
-  -d '{"id":"camp_FT","advertiser":"Freetrade","category":"finance","cpmGBP":10,"budgetDailyGBP":50,"budgetTotalGBP":1000,"keywords":["isa","pension","investment"],"matchingDescription":"UK ISA, SIPP and GIA investing platform","text":"...","advSlug":"ft","active":true}'
+  -d '{"id":"camp_FT","advertiser":"Freetrade","category":"finance","cpmGBP":10,"budgetDailyGBP":50,"budgetTotalGBP":1000,"keywords":["isa","pension","investment"],"matchingDescription":"UK ISA, SIPP and GIA investing platform","variants":[{"angle":"a1","text":"..."},{"angle":"a2","text":"..."},{"angle":"a3","text":"..."},{"angle":"a4","text":"..."},{"angle":"a5","text":"..."}],"advSlug":"ft","active":true}'
 
 # Delete a campaign
 curl -X POST https://testbot-two-psi.vercel.app/admin/campaign/delete \

@@ -1,0 +1,42 @@
+{
+  "id": "Cam_SmarPension",
+  "advertiser": "Smart Pension",
+  "category": "finance",
+  "cpmGBP": 70,
+  "budgetDailyGBP": 50,
+  "budgetTotalGBP": 500,
+  "keywords": [
+    "pension",
+    "isa",
+    "grow",
+    "workplace pension",
+    "retirement"
+  ],
+  "matchingDescription": "UK workplace pension provider, technology-driven retirement saving",
+  "variants": [
+    {
+      "angle": "workplace pension growth",
+      "text": "Smart Pension is one of the UK's fastest-growing workplace pension providers, setting a new standard for technology-powered retirement saving."
+    },
+    {
+      "angle": "technology-led pension management",
+      "text": "Manage your workplace pension digitally with Smart Pension — built on technology that makes tracking and growing your retirement savings simple."
+    },
+    {
+      "angle": "new to workplace pensions",
+      "text": "Just started a new job? Smart Pension is a fast-growing UK workplace pension provider focused on making retirement saving straightforward."
+    },
+    {
+      "angle": "long-term retirement saving",
+      "text": "Smart Pension helps UK employees build retirement savings over the long term through a technology-powered workplace pension."
+    },
+    {
+      "angle": "modern pension experience",
+      "text": "Join Smart Pension — a UK workplace pension provider setting a new standard for how technology can power retirement savings."
+    }
+  ],
+  "link": "",
+  "linkText": "Learn more",
+  "advSlug": "smart-pension",
+  "active": true
+}

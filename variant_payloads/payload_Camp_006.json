@@ -1,0 +1,44 @@
+{
+  "id": "Camp_006",
+  "advertiser": "Oppo",
+  "category": "tech",
+  "cpmGBP": 100,
+  "budgetDailyGBP": 50,
+  "budgetTotalGBP": 500,
+  "keywords": [
+    "phone",
+    "ai",
+    "oppo",
+    "tech",
+    "mobile",
+    "camera",
+    "smartphone"
+  ],
+  "matchingDescription": "Android smartphone with AI photography features, consumer mobile device",
+  "variants": [
+    {
+      "angle": "ai photography features",
+      "text": "The Oppo Reno14 F 5G features AI Flash Photography and AI-powered photo editing, helping every shot look its best in any lighting."
+    },
+    {
+      "angle": "design and aesthetics",
+      "text": "The Oppo Reno14 F 5G's Iridescent Mermaid Design stands out — a smartphone that's as much a style statement as a daily tool."
+    },
+    {
+      "angle": "macro photography",
+      "text": "Capture intricate close-up detail with the Oppo Reno14 F 5G's 2MP Macro camera, paired with AI-powered editing for sharper results."
+    },
+    {
+      "angle": "5g connectivity",
+      "text": "The Oppo Reno14 F 5G combines fast 5G connectivity with AI Flash Photography — built for users who want speed and standout photos."
+    },
+    {
+      "angle": "everyday smartphone upgrade",
+      "text": "Looking for a smartphone upgrade? The Oppo Reno14 F 5G offers AI photo editing, a striking design, and 5G — all in one device."
+    }
+  ],
+  "link": "",
+  "linkText": "Learn more",
+  "advSlug": "oppo",
+  "active": true
+}

@@ -1,0 +1,43 @@
+{
+  "id": "Cam_02",
+  "advertiser": "Moneybox",
+  "category": "finance",
+  "cpmGBP": 40,
+  "budgetDailyGBP": 50,
+  "budgetTotalGBP": 500,
+  "keywords": [
+    "isa",
+    "pension",
+    "investment",
+    "lifetime isa",
+    "first home",
+    "pension consolidation"
+  ],
+  "matchingDescription": "UK ISA, Lifetime ISA, first home saving and pension consolidation app",
+  "variants": [
+    {
+      "angle": "first-home saver",
+      "text": "Saving for your first home? Moneybox's Lifetime ISA helps you save with a government bonus, all from one award-winning app."
+    },
+    {
+      "angle": "pension consolidation",
+      "text": "Combine your old pensions into one place with Moneybox — track and manage your retirement savings alongside your ISA, simply."
+    },
+    {
+      "angle": "simple investing for beginners",
+      "text": "Moneybox makes investing simple — open an ISA and start investing in minutes, used by millions to grow their money over time."
+    },
+    {
+      "angle": "all-in-one savings app",
+      "text": "Moneybox is the simple way to save, invest, buy your first home, and combine old pensions — all with one award-winning service."
+    },
+    {
+      "angle": "lifetime isa government bonus",
+      "text": "Get a government bonus on your savings with Moneybox's Lifetime ISA — a straightforward way to save toward your first home or retirement."
+    }
+  ],
+  "link": "mb",
+  "linkText": "Learn more",
+  "advSlug": "moneybox",
+  "active": true
+}

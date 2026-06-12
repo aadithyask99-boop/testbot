@@ -1,0 +1,42 @@
+{
+  "id": "Cam_03",
+  "advertiser": "Trading 212",
+  "category": "finance",
+  "cpmGBP": 120,
+  "budgetDailyGBP": 50,
+  "budgetTotalGBP": 500,
+  "keywords": [
+    "isa",
+    "pension",
+    "investment",
+    "cash isa",
+    "interest"
+  ],
+  "matchingDescription": "UK Cash ISA and investment platform, commission-free, FSCS protected savings",
+  "variants": [
+    {
+      "angle": "cash isa interest rate",
+      "text": "Trading 212's Cash ISA pays high interest with flexible withdrawals and no account fees. Save completely free and earn interest tax-free. FSCS protected up to £85,000."
+    },
+    {
+      "angle": "first-time saver",
+      "text": "New to ISAs? Trading 212's Cash ISA has no minimum balance, no fees, and instant access to your money — a simple way to start saving tax-free."
+    },
+    {
+      "angle": "switching from a low-interest account",
+      "text": "Earning little to no interest on cash savings? Trading 212's Cash ISA offers a competitive rate with flexible withdrawals and zero account fees."
+    },
+    {
+      "angle": "flexible access savings",
+      "text": "Trading 212's Cash ISA lets you withdraw and redeposit without losing your annual allowance — flexible, fee-free, FSCS protected saving."
+    },
+    {
+      "angle": "fscs protection and safety",
+      "text": "Your savings are protected up to £85,000 with Trading 212's FSCS-covered Cash ISA — high interest, no fees, flexible withdrawals."
+    }
+  ],
+  "link": "",
+  "linkText": "Learn more",
+  "advSlug": "trading-212",
+  "active": true
+}

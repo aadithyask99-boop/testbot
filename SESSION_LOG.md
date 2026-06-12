@@ -192,3 +192,88 @@ Format: session number, name, date, what was built/decided/learned.
 
 ---
 <!-- Add new sessions below this line -->
+
+## Session 5 — Variant Bank
+**Date:** 2026-06-12
+**Chat:** Claude.ai (claude.ai chat, not Claude Code)
+**Goal:** Build the Variant Bank — each campaign gets 5-15 ad copy variants with
+distinct angles; Haiku selects the best-fitting variant per page after the
+campaign wins the CPM auction. Selection only, no generation (FCA constraint).
+
+**What was built:**
+- Design doc: `VARIANT_BANK_SPEC.md` — schema, match-path sequencing, caching,
+  round-robin fallback, all confirmed with Aadi before coding
+- Schema: `campaign.text` removed entirely, replaced with `variants[]`
+  (5-15 entries, each `{id, angle, text}`, text ≤200 chars). No migration —
+  schema replacement, existing campaigns re-entered manually via the new form.
+- `lib/config.js`: default Vanguard campaign rewritten with 5 variants;
+  new `variantLimits` (min 5, max 15, maxTextLength 200)
+- `lib/auction.js`: `isEligible()` now requires non-empty `variants[]`
+- `lib/relevance.js`: new Layer 6 `selectVariant()` — fires ONCE, only for the
+  auction winner. `haikuSelectVariant()` is a SEPARATE Haiku call (not combined
+  with the relevance filter) — whitelist-parsed against known variant IDs.
+  `roundRobinVariant()` via atomic `kvIncr('variant-rotation:{campaignId}')`
+  as fallback. New cache `variant:{sha256(url|campaignId)}`, 24h TTL.
+- `api/index.js`: injects `selectedVariant.text`; impression log gains
+  `variantId`/`variantAngle`/`variantMethod`; new `variant-impr:{campaignId}`
+  HINCRBY counter for per-variant impression tracking
+- `api/admin.js`: `validateVariants()` (5-15 count, required fields, 200-char
+  max, duplicate-angle warning), `normalizeVariants()` assigns stable v1..vN
+- `api/dashboard.js`: `variantBreakdown` per campaign (impressions + % per
+  angle), `currentCreativeFull` now resolves the SPECIFIC served variant
+  (not just the campaign's first variant)
+- `api/dashboard-ui.js`: Ad Copy textarea replaced with a variant repeater
+  (add/remove rows, live char counter, 5-15 client-side validation);
+  `renderVariants()` in campaign detail panel; `whyWon()` extended with a
+  variant line for all 4 methods (haiku / haiku_cached / round_robin /
+  only_option)
+- `api/sdk.js`: placeholder client-side path updated to read `variants[0]`
+
+**Bugs found and fixed this session (NOT part of the variant bank plan):**
+- `/admin` GET was being shadowed by the `/ad` route check
+  (`'/admin'.startsWith('/ad')` is true) — fixed with a regex that only
+  matches `/ad`, `/ad/...`, `/ad?...`
+- `kvGet` in `lib/kv.js` could corrupt any value whose JSON contains a bare
+  `%` not part of valid percent-encoding (e.g. ad copy "0.15%") —
+  `decodeURIComponent` throws "URI malformed", the old code's catch returned
+  the RAW JSON STRING, and callers spreading it (`{...c}`) produced a
+  character-indexed object. Fixed: try `JSON.parse(result)` first, only
+  fall back to decode+parse if that fails.
+
+**Incident — Upstash quota exhaustion (NOT a code bug):**
+- Mid-session, all KV reads/writes started returning `null` with no visible
+  error (writes/reads silently fail via kvGet/kvSet's catch blocks). Looked
+  exactly like data corruption/loss — campaign count dropped from 11 to 1 to 0.
+- Root cause: Upstash free tier hit its 500k commands/month limit. Diagnosed
+  via a temporary `/admin/debug-kv` endpoint that did a raw Upstash
+  SET+GET roundtrip and returned the actual HTTP 400
+  `"ERR max requests limit exceeded"` response.
+- Resolution: Upgraded Upstash to pay-as-you-go via Vercel Storage tab,
+  redeployed. ALL ORIGINAL DATA WAS INTACT — nothing was actually lost,
+  it was just unreadable during the outage. Temporary `/admin/debug-kv`
+  and `/admin/repair-index` endpoints removed after confirming recovery.
+
+**Migration completed:**
+- All 11 campaigns now have 5 variants each (Vanguard seeded with new
+  default; the other 10 — Trading 212, interactive investor ISA, Oppo,
+  E*TRADE, Smart Pension, Xiaomi, Moneybox, Express VPN, NordVPN, Freetrade —
+  migrated via `/admin/campaign` POSTs with variants drafted from their
+  original `text`/`matchingDescription`)
+- `matchingDescription` was already populated for all 11 from a prior
+  session — Task 0 from HANDOVER.md is effectively done
+
+**Validated live:**
+- Live Auction Board confirmed: Haiku-selected variants appear in the "Why"
+  box (e.g. `Variant "flat-fee pricing" (v2) selected via Haiku.`)
+- Auction + relevance filter + variant selection all working together
+  correctly on real crawls (interactive investor ISA winning over higher-CPM
+  off-topic bidders, Express VPN winning the VPN article, pasta-recipe
+  correctly served nothing)
+
+**Where we stopped:**
+- 8/12 serverless functions (unchanged)
+- All 11 campaigns on the variant bank schema, live and verified
+- Pre-existing duplicate `/admin/reset-stats` block in admin.js (lines ~67-91
+  and ~93-130 from before this session) still present — flagged, not fixed,
+  out of scope
+- Ready for Session 6: precompute/proactive crawling (HANDOVER.md Task 2)
