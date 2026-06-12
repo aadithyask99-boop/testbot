@@ -1,0 +1,14 @@
+# Wrangler config — deploy with: wrangler deploy
+# Docs: https://developers.cloudflare.com/workers/wrangler/configuration/
+
+name = "testbot-worker"
+main = "index.js"
+compatibility_date = "2024-09-23"
+
+# Free tier (Workers.dev) is sufficient for this proof-of-concept.
+# After `wrangler deploy`, the Worker is reachable at:
+#   https://testbot-worker.<your-subdomain>.workers.dev
+#
+# No routes/custom domain configured — workers.dev subdomain only.
+# To point this at a REAL publisher's domain later, add a `routes`
+# block here (requires the domain to be on Cloudflare DNS).
