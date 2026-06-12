@@ -143,8 +143,15 @@ module.exports = async function handler(req, res) {
   // exactly what Upstash is returning, bypassing kvGet's parsing entirely.
   // SAFE TO REMOVE after the Session 5 incident is resolved.
   if (req.method === 'GET' && url.includes('/admin/debug-kv')) {
-    const { kvDebugRaw } = require('../lib/kv');
-    const out = {};
+    const { kvDebugRaw, kvDebugRoundtrip } = require('../lib/kv');
+    const out = {
+      env: {
+        KV_REST_API_URL_set: !!process.env.KV_REST_API_URL,
+        KV_REST_API_TOKEN_set: !!process.env.KV_REST_API_TOKEN,
+        KV_REST_API_URL_prefix: (process.env.KV_REST_API_URL || '').slice(0, 30),
+      },
+      roundtrip: await kvDebugRoundtrip(),
+    };
     for (const key of ['campaigns:finance', 'campaigns:tech', 'campaign:camp_001', 'campaign:Cam_Nord']) {
       out[key] = {
         parsed: await kvGet(key),
