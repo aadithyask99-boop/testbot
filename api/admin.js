@@ -21,6 +21,27 @@ async function readBody(req) {
   try { return JSON.parse(body); } catch { return null; }
 }
 
+// Session 6: after a campaign is created/edited/paused/deleted, the
+// relevance-filter and variant caches for that campaign across every
+// known page may now be stale (candidate set changed, or the campaign's
+// own data — matchingDescription/variants/cpmGBP — changed). Fire an
+// internal call to /precompute?action=invalidate to clear those specific
+// cache entries. Best-effort: a failure here is non-fatal — the caches
+// would otherwise just expire naturally at their 24h TTL, so this is an
+// optimization for faster propagation, not a correctness requirement.
+const PLATFORM_URL = process.env.PLATFORM_URL || 'https://testbot-two-psi.vercel.app';
+async function invalidatePrecomputeCaches(campaignId, category) {
+  try {
+    await fetch(`${PLATFORM_URL}/precompute?action=invalidate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ campaignId, category: category || null }),
+    });
+  } catch (e) {
+    console.error('Precompute invalidate call failed (non-fatal):', e.message);
+  }
+}
+
 // Add a campaign ID to its category index list (idempotent)
 async function addToCategoryIndex(category, id) {
   const ids = (await kvGet(`campaigns:${category}`)) || [];
@@ -192,6 +213,7 @@ module.exports = async function handler(req, res) {
     campaign.active = data.active === true;
     campaign.updatedAt = new Date().toISOString();
     await kvSet(`campaign:${campaign.id}`, campaign);
+    await invalidatePrecomputeCaches(campaign.id, campaign.category);
     return res.status(200).json({ message: campaign.active ? 'Campaign activated' : 'Campaign paused', campaign });
   }
 
@@ -209,6 +231,7 @@ module.exports = async function handler(req, res) {
     const ids = (await kvGet(`campaigns:${campaign.category}`)) || [];
     const updated = ids.filter(i => i !== data.id);
     await kvSet(`campaigns:${campaign.category}`, updated);
+    await invalidatePrecomputeCaches(data.id, campaign.category);
     return res.status(200).json({ message: `Campaign deleted: ${data.id}`, id: data.id });
   }
 
@@ -225,6 +248,7 @@ module.exports = async function handler(req, res) {
     }
     try {
       const { campaign, duplicateAngleWarning } = await saveCampaign(data);
+      await invalidatePrecomputeCaches(campaign.id, campaign.category);
       const response = { message: `Campaign saved: ${campaign.id}`, campaign };
       if (duplicateAngleWarning) {
         response.warning = `Duplicate variant angle detected: "${duplicateAngleWarning}". Distinct angles are recommended for variant selection to work well.`;

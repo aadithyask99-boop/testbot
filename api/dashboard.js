@@ -2,6 +2,20 @@ const { kvGet, kvSet, kvListGet, kvHashGetAll } = require('../lib/kv');
 const { getCampaignSpend } = require('../lib/auction');
 const config = require('../lib/config');
 
+const PLATFORM_URL = process.env.PLATFORM_URL || 'https://testbot-two-psi.vercel.app';
+
+// Session 6: best-effort fetch of precompute coverage for the operator
+// dashboard card. Failure is non-fatal — the card just shows nothing.
+async function getPrecomputeStatus() {
+  try {
+    const resp = await fetch(`${PLATFORM_URL}/precompute?action=status`);
+    if (!resp.ok) return null;
+    return await resp.json();
+  } catch (e) {
+    return null;
+  }
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -490,6 +504,7 @@ module.exports = async function handler(req, res) {
       recentImpressions:  (recentBotLogs || []).slice(0, 20),
       recentPubClicks:    (recentPubClicks || []).slice(0, 10),
       recentAdvClicks:    (recentAdvClicks || []).slice(0, 10),
+      precompute:         await getPrecomputeStatus(),
     });
 
   } catch (e) {

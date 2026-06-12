@@ -69,6 +69,8 @@ var html = '<!DOCTYPE html>' +
 '<section><h2>Impressions by AI Platform</h2>' +
 '<table><thead><tr><th>Platform</th><th>Impressions</th><th>Total Visits</th><th>Unique Visits</th><th>CTR</th></tr></thead>' +
 '<tbody id="ov-platforms"><tr><td colspan="5" class="empty">Loading...</td></tr></tbody></table></section>' +
+'<section><h2>Precompute Coverage <span style="font-size:12px;color:#888;font-weight:400">(category classification warmed ahead of crawls)</span></h2>' +
+'<div id="ov-precompute"><div class="empty">Loading...</div></div></section>' +
 '</div>' +
 
 '<div id="tab-advertiser" class="tab">' +
@@ -159,6 +161,29 @@ var html = '<!DOCTYPE html>' +
 '  set("ov-activity",all.length?all.map(function(e){' +
 '    return "<tr><td>"+ago(e.time)+"</td><td>"+(e.platform||"—")+"</td><td>"+tag(e.crawlerType||"—",e.crawlerType||"")+"</td><td>"+(e.advertiser||e.served||"—")+"</td></tr>";' +
 '  }).join(""):"<tr><td colspan=\'4\' class=\'empty\'>No activity yet</td></tr>");' +
+'  renderPrecompute(opData.precompute);' +
+'}' +
+'function renderPrecompute(pc){' +
+'  if(!pc){set("ov-precompute","<div class=\'empty\'>Precompute status unavailable</div>");return;}' +
+'  var pct=pc.coveragePct||0;' +
+'  var color=pct>=90?"#16a34a":(pct>=50?"#f59e0b":"#dc2626");' +
+'  var sweepLine="No sweep run yet";' +
+'  if(pc.lastSweep&&pc.lastSweep.time){' +
+'    sweepLine="Last sweep: "+ago(pc.lastSweep.time)+" — "+pc.lastSweep.classified+" classified, "+pc.lastSweep.skipped+" skipped"+(pc.lastSweep.errors?(", "+pc.lastSweep.errors+" errors"):"");' +
+'  }' +
+'  var rows=(pc.pages||[]).map(function(p){' +
+'    var freshTag=p.fresh?"<span style=\'color:#16a34a\'>fresh</span>":"<span style=\'color:#cbd5e1\'>stale/none</span>";' +
+'    return "<div style=\'display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid #f5f5f5\'>"+' +
+'      "<span style=\'font-family:monospace;color:#333\'>"+p.path+"</span>"+' +
+'      "<span style=\'color:#888\'>"+(p.category||"—")+" · "+(p.method||"—")+" · "+freshTag+"</span>"+' +
+'    "</div>";' +
+'  }).join("");' +
+'  set("ov-precompute",' +
+'    "<div style=\'display:flex;align-items:center;gap:16px;margin-bottom:10px\'>"+' +
+'      "<div style=\'font-size:28px;font-weight:700;color:"+color+"\'>"+pct+"%</div>"+' +
+'      "<div><div style=\'font-size:13px;color:#333\'>"+pc.covered+" of "+pc.pagesTotal+" pages pre-classified</div><div style=\'font-size:11px;color:#999\'>"+sweepLine+"</div></div>"+' +
+'    "</div>"+rows' +
+'  );' +
 '}' +
 'function renderAdvertiser(){' +
 '  if(!advData)return;' +

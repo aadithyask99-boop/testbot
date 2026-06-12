@@ -25,6 +25,7 @@
     { "src": "/admin/campaign",       "dest": "/api/admin.js" },
     { "src": "/admin",                "dest": "/api/admin.js" },
     { "src": "/match",           "dest": "/api/match.js" },
+    { "src": "/precompute",      "dest": "/api/precompute.js" },
     { "src": "/articles/(.*)",   "dest": "/api/index.js" },
     { "src": "/",                "dest": "/api/index.js" }
   ]
