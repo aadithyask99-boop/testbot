@@ -84,26 +84,35 @@ function detectBot(userAgent) {
 
 // ------------------------------------------------------------
 // Page-signal extraction via HTMLRewriter.
-// Collects title, meta description, and text from the first two <p>
-// elements (firstParagraph = 1st, bodySample = both joined) — mirrors
-// api/index.js's extraction (which uses ALL <p> elements up to 1500
-// chars; v1 here uses the first 2, sufficient for classification/
-// relevance and avoids buffering the whole page to extract signals).
+// Collects title, meta description, and text from article paragraphs —
+// mirrors api/index.js's extraction (which uses ALL <p> elements from
+// page.body up to 1500 chars; v1 here uses the first 2 non-byline
+// paragraphs, sufficient for classification/relevance and avoids
+// buffering the whole page).
 //
-// KNOWN V1 LIMITATION: scoped to `article p` (see injectIntoResponse
-// for why). This assumes the page has an <article> wrapper, true for
-// all of lib/demo-pages.js. A REAL publisher's page may not use
-// <article> — if `article p` matches zero elements, paragraphCount
-// will be 0 and injection falls back to "before </body>" (the
-// lib/injector.js fallback), which still works but loses the "after
-// the intro" placement. v2: detect zero article-scoped matches and
-// fall back to plain `p`, OR use a content-area heuristic (main,
-// [role=main], .content, .post-content — common publisher patterns).
-// Not built in this session — testbot-two-psi's demo pages all use
-// <article>, so this doesn't block the proof-of-concept.
+// KNOWN V1 LIMITATIONS:
+// 1. Scoped to `article p` (see injectIntoResponse for why the header's
+//    tagline <p> must not count). Assumes an <article> wrapper, true
+//    for all of lib/demo-pages.js. A real publisher's page may not use
+//    <article> — if `article p` matches zero elements, paragraphCount
+//    is 0 and injection falls back to "before </body>" (still works,
+//    loses "after the intro" placement). v2: fall back to plain `p` or
+//    a content-area heuristic (main, [role=main], .content,
+//    .post-content) if article-scoped matches are zero.
+// 2. SIGNALS additionally exclude `.byline` — lib/demo-pages.js's
+//    makePage() template always has `<p class="byline">By ... ·
+//    DATE</p>` as the first article p, and api/index.js's own
+//    extraction (from page.body, which excludes the byline) never sees
+//    it. Without excluding it here, the Worker's "firstParagraph" would
+//    be byline text instead of real content — worse signal quality than
+//    the origin. `:not(.byline)` is a best-effort match for THIS demo
+//    template; a real publisher's byline markup will differ or be
+//    absent. The byline STILL counts toward injection positioning
+//    (articlePCount) — see injectIntoResponse.
 // ------------------------------------------------------------
 function extractSignals(response) {
   const signals = { title: '', metaDescription: '', paragraphs: [] };
+  let articlePCount = 0; // ALL article p (including byline) — injection positioning
 
   const rewriter = new HTMLRewriter()
     .on('title', {
@@ -115,9 +124,10 @@ function extractSignals(response) {
         if (content) signals.metaDescription = content;
       },
     })
-    // Scoped to `article p` — see injectIntoResponse for why the
-    // header's tagline <p> must not be counted as a body paragraph.
     .on('article p', {
+      element(el) { articlePCount++; },
+    })
+    .on('article p:not(.byline)', {
       text(text) {
         if (signals.paragraphs.length === 0) signals.paragraphs.push('');
         const idx = signals._currentP ?? signals.paragraphs.length - 1;
@@ -140,7 +150,10 @@ function extractSignals(response) {
       metaDescription: signals.metaDescription,
       firstParagraph,
       bodySample,
-      paragraphCount: signals.paragraphs.length,
+      // articlePCount (includes byline) drives injection positioning —
+      // injectIntoResponse's pSeen===1 lands after the byline, matching
+      // lib/injector.js's verified behaviour.
+      paragraphCount: articlePCount,
     };
   });
 }
@@ -180,7 +193,13 @@ function injectIntoResponse(response, injectedHtml, paragraphCount) {
     .on('article p', {
       element(el) {
         pSeen++;
-        if (pSeen === 2 && paragraphCount >= 2) {
+        // lib/injector.js's "2nd </p> after char 200" lands after the
+        // BYLINE — which is article's 1ST <p> (the header tagline <p>
+        // is globally #1, byline is globally #2). So "after the 1st
+        // article p" is the correct equivalent, not the 2nd. Verified
+        // against lib/injector.js's actual output for this page
+        // (Session 7 live test — see commit history).
+        if (pSeen === 1 && paragraphCount >= 1) {
           el.after(injectedHtml, { html: true });
           injected = true;
         }
@@ -188,10 +207,10 @@ function injectIntoResponse(response, injectedHtml, paragraphCount) {
     })
     .on('body', {
       element(el) {
-        if (paragraphCount < 2) {
-          // Fallback: fewer than 2 <p> elements inside <article> —
-          // append before </body>, mirroring lib/injector.js's
-          // injectBeforeBodyClose fallback.
+        if (paragraphCount < 1) {
+          // Fallback: NO <p> elements inside <article> — append before
+          // </body>, mirroring lib/injector.js's injectBeforeBodyClose
+          // fallback.
           el.append(injectedHtml, { html: true });
           injected = true;
         }
