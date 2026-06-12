@@ -89,6 +89,18 @@ function detectBot(userAgent) {
 // api/index.js's extraction (which uses ALL <p> elements up to 1500
 // chars; v1 here uses the first 2, sufficient for classification/
 // relevance and avoids buffering the whole page to extract signals).
+//
+// KNOWN V1 LIMITATION: scoped to `article p` (see injectIntoResponse
+// for why). This assumes the page has an <article> wrapper, true for
+// all of lib/demo-pages.js. A REAL publisher's page may not use
+// <article> — if `article p` matches zero elements, paragraphCount
+// will be 0 and injection falls back to "before </body>" (the
+// lib/injector.js fallback), which still works but loses the "after
+// the intro" placement. v2: detect zero article-scoped matches and
+// fall back to plain `p`, OR use a content-area heuristic (main,
+// [role=main], .content, .post-content — common publisher patterns).
+// Not built in this session — testbot-two-psi's demo pages all use
+// <article>, so this doesn't block the proof-of-concept.
 // ------------------------------------------------------------
 function extractSignals(response) {
   const signals = { title: '', metaDescription: '', paragraphs: [] };
@@ -103,7 +115,9 @@ function extractSignals(response) {
         if (content) signals.metaDescription = content;
       },
     })
-    .on('p', {
+    // Scoped to `article p` — see injectIntoResponse for why the
+    // header's tagline <p> must not be counted as a body paragraph.
+    .on('article p', {
       text(text) {
         if (signals.paragraphs.length === 0) signals.paragraphs.push('');
         const idx = signals._currentP ?? signals.paragraphs.length - 1;
@@ -156,7 +170,14 @@ function injectIntoResponse(response, injectedHtml, paragraphCount) {
   let injected = false;
 
   const rewriter = new HTMLRewriter()
-    .on('p', {
+    // Scoped to `article p` — the header's tagline <p> (e.g.
+    // "<header>...<p>UK personal finance &amp; investing</p></header>")
+    // must NOT count toward "the 2nd paragraph." This mirrors
+    // lib/injector.js's behaviour, which starts its search at character
+    // 200 (past the <header> block) — counting from the start of
+    // <article> achieves the same intent via HTMLRewriter's selector
+    // scoping instead of a character offset.
+    .on('article p', {
       element(el) {
         pSeen++;
         if (pSeen === 2 && paragraphCount >= 2) {
@@ -168,8 +189,8 @@ function injectIntoResponse(response, injectedHtml, paragraphCount) {
     .on('body', {
       element(el) {
         if (paragraphCount < 2) {
-          // Fallback: fewer than 2 <p> elements on the page — append
-          // before </body>, mirroring lib/injector.js's
+          // Fallback: fewer than 2 <p> elements inside <article> —
+          // append before </body>, mirroring lib/injector.js's
           // injectBeforeBodyClose fallback.
           el.append(injectedHtml, { html: true });
           injected = true;
