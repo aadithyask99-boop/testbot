@@ -390,4 +390,83 @@ winner is not.
 
 — Claude (session 6)
 
+---
+
+## Session 7 additions
+
+### Don't trust your own reasoning about HTML position — trace the actual output
+Twice this session I reasoned about WHERE `lib/injector.js` places its
+injection ("2nd `</p>` after char 200... that should be paragraph X") and
+got it wrong both times before checking. The fix that actually worked: call
+`injectSponsoredContent()` directly with a recognisable marker string
+(`'TESTINJECT'`), find it in the output, and print the surrounding context.
+Two minutes of actual tracing beat ten minutes of reasoning about character
+offsets vs DOM element counts. **Lesson: when porting positional logic
+between two different APIs (string-offset vs HTMLRewriter element-count),
+trace the SOURCE's actual output on a concrete example FIRST — don't
+translate the description of the algorithm.**
+
+### A library's self-test running on require() can break downstream scripts
+`lib/detector.js` ran its full test suite (printing ~50 lines to stdout)
+EVERY time it was `require()`'d — harmless for `api/index.js` (stdout isn't
+captured there), but broke `scripts/generate-worker-detector.js`, which
+needs `require('../lib/detector').AI_CRAWLERS` and writes clean JSON/JS to
+stdout. Fixed with `if (require.main === module)`. **Lesson: any module
+with inline self-test/demo code that prints to stdout should guard it —
+even if no CURRENT consumer cares, a future script that captures stdout
+will silently get garbage.**
+
+### Edge-worker bot detection: embed, don't call back
+Considered (and rejected) having the Worker call our API to ask "is this a
+bot?" The asymmetry argument: a publisher's site gets MOSTLY human traffic.
+A detection callback on every request means 100% of human pageviews pay a
+network-hop tax to serve <1% of traffic (bots). Embedding a ~35-entry
+substring-match list is microseconds of CPU, well under Cloudflare's free
+10ms/request budget. The tradeoff (pattern list can drift from
+`lib/detector.js`) is solved well-enough by a manual regeneration script —
+not perfect, but the alternative (callback) doesn't scale to "Worker in
+front of a publisher's entire site."
+
+### The "2nd <p>" position depends on what counts as the "1st <p>" — header vs article
+`lib/demo-pages.js`'s template has `<header><h1>...</h1><p>tagline</p>
+</header>` BEFORE `<article>`. Globally, that tagline `<p>` is paragraph #1,
+the article's byline is #2. `lib/injector.js`'s "2nd `</p>` after char 200"
+(char 200 happens to fall past the header) lands after the BYLINE. When
+porting to HTMLRewriter's `article p` selector (which correctly excludes
+the header tagline), the byline becomes article's 1ST `<p>` — so "after the
+1st article p" is the correct translation of "2nd `<p>` globally," NOT "2nd
+article p." Off-by-one errors like this are exactly why tracing actual
+output (see above) matters.
+
+### Worker signal quality vs origin signal quality — the byline trap
+`api/index.js` extracts `firstParagraph`/`bodySample` from `page.body`
+(the article's content HTML), which NEVER includes the byline —
+`makePage()` adds `<p class="byline">` separately. If the Worker's
+`extractSignals` naively used `article p` for signals too, its
+"firstParagraph" would be the byline ("By Finance Weekly Editorial · 10
+June 2026") instead of real content — WORSE classification signal than the
+origin gets. Fixed with `article p:not(.byline)` for signals specifically,
+while injection positioning still counts the byline (`articlePCount`,
+separate from `signals.paragraphs`). **Lesson: when two code paths
+(Worker vs origin) are supposed to produce equivalent results from
+different starting points (fetched HTML vs internal template data), check
+that they're extracting the SAME underlying content — not just using
+"equivalent-sounding" selectors.**
+
+### Known v1 limitations are now load-bearing assumptions about OUR OWN templates
+`worker/index.js` currently assumes: (1) the page has an `<article>`
+wrapper, (2) the first article paragraph has `class="byline"`. BOTH are
+true for `lib/demo-pages.js` and BOTH are assumptions about OUR template,
+not general HTML. A real publisher's page won't have either. This is
+DOCUMENTED inline (search "KNOWN V1 LIMITATION") but worth restating here:
+**the Worker currently only works correctly against pages shaped like our
+own demo pages.** Pointing it at a real publisher's domain (Session 8+)
+will likely need: (a) a content-area fallback when `article p` is empty,
+(b) NOT assuming a byline exists/has that class name — possibly just
+accepting slightly-worse signals for real publishers rather than trying to
+detect/exclude bylines generically.
+
+— Claude (session 7)
+
+
 

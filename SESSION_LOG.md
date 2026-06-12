@@ -193,6 +193,90 @@ Format: session number, name, date, what was built/decided/learned.
 ---
 <!-- Add new sessions below this line -->
 
+## Session 7 — Cloudflare Worker SDK
+**Date:** 2026-06-12
+**Chat:** Claude.ai (claude.ai chat, not Claude Code)
+**Goal:** Build the thing a real publisher would actually install —
+a Cloudflare Worker that sits in front of a site, detects AI crawlers,
+and injects sponsored content without any origin server changes.
+Deferred per-publisher namespacing (Task 3) since there's no real
+second tenant yet — this is the artifact needed to GET one.
+
+**What was built:**
+- `WORKER_SDK_SPEC.md` — design doc. Key decisions: `/match` (existing,
+  no new slot) as the Worker's decision endpoint; bot detection via an
+  EMBEDDED pattern subset generated from `lib/detector.js` (not a
+  callback API — avoids a network hop on every human pageview); test
+  target is testbot-two-psi.vercel.app itself (Worker proxies its own
+  demo pages first, before any real publisher)
+- `lib/detector.js`: guarded the self-test block with
+  `require.main === module` — it was printing to stdout on every
+  `require()`, breaking the generation script's output capture
+- `scripts/generate-worker-detector.js` (NEW, manual-run helper):
+  generates the embedded `BOT_PATTERNS` array from `lib/detector.js`'s
+  `AI_CRAWLERS` (35/35 entries qualify — all simple string patterns)
+- `api/match.js`: accepts `bodySample` in the request body
+- `api/impression.js` (NEW, 10/12 functions): Worker-side impression
+  logging. Replicates `api/index.js`'s exact KV writes —
+  `impr:{type}:{campaignId}:{date/total}` (matches `lib/auction.js`'s
+  `imprKey` exactly — initially written with the WRONG format
+  `stats:impressions:...`, caught before deploy), global `stats:*`
+  counters, per-platform/per-campaign-platform/per-variant hashes,
+  `log:recent` entry with `source: 'worker'`
+- `worker/index.js` (NEW): the Worker script. Fetches origin with a
+  non-bot UA (avoids double-injection/double-counting), detects bots
+  via embedded `BOT_PATTERNS`, extracts page signals via HTMLRewriter,
+  calls `/match`, injects the selected variant via HTMLRewriter,
+  fire-and-forget logs via `/impression`
+- `worker/wrangler.toml` (NEW) — Cloudflare deploy config
+- `vercel.json`: `/impression` route added (10/12)
+
+**Deployed live:** `https://testbot-worker.projectatlas.workers.dev`
+(Cloudflare Workers free tier, `projectatlas.workers.dev` subdomain
+registered this session)
+
+**Bugs found and fixed during live testing (2 rounds):**
+1. Injection landed after the header's tagline `<p>` instead of after
+   the byline — `HTMLRewriter`'s `p` selector counted the
+   `<header><p>UK personal finance &amp; investing</p></header>` tagline
+   as paragraph #1. Fixed: scoped to `article p`.
+2. Still one position off after fix #1 — landed after the 2nd
+   `article p` (byline + 1st content para) instead of after just the
+   byline. Traced `lib/injector.js`'s ACTUAL output directly
+   (`injectSponsoredContent` with a test marker) to confirm the correct
+   position is "after the 1st `article p`" (the byline) — `lib/
+   injector.js`'s "2nd `</p>` globally" = header tagline (#1) + byline
+   (#2). Fixed: `pSeen === 1` (was 2). Also excluded `.byline` from
+   SIGNAL extraction (firstParagraph/bodySample) — `api/index.js`'s own
+   extraction never sees the byline either, so including it would have
+   made the Worker's classification signals WORSE than the origin's.
+
+**Validated live (all via deployed Worker vs direct origin comparison):**
+- PerplexityBot via Worker: injection position, content, and variant
+  selection (Trading 212 "v2" / first-time-investor) match origin exactly
+- Googlebot via Worker: passes through unmodified (cloaking-risk
+  respected) — confirmed both before and after the position fixes
+- Human UA via Worker: passes through unmodified
+- 3 real impressions logged via `/impression`, `source: 'worker'`,
+  correct campaign/variant/platform attribution, real Cloudflare edge
+  IPs (172.7x.x.x ranges) confirming genuine edge traffic
+
+**Where we stopped:**
+- 10/12 serverless functions (2 free)
+- Worker proof-of-concept fully validated against our OWN demo pages
+- NOT YET DONE: pointing the Worker at a REAL publisher's domain
+  (requires `routes`/custom domain config in `wrangler.toml`, and the
+  KNOWN V1 LIMITATIONS documented inline in `worker/index.js` —
+  `<article>` wrapper assumption, `.byline` class assumption — would
+  need revisiting for a real publisher's actual markup)
+- Task 3 (per-publisher namespacing) still pending — now genuinely
+  blocked on "do we have a publisher," which this Worker is the pitch
+  artifact for
+- Ready for Session 8: either a real publisher pilot (business step,
+  using this Worker as the install artifact), OR v2 hardening of the
+  Worker (behavioral/anonymous bot detection, content-area heuristics
+  beyond `<article>`, `routes` config for a real domain)
+
 ## Session 6 — Precompute Classification Cache
 **Date:** 2026-06-12
 **Chat:** Claude.ai (claude.ai chat, not Claude Code)

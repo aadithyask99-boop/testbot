@@ -6,12 +6,18 @@
 
 ---
 
-## Current State (end of Session 6)
+## Current State (end of Session 7)
 
 **Live URL:** https://testbot-two-psi.vercel.app  
 **Dashboard:** https://testbot-two-psi.vercel.app/ui  
+**Worker (NEW):** https://testbot-worker.projectatlas.workers.dev —
+proxies testbot-two-psi.vercel.app itself (proof-of-concept)
 **GitHub:** https://github.com/aadithyask99-boop/testbot (main branch)  
-**Vercel:** Hobby plan — **9/12** serverless functions used, 3 free  
+**Worker repo location:** `worker/` directory in the same repo
+(`wrangler.toml` + `index.js`)
+**Vercel:** Hobby plan — **10/12** serverless functions used, 2 free  
+**Cloudflare:** Workers free tier, `projectatlas.workers.dev` subdomain
+registered Session 7
 **Database:** Upstash Redis — pay-as-you-go (see Session 5 incident in
 CONTINUE.md if KV reads/writes ever silently return null again)
 **Tests:** 133 passing as of Session 4 (test files live in `/tmp`, not in
@@ -19,8 +25,37 @@ repo — not re-run since; re-run at next session start if touching core
 match/auction logic)
 **Anthropic API:** `claude-haiku-4-5` confirmed working — 3 possible calls
 per page now (category classification, relevance filter, variant selection)
-**Demo pages:** 7 (was 5) — all listed in `/sitemap.xml`, all 100%
-pre-classified via `/precompute?action=sweep`
+**Demo pages:** 7, all 100% pre-classified
+
+### What's new this session — Cloudflare Worker SDK (Session 7, DONE)
+- `worker/index.js` — DEPLOYED and VALIDATED live. Proxies
+  testbot-two-psi.vercel.app, detects AI crawlers via an embedded
+  pattern list (generated from `lib/detector.js` via
+  `scripts/generate-worker-detector.js`), calls `/match`, injects the
+  selected variant via HTMLRewriter, logs impressions via new
+  `/impression` endpoint
+- Confirmed: PerplexityBot injection matches origin exactly (position +
+  content + variant), Googlebot passes through clean (cloaking-risk
+  respected), human passes through clean, 3 real impressions logged
+  correctly with Cloudflare edge IPs
+- `api/impression.js` (NEW, 10/12) — Worker-side logging endpoint
+- `api/match.js` — accepts `bodySample` now
+- See SESSION_LOG.md Session 7 for the two injection-position bugs
+  found and fixed live, and CONTINUE.md for lessons (esp. "trace actual
+  output, don't reason about positions")
+
+### KNOWN V1 LIMITATIONS for the Worker (both documented inline in
+worker/index.js, both are assumptions about OUR OWN demo page template):
+1. Assumes the page has an `<article>` wrapper — if `article p` matches
+   zero elements, injection falls back to "before `</body>`" (works,
+   but loses "after the intro" placement)
+2. Assumes the first article paragraph has `class="byline"` — used to
+   exclude it from classification SIGNALS (firstParagraph/bodySample),
+   matching what `api/index.js` itself extracts. A real publisher's
+   byline markup will differ or be absent.
+
+Both need revisiting before pointing the Worker at a REAL publisher's
+domain — see Session 8 options below.
 
 ### What's new this session — Precompute Classification Cache (Task 2, DONE)
 - New `api/precompute.js` (9/12 functions): `?action=sweep` (classify
@@ -83,11 +118,11 @@ important (e.g. once a real publisher's sitemap has never-crawled pages).
 - POST /admin/reset-stats for clean test cycles
 
 ### What is NOT yet built (architectural gaps for production)
-1. **Per-publisher pubId + multi-publisher support** — everything is single-tenant. KV keys need `{pubId}` namespacing (including `precompute:`/`match:`, built single-tenant in Session 6). Publisher SDK (Cloudflare Worker) needs to inject pubId. (Session 7 — START HERE)
-2. **Publisher onboarding flow + floor prices** — no `publisher:{pubId}` records yet. (Session 7)
-3. **Cloudflare Worker SDK** — `api/sdk.js` is still client-side placeholder. (Session 7/8)
+1. **Per-publisher pubId + multi-publisher support** — everything is single-tenant. KV keys need `{pubId}` namespacing (including `precompute:`/`match:`, built single-tenant in Session 6, and the Worker's calls to `/match`/`/impression`, built single-tenant in Session 7). Deliberately deferred until a real second tenant exists — see Session 8 Path A.
+2. **Publisher onboarding flow + floor prices** — no `publisher:{pubId}` records yet. Blocked on same as #1.
+3. **Worker v2 hardening** — content-area fallback beyond `<article>`, byline-detection beyond `.byline`, behavioral/anonymous bot detection (DeepSeek pattern). See Session 8 Path B. Required before pointing the Worker at a real publisher's arbitrary markup.
 4. **Daily precompute sweep via cron** — deferred Session 6, needs `vercel.json` migration from `routes` to `rewrites`+`functions` first. Event-based invalidation covers the real-time case; this is a safety-net for never-crawled pages. Low priority until publisher sitemaps are large.
-5. **Real-world organic appearance probability** — cannot be measured on testbot-two-psi.vercel.app (zero-authority domain). Needs publisher partner with indexed traffic. NOT an engineering blocker — a business blocker.
+5. **Real-world organic appearance probability** — cannot be measured on testbot-two-psi.vercel.app (zero-authority domain). Needs publisher partner with indexed traffic. NOT an engineering blocker — a business blocker. Session 7's Worker is the artifact that makes getting one more likely.
 
 ---
 
@@ -145,26 +180,59 @@ The "honest constraint" below still applies — still gated by publisher
 partnership for the sitemap-crawl half (today uses `listPaths()` from
 `lib/demo-pages.js` as the sitemap source).
 
-### Task 3: Per-publisher namespacing
+### ✅ DONE — Task 4: Cloudflare Worker SDK
+Built, deployed, and validated live in Session 7. See "What's new this
+session" above and SESSION_LOG.md Session 7 for full detail.
+`WORKER_SDK_SPEC.md` has the design doc, `worker/index.js` is the script,
+live at https://testbot-worker.projectatlas.workers.dev.
+
+### Session 8 — Two paths, pick based on what's actionable
+
+**Path A: Real publisher pilot (business step)**
+Now that there's a working, demonstrable Worker — "paste this in,
+change one config line, done" — this is the artifact to show a
+prospective publisher. If Aadi has identified someone:
+1. Update `worker/wrangler.toml` with their domain (`routes` block,
+   requires their domain on Cloudflare DNS — or they add a Worker route
+   via their own CF dashboard if they're already on Cloudflare)
+2. Change `ORIGIN_URL` in `worker/index.js` to their actual origin
+3. Address the two KNOWN V1 LIMITATIONS for THEIR markup specifically
+   (does their page have `<article>`? what does their byline/metadata
+   look like, if any?) — likely needs the v2 content-area fallback
+   (Path B item 1) regardless
+4. THIS is when Task 3 (per-publisher namespacing) becomes real and
+   necessary — see below, now genuinely motivated by a real second
+   tenant
+
+**Path B: Worker v2 hardening (engineering step, no publisher yet)**
+If no publisher lined up yet, harden the Worker against arbitrary HTML:
+1. Content-area fallback when `article p` matches zero elements — try
+   `main p`, `[role=main] p`, `.content p`, `.post-content p` in order,
+   falling back to plain `p` (matches the pattern `api/sdk.js`'s
+   placeholder already references: `'article p, main p, .content p, p'`)
+2. Don't assume `.byline` — either accept the signal-quality hit for
+   real publishers, or detect "metadata-like" first paragraphs heuristically
+   (short, contains a date pattern, etc. — diminishing returns, maybe
+   not worth it)
+3. v2 bot detection: `lib/combined-detector.js`'s behavioral scoring
+   (anonymous crawler path — DeepSeek pattern) — currently OUT of the
+   embedded Worker patterns entirely (v1 only does self-identifying UAs)
+4. Re-run `scripts/generate-worker-detector.js` if `lib/detector.js`'s
+   crawler list has changed, refresh `BOT_PATTERNS` in `worker/index.js`
+
+### Task 3: Per-publisher namespacing (NOW MOTIVATED BY Path A, if taken)
 KV keys need `{pubId}` segments:
 - `campaign:{pubId}:{id}` (or keep global campaigns and add `eligiblePublishers: ['pub_001']` to each campaign — design decision)
 - `match:{pubId}:{urlHash}` and `precompute:{pubId}:{urlHash}` (cache is per-publisher because publishers can override page categories via `publisherCategory`)
 - `spend:daily:{pubId}:{id}:{date}` only if we add per-publisher floors that affect spend
 - Publisher record: `publisher:{pubId} = { name, floorCPM, sitemapUrl, active, createdAt }`
 - `api/precompute.js`'s `?action=sweep` needs a `pubId` param once multi-tenant — currently sweeps `listPaths()` (single demo "publisher")
+- `worker/index.js` would need to send `pubId` to `/match` and `/impression` — both currently single-tenant
 
-**Honest constraint:** still gated by publisher partnership. No engineering
-substitute for "we have a real publisher with indexed AI traffic."
-
-### Task 4: Cloudflare Worker SDK
-Workers code that publishers paste into their CF dashboard. Worker:
-1. Fetches the origin page
-2. Sniffs the User-Agent
-3. If bot: calls our `/match?url=...&pubId=...` (with page signals), gets a winner, injects creative paragraph into the response HTML
-4. If human: returns response unmodified
-5. Logs the impression via our endpoint
-
-Publisher's site can be on ANY hosting (WordPress, Ghost, custom) — the Worker sits in front. This is the production deployment story for Phase 4.
+**Honest constraint:** still gated by publisher partnership. The Worker
+built in Session 7 is the artifact that makes "yes" more likely — but
+Task 3 itself should wait until there's a real second tenant to design
+against, per Session 7's framing decision.
 
 
 ---
