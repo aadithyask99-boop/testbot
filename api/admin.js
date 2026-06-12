@@ -235,7 +235,10 @@ module.exports = async function handler(req, res) {
   }
 
   // ---- GET /ad — auction winner for a category (used by SDK) ----
-  if (req.method === 'GET' && url.startsWith('/ad')) {
+  // NOTE: was `url.startsWith('/ad')`, which also matches '/admin' —
+  // '/admin'.startsWith('/ad') is true. Fixed to match only '/ad' itself
+  // or '/ad?...' / '/ad/...'.
+  if (req.method === 'GET' && /^\/ad(\?|\/|$)/.test(url)) {
     const category = (req.query && req.query.cat) || config.demoPageCategory;
     const winner = await runAuction(category);
     if (!winner) return res.status(200).json({ category, campaign: null, message: 'No eligible campaign' });
