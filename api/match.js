@@ -48,6 +48,7 @@ module.exports = async function handler(req, res) {
       title: body.title || '',
       metaDescription: body.metaDescription || '',
       firstParagraph: body.firstParagraph || '',
+      bodySample: body.bodySample || body.firstParagraph || '',
       publisherCategory: body.publisherCategory || null,
     });
     return res.status(200).json(result);

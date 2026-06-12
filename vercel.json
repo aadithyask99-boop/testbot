@@ -26,6 +26,7 @@
     { "src": "/admin",                "dest": "/api/admin.js" },
     { "src": "/match",           "dest": "/api/match.js" },
     { "src": "/precompute",      "dest": "/api/precompute.js" },
+    { "src": "/impression",      "dest": "/api/impression.js" },
     { "src": "/articles/(.*)",   "dest": "/api/index.js" },
     { "src": "/",                "dest": "/api/index.js" }
   ]
