@@ -278,7 +278,8 @@ var html = '<!DOCTYPE html>' +
 '    var serving;' +
 '    if(p.servingId){' +
 '      var methodLabel=p.method==="haiku"?(p.cached?"haiku · cached":"haiku · fresh"):(p.method||"—");' +
-'      serving="<div style=\'font-size:15px;font-weight:600;color:#111;margin-bottom:2px\'>"+p.servingAdv+" <span style=\'font-size:12px;color:#16a34a\'>£"+(p.servingCpmGBP||0)+" CPM</span></div><div style=\'font-size:11px;color:#888;margin-bottom:8px\'>via "+methodLabel+(p.lastPlatform?(" · "+p.lastPlatform):"")+(p.lastCrawl?(" · "+ago(p.lastCrawl)):"")+"</div>";' +
+'      serving="<div style=\'font-size:15px;font-weight:600;color:#111;margin-bottom:2px\'>"+p.servingAdv+" <span style=\'font-size:12px;color:#16a34a\'>£"+(p.servingCpmGBP||0)+" CPM</span></div><div style=\'font-size:11px;color:#888;margin-bottom:8px\'>via "+methodLabel+(p.lastPlatform?(" · "+p.lastPlatform):"")+(p.lastCrawl?(" · "+ago(p.lastCrawl)):"")+"</div>"+' +
+'        (p.variantText?("<div style=\'font-size:12px;color:#444;line-height:1.5;background:#f8f9fb;border-radius:4px;padding:6px 8px;margin-bottom:8px\'>"+escHtml(p.variantText)+(p.variantAngle?("<div style=\'font-size:10px;color:#aaa;margin-top:4px\'>variant: "+p.variantAngle+"</div>"):"")+"</div>"):"");' +
 '    }else{' +
 '      serving="<div style=\'font-size:14px;font-weight:600;color:#ef4444;margin-bottom:2px\'>Nothing served</div><div style=\'font-size:11px;color:#888;margin-bottom:8px\'>"+((p.reason||"no_winner").replace(/_/g," "))+(p.lastPlatform?(" · "+p.lastPlatform):"")+(p.lastCrawl?(" · "+ago(p.lastCrawl)):"")+"</div>";' +
 '    }' +

@@ -67,8 +67,36 @@ module.exports = async function handler(req, res) {
     }
     // Build the per-page board: every page seen in logs, with its latest
     // resolved auction (winner + full candidate breakdown + method + when).
+    // Lightweight campaign->variants lookup, built BEFORE pageBoard (which
+    // needs it) and BEFORE the full campaignList (which depends on pageBoard
+    // for servingIds). Just id -> variants[], cheap (one kvGet per campaign,
+    // already cached by the runtime within this request — same kvGet calls
+    // the full campaignList loop makes again below for the rest of the
+    // campaign fields).
+    const variantLookup = {};
+    {
+      const allIds = [];
+      for (const cat of config.categories) {
+        const cids = (await kvGet('campaigns:' + cat)) || [];
+        allIds.push(...cids);
+      }
+      for (const id of [...new Set(allIds)]) {
+        const c = await kvGet('campaign:' + id);
+        if (c) variantLookup[id] = c.variants || [];
+      }
+    }
+
     const pageBoard = Object.keys(pageServingMap).map(url => {
       const e = pageServingMap[url];
+      // Resolve the actual served creative text for the Live Auction Board —
+      // look up the campaign that won and find the variant that was selected,
+      // so the board shows WHAT was injected, not just who won.
+      let variantText = null;
+      if (e.campaignId && e.variantId) {
+        const variants = variantLookup[e.campaignId] || [];
+        const v = variants.find(x => x.id === e.variantId);
+        variantText = (v && v.text) || null;
+      }
       return {
         url,
         category:       e.matchCategory || null,
@@ -81,6 +109,7 @@ module.exports = async function handler(req, res) {
         variantId:      e.variantId || null,
         variantAngle:   e.variantAngle || null,
         variantMethod:  e.variantMethod || null,
+        variantText,
         lastPlatform:   e.platform || null,
         lastCrawl:      e.time || null,
         candidates:     e.candidates || null,
@@ -144,13 +173,9 @@ module.exports = async function handler(req, res) {
     // latest-served creative on ANY page. We derive that set from the real
     // page board (logs), never from a re-run auction.
     const servingIds = new Set(pageBoard.filter(p => p.servingId).map(p => p.servingId));
-    const allCampaignIds = [];
-    for (const cat of config.categories) {
-      const cids = (await kvGet('campaigns:' + cat)) || [];
-      allCampaignIds.push(...cids);
-    }
+    const allCampaignIds = Object.keys(variantLookup);
     const campaignList = [];
-    for (const id of [...new Set(allCampaignIds)]) {
+    for (const id of allCampaignIds) {
       const c = await kvGet('campaign:' + id);
       if (!c) continue;
       const spend = await getCampaignSpend(c);
