@@ -19,6 +19,8 @@
     { "src": "/sdk.js",          "dest": "/api/sdk.js" },
     { "src": "/ad",              "dest": "/api/admin.js" },
     { "src": "/admin/reset-stats",    "dest": "/api/admin.js" },
+    { "src": "/admin/repair-index",   "dest": "/api/admin.js" },
+    { "src": "/admin/debug-kv",       "dest": "/api/admin.js" },
     { "src": "/admin/seed",           "dest": "/api/admin.js" },
     { "src": "/admin/campaign/delete", "dest": "/api/admin.js" },
     { "src": "/admin/campaign/pause", "dest": "/api/admin.js" },

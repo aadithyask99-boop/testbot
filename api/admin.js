@@ -137,6 +137,23 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({ message: 'Category indexes repaired', result });
   }
 
+  // ---- TEMPORARY: DEBUG raw KV state for category indexes ----
+  // Dumps campaigns:finance / campaigns:tech / a couple campaign records
+  // via kvGet (parsed) AND a raw kvRequest GET (unparsed) so we can see
+  // exactly what Upstash is returning, bypassing kvGet's parsing entirely.
+  // SAFE TO REMOVE after the Session 5 incident is resolved.
+  if (req.method === 'GET' && url.includes('/admin/debug-kv')) {
+    const { kvDebugRaw } = require('../lib/kv');
+    const out = {};
+    for (const key of ['campaigns:finance', 'campaigns:tech', 'campaign:camp_001', 'campaign:Cam_Nord']) {
+      out[key] = {
+        parsed: await kvGet(key),
+        raw: await kvDebugRaw(key),
+      };
+    }
+    return res.status(200).json(out);
+  }
+
   // ---- RESET STATS (destructive: zeroes counters + logs, keeps campaigns) ----
   if (req.method === 'POST' && url.includes('/admin/reset-stats')) {
     const today = new Date().toISOString().split('T')[0];
