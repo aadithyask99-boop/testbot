@@ -193,6 +193,84 @@ Format: session number, name, date, what was built/decided/learned.
 ---
 <!-- Add new sessions below this line -->
 
+## Session 6 — Precompute Classification Cache
+**Date:** 2026-06-12
+**Chat:** Claude.ai (claude.ai chat, not Claude Code)
+**Goal:** Stop relying on the first-ever bot crawl to pay the classification
+cost for each page. Proactively warm the category-classification cache
+(Layers 0-3) so real crawls always hit a warm cache, with event-based
+invalidation when campaigns change.
+
+**What was built:**
+- Design doc: `PRECOMPUTE_SPEC.md` — both trigger mechanisms confirmed
+  (event-based invalidation primary, cron as a deferred slow safety-net)
+- `lib/demo-pages.js`: +2 pages (now 7 total)
+  - `/articles/best-broadband-deals` (tech, keyword-confident)
+  - `/articles/sipp-vs-workplace-pension` (finance, deliberately close to
+    pension-vs-isa, tests Haiku differentiation between adjacent topics)
+- `lib/relevance.js`: extracted `classifyOnly()` (Layers 0-3 only) from
+  `runMatch`. Writes `match:{sha256(url)}` (existing, read by live crawls)
+  AND `precompute:{sha256(url)}` (new, coverage/diagnostics: category,
+  method, classifiedAt, source) together on a cache MISS. On a cache HIT
+  where `precompute:` is missing, BACKFILLS it (source: 'backfill') —
+  see bug below.
+- `lib/relevance.js`: expanded `TAXONOMY.tech` with consumer hardware/
+  telecoms terms (broadband, smartphone, router, fibre, wi-fi, 5g,
+  internet, mobile, app, device, streaming, connectivity, processor) —
+  the old taxonomy was SaaS/dev-only and scored the broadband page 0,
+  falling back to 'other' without Haiku
+- `api/precompute.js` (NEW, 9/12 functions):
+  - `GET /precompute?action=sweep` — classify pages with missing/stale
+    `precompute:` entries
+  - `GET /precompute?action=status` — coverage report (% covered, last
+    sweep summary, per-page category/method/source/freshness)
+  - `POST /precompute?action=invalidate` — deletes `match-rel:`/`variant:`
+    cache entries for an edited campaign, replicating the EXACT
+    keyword-pre-filter candidate-set hash the live auction path computes
+- `api/admin.js`: fire-and-forget `invalidatePrecomputeCaches()` after
+  campaign create/update/pause/delete (non-fatal — caches expire at 24h
+  TTL anyway, this is a propagation-speed optimization)
+- Dashboard: new "Precompute Coverage" card on Overview tab (coverage %,
+  last sweep summary, per-page status)
+- `vercel.json`: `/precompute` route added (9/12)
+
+**Bug found and fixed (live, during validation):**
+- First live sweep reported `classified: 7` but `status` showed only
+  `3/7 covered`. Root cause: 4 of the 7 pages already had warm `match:`
+  entries from Session 5 live crawls (within 24h TTL) — `classifyOnly`'s
+  cache-hit path returned early WITHOUT writing `precompute:` per the
+  original spec ("on cache hit, no write occurs"). Fixed: on cache hit,
+  if `precompute:` is missing, backfill it from the cached `match:` entry
+  (`source: 'backfill'`). Re-swept after the fix → 7/7, 100% coverage,
+  confirmed live.
+
+**CRON DEFERRED:** Vercel's `crons` config is incompatible with this
+project's legacy `routes`-based `vercel.json` (`crons` requires
+`functions`/`rewrites` syntax). Event-based invalidation is the PRIMARY
+freshness mechanism per the spec, so this is non-blocking. To add the
+daily sweep safety-net later: migrate `vercel.json` to `rewrites`+
+`functions`, then add the `crons` block from `PRECOMPUTE_SPEC.md`. Until
+then, `/precompute?action=sweep` can be triggered manually or via an
+external cron (GitHub Actions, cron-job.org).
+
+**Validated live:**
+- Sitemap correctly lists all 7 pages
+- Sweep classified all 7 pages correctly (4 keyword, 2 haiku, including
+  the two new pages and the two adjacent-topic finance pages)
+- Coverage status: 7/7, 100%, with `source` correctly distinguishing
+  `cron` (this session's sweeps) vs `backfill` (Session 5 live crawls)
+
+**Where we stopped:**
+- 9/12 serverless functions (3 free)
+- All 7 demo pages pre-classified, 100% coverage confirmed
+- Event-based invalidation wired into all campaign mutation endpoints,
+  not yet exercised live (no campaign edited this session after the wiring
+  landed — worth a quick live test next session: edit a campaign's
+  `matchingDescription`, confirm `/precompute?action=invalidate` fires and
+  the relevant `match-rel:`/`variant:` keys are gone)
+- Ready for Session 7: per-publisher namespacing + publisher onboarding +
+  floor prices, OR Cloudflare Worker SDK (HANDOVER.md has both queued)
+
 ## Session 5 — Variant Bank
 **Date:** 2026-06-12
 **Chat:** Claude.ai (claude.ai chat, not Claude Code)

@@ -6,21 +6,46 @@
 
 ---
 
-## Current State (end of Session 5)
+## Current State (end of Session 6)
 
 **Live URL:** https://testbot-two-psi.vercel.app  
 **Dashboard:** https://testbot-two-psi.vercel.app/ui  
 **GitHub:** https://github.com/aadithyask99-boop/testbot (main branch)  
-**Vercel:** Hobby plan — **8/12** serverless functions used, 4 free  
-**Database:** Upstash Redis — **now on pay-as-you-go** (was free tier, hit
-500k commands/month limit mid-Session-5; see CONTINUE.md for the incident
-writeup and how to diagnose it if it recurs)
+**Vercel:** Hobby plan — **9/12** serverless functions used, 3 free  
+**Database:** Upstash Redis — pay-as-you-go (see Session 5 incident in
+CONTINUE.md if KV reads/writes ever silently return null again)
 **Tests:** 133 passing as of Session 4 (test files live in `/tmp`, not in
-repo — not re-run this session; re-run at next session start)
-**Anthropic API:** `claude-haiku-4-5` confirmed working — now making TWO
-calls per ambiguous page (relevance filter + variant selection)
+repo — not re-run since; re-run at next session start if touching core
+match/auction logic)
+**Anthropic API:** `claude-haiku-4-5` confirmed working — 3 possible calls
+per page now (category classification, relevance filter, variant selection)
+**Demo pages:** 7 (was 5) — all listed in `/sitemap.xml`, all 100%
+pre-classified via `/precompute?action=sweep`
 
-### What's new this session — Variant Bank (Task 1, DONE)
+### What's new this session — Precompute Classification Cache (Task 2, DONE)
+- New `api/precompute.js` (9/12 functions): `?action=sweep` (classify
+  stale/missing pages), `?action=status` (coverage report — now on the
+  dashboard Overview tab), `?action=invalidate` (POST, called from
+  admin.js on every campaign mutation)
+- `lib/relevance.js`: `classifyOnly()` extracted (Layers 0-3 only,
+  category classification). `runMatch` = `classifyOnly` + Layers 4-6
+  (auction/variants), unchanged behavior. New `precompute:{sha256(url)}`
+  cache, written alongside `match:` (with backfill for pre-existing
+  `match:` entries — see CONTINUE.md)
+- 2 new demo pages (best-broadband-deals/tech, sipp-vs-workplace-pension/
+  finance) — 7 total now
+- `TAXONOMY.tech` expanded with consumer hardware/telecoms terms
+- Confirmed live: 7/7 pages, 100% coverage
+
+### CRON DEFERRED (see CONTINUE.md)
+Vercel `crons` config incompatible with this project's legacy
+`routes`-based `vercel.json`. Event-based invalidation (the primary
+mechanism per the spec) is wired and working; the sweep can be triggered
+manually or via external cron. Migrating `vercel.json` to
+`rewrites`+`functions` is a prerequisite if the daily sweep becomes
+important (e.g. once a real publisher's sitemap has never-crawled pages).
+
+### Previous session — Variant Bank (Task 1, DONE — Session 5)
 - `campaign.text` removed entirely → `variants[]` (5-15 entries, each
   `{id, angle, text}`, text ≤200 chars)
 - Layer 6 (`lib/relevance.js`, `selectVariant`): after a campaign wins the
@@ -31,9 +56,8 @@ calls per ambiguous page (relevance filter + variant selection)
 - Dashboard: variant repeater in Add/Edit form, per-variant impression
   breakdown in campaign detail, `whyWon()` shows which variant was selected
   and how (`Variant "flat-fee pricing" (v2) selected via Haiku.`)
-- Confirmed live on real Perplexity crawls — see SESSION_LOG.md Session 5
 
-### Bugs fixed this session (found during live testing, not part of the plan)
+### Bugs fixed in Session 5 (found during live testing, not part of the plan)
 - `/admin` GET was shadowed by the `/ad` route (`'/admin'.startsWith('/ad')`)
   — fixed with a stricter regex
 - `kvGet` corrupted any value whose JSON contains a bare `%` (e.g. "0.15%")
@@ -59,10 +83,10 @@ calls per ambiguous page (relevance filter + variant selection)
 - POST /admin/reset-stats for clean test cycles
 
 ### What is NOT yet built (architectural gaps for production)
-1. **Precompute / proactive crawling** — relevance fires at crawl time today. Should be: publisher installs tag → we crawl their sitemap → classify pages upfront → precompute match table. Lazy crawl-time works for demo testbed, fails at production scale. (Session 6 task — START HERE)
-2. **Per-publisher pubId + multi-publisher support** — everything is single-tenant. KV keys need `{pubId}` namespacing. Publisher SDK (Cloudflare Worker) needs to inject pubId. (Session 6/7)
-3. **Publisher onboarding flow + floor prices** — no `publisher:{pubId}` records yet. (Session 7)
-4. **Cloudflare Worker SDK** — `api/sdk.js` is still client-side placeholder. (Session 7)
+1. **Per-publisher pubId + multi-publisher support** — everything is single-tenant. KV keys need `{pubId}` namespacing (including `precompute:`/`match:`, built single-tenant in Session 6). Publisher SDK (Cloudflare Worker) needs to inject pubId. (Session 7 — START HERE)
+2. **Publisher onboarding flow + floor prices** — no `publisher:{pubId}` records yet. (Session 7)
+3. **Cloudflare Worker SDK** — `api/sdk.js` is still client-side placeholder. (Session 7/8)
+4. **Daily precompute sweep via cron** — deferred Session 6, needs `vercel.json` migration from `routes` to `rewrites`+`functions` first. Event-based invalidation covers the real-time case; this is a safety-net for never-crawled pages. Low priority until publisher sitemaps are large.
 5. **Real-world organic appearance probability** — cannot be measured on testbot-two-psi.vercel.app (zero-authority domain). Needs publisher partner with indexed traffic. NOT an engineering blocker — a business blocker.
 
 ---
@@ -100,24 +124,37 @@ Built and live in Session 5. See "What's new this session" above and
 SESSION_LOG.md Session 5 for full detail. `VARIANT_BANK_SPEC.md` in repo
 root has the design doc if you need the original reasoning.
 
-### Task 2: Precompute / Proactive Crawling (Session 6 — START HERE)
-**The core idea:** instead of running relevance lazily at crawl time, walk the publisher's sitemap when they sign up, classify every page upfront, precompute the eligible-campaign-set per page. Bot arrives → KV lookup of "what wins on this URL" → fast inject.
+### ✅ DONE — Task 2: Precompute / Proactive Crawling
+Built and live in Session 6, validated to 100% coverage. See "What's new
+this session" above and SESSION_LOG.md Session 6 for full detail.
+`PRECOMPUTE_SPEC.md` in repo root has the design doc.
 
-**New things needed:**
-- `POST /publishers/onboard` — accepts publisher tag info + sitemap URL
-- Background crawler (Vercel cron? Manual trigger?) — walks sitemap, calls `runMatch` per URL, caches result
-- `match-precomputed:{pubId}:{urlHash}` KV key — the precomputed answer
-- Recompute trigger when campaigns added/edited (re-run match for affected pages)
-- Honest "precompute progress" UI in dashboard (X of Y pages classified)
+**What got built vs the original sketch below:** the original sketch
+described a publisher-onboarding-driven sitemap crawl with a
+`match-precomputed:{pubId}:{urlHash}` key storing the FULL AUCTION RESULT.
+What was actually built (and is the architecturally correct version,
+confirmed during design): precompute warms ONLY the category
+CLASSIFICATION (`precompute:{sha256(url)}`, Layers 0-3) — never the auction
+winner. The auction (Layers 4-6) stays live because campaigns/budgets/
+variants change far more often than a page's topic. This is simpler, safer
+(no stale ad-serving decisions), and the per-publisher namespacing (Task 3
+below) slots in cleanly on top: `precompute:{sha256(pubId+url)}` when
+multi-tenant.
 
-**Honest constraint:** still gated by publisher partnership. No engineering substitute for "we have a real publisher with indexed AI traffic."
+The "honest constraint" below still applies — still gated by publisher
+partnership for the sitemap-crawl half (today uses `listPaths()` from
+`lib/demo-pages.js` as the sitemap source).
 
 ### Task 3: Per-publisher namespacing
 KV keys need `{pubId}` segments:
 - `campaign:{pubId}:{id}` (or keep global campaigns and add `eligiblePublishers: ['pub_001']` to each campaign — design decision)
-- `match:{pubId}:{urlHash}` (cache is per-publisher because publishers can override page categories)
+- `match:{pubId}:{urlHash}` and `precompute:{pubId}:{urlHash}` (cache is per-publisher because publishers can override page categories via `publisherCategory`)
 - `spend:daily:{pubId}:{id}:{date}` only if we add per-publisher floors that affect spend
 - Publisher record: `publisher:{pubId} = { name, floorCPM, sitemapUrl, active, createdAt }`
+- `api/precompute.js`'s `?action=sweep` needs a `pubId` param once multi-tenant — currently sweeps `listPaths()` (single demo "publisher")
+
+**Honest constraint:** still gated by publisher partnership. No engineering
+substitute for "we have a real publisher with indexed AI traffic."
 
 ### Task 4: Cloudflare Worker SDK
 Workers code that publishers paste into their CF dashboard. Worker:
@@ -129,6 +166,7 @@ Workers code that publishers paste into their CF dashboard. Worker:
 
 Publisher's site can be on ANY hosting (WordPress, Ghost, custom) — the Worker sits in front. This is the production deployment story for Phase 4.
 
+
 ---
 
 ## Open Decisions Aadi Needs to Make (carried from earlier sessions + new)
@@ -137,8 +175,8 @@ Publisher's site can be on ANY hosting (WordPress, Ghost, custom) — the Worker
 - **Campaign tiebreaker at identical CPM?** Currently random shuffle. Worked, but caused Session 4 confusion. Worth replacing with deterministic tiebreak (createdAt? round-robin?).
 - **LLM for matching: Haiku (current) or alternatives?** Haiku 4.5 working well. ~£0.06 per ambiguous-page call, now TWO calls per ambiguous page (relevance + variant selection) since Session 5. Volume cost still trivial at demo scale.
 - **Variant tiebreaker:** ✅ DECIDED Session 5 — round-robin per campaign via `variant-rotation:{campaignId}`, used only as a fallback when Haiku is unavailable or returns an unparseable variant ID.
-- **Precompute trigger model:** cron-based (every N hours) or event-based (on campaign edit)? Cost vs freshness tradeoff.
-- **Cache invalidation on matchingDescription edit:** today the relevance cache invalidates on candidate-set change (campaign added/removed/paused) but NOT on a campaign's description being edited. Should it? Otherwise edits don't take effect until 24h TTL expires. Same question now applies to `variant:{...}` cache if variants are edited.
+- **Precompute trigger model:** ✅ DECIDED Session 6 — BOTH, event-based (primary, `/precompute?action=invalidate` fired from admin.js on every campaign mutation) + cron (secondary safety-net, DEFERRED — see "What is NOT yet built" #4).
+- **Cache invalidation on matchingDescription edit:** ✅ DECIDED/BUILT Session 6 — `/precompute?action=invalidate` deletes the `match-rel:`/`variant:` keys for the edited campaign across all known pages on every save/pause/delete, replicating the live keyword-pre-filter candidate-set hash. NOT yet exercised live with an actual edit (see SESSION_LOG Session 6 "Where we stopped") — worth a quick live test next session.
 
 ---
 

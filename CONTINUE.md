@@ -325,3 +325,69 @@ variant selection — is working end to end on real Perplexity crawls.
 
 — Claude (session 5)
 
+---
+
+## Session 6 additions
+
+### Cache-hit early-returns can silently break "write a second cache" plans
+When extracting `classifyOnly()`, the original plan was "write `match:` AND
+`precompute:` together on every classification." But Layer 0 (cache check)
+returns EARLY on a hit — meaning any pre-existing `match:` entry from BEFORE
+`precompute:` existed (i.e. all of Session 5's live-crawl traffic) would
+NEVER get a `precompute:` entry, because the code path that writes it is
+never reached. First live sweep showed 7 classified but only 3/7 "covered" —
+looked like a bug in the sweep logic, but was actually this.
+
+**Lesson:** when adding a NEW cache/log/metric alongside an EXISTING cache
+that has an early-return on hit, always ask "what about entries that are
+ALREADY cached from before this new thing existed?" Either backfill on next
+read (what we did — `source: 'backfill'`), or accept a 24h gap until the old
+entries naturally expire and get rewritten through the new path. We chose
+backfill because the dashboard coverage card would otherwise show a
+confusing partial number for up to 24h after every deploy that adds a new
+cache key.
+
+### Vercel `crons` is incompatible with legacy `routes`-based vercel.json
+Wanted to add a daily cron sweep. `vercel.json` here uses the OLD `routes`
+array (`{src, dest}` pairs) for all routing — this is the format from
+Sessions 1-5. Vercel's `crons` config requires the NEWER `functions`/
+`rewrites` config format; mixing `routes` with `crons` either gets rejected
+at deploy or silently ignored (didn't test which — didn't want to risk
+breaking the working `routes` config to find out).
+
+**Decision:** deferred cron entirely. Event-based invalidation
+(`POST /precompute?action=invalidate`, called from `admin.js` on every
+campaign mutation) is the PRIMARY freshness mechanism anyway — cron was
+always meant to be a slow safety net for pages NO crawl has ever hit. At
+demo scale (7 known pages, all crawled regularly), this safety net adds
+little. If a future session needs it (e.g. once a real publisher's sitemap
+has hundreds of never-crawled pages), the move is: migrate `vercel.json`
+to `rewrites`+`functions` format FIRST, verify the existing routes still all
+work, THEN add `crons`. Don't try to bolt `crons` onto the `routes` array.
+
+### Tech taxonomy was SaaS/dev-only — real publisher content needs broader terms
+`TAXONOMY.tech` (Session 1) only had terms like `saas`, `kubernetes`,
+`react`, `developer tools` — fine for a dev-audience tech site, but a
+broadband/consumer-electronics article scored 0 and fell back to `other`
+without Haiku. Added `broadband, smartphone, router, fibre, wi-fi, 5g,
+internet, mobile, app, device, streaming, connectivity, processor`. If
+Session 7+ adds publisher pages from other verticals (health, travel,
+lifestyle), expect the same gap — TAXONOMY currently only covers
+finance + tech, and tech currently means "VPN + dev tools + consumer
+electronics." Keyword taxonomies need to grow with publisher diversity;
+Haiku is the fallback but keyword-confident classification is cheaper and
+faster when it works.
+
+### classifyOnly() — what it is and isn't
+`classifyOnly` = Layers 0-3 (category classification) ONLY. It does NOT run
+the auction, relevance filter, or variant selection (Layers 4-6) — those
+depend on live campaign/budget state and must NEVER be precomputed (a
+precomputed "winner" could be stale the moment a budget runs out or a
+campaign is paused). `runMatch` = `classifyOnly` + Layers 4-6, unchanged in
+behavior from the caller's perspective. If you're tempted to "precompute the
+whole match result for speed" — don't. Category (topic) is stable; auction
+winner is not.
+
+— Claude (session 6)
+
+
