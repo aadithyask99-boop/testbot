@@ -237,6 +237,117 @@ against, per Session 7's framing decision.
 
 ---
 
+## ⚠️ SESSION 8 START HERE — Aadi's new requests (paused mid-triage)
+
+A new batch of requests was raised together at the end of Session 7's
+chat, and the chat was paused/restarted before any of them were diagnosed
+or designed (except the first item below, which has a partial diagnosis).
+**Read this whole section before doing anything else.**
+
+### 1. Live "Why" box regression — DIAGNOSIS IN PROGRESS, do this first
+
+Aadi reported the Live Auction Board's "Why" box for `/articles/best-isa-2026`
+now shows:
+```
+Trading 212 £120 CPM
+via — · Perplexity · 10m ago
+[injected text]
+Why: Trading 212 served.
+```
+Expected (per Session 5/6 `whyWon()` design): a full explanation —
+classification method, competitors filtered, CPM comparison, variant
+selection method (e.g. `"Page classified as finance via keyword scoring
+(score 0.52)... Trading 212 won at £120 CPM against... Variant 'first-time
+investor' (v3) selected via Haiku."`).
+
+`via —` (method empty/null) and `Why: {advertiser} served.` (a generic
+fallback, not `whyWon()`'s normal output) both point to this `pageBoard`
+entry having `method: null` and/or `candidates: null`.
+
+**Diagnosis NOT YET DONE** — paused before fetching the actual `pageBoard`
+JSON. First step:
+```bash
+curl -s "https://testbot-two-psi.vercel.app/dashboard?view=advertiser" \
+  | python3 -c "import json,sys; d=json.load(sys.stdin); print([p for p in d['pageBoard'] if 'best-isa-2026' in p['url']])"
+```
+Look at `method`, `cached`, `candidates`, `relevanceScore`, `variantMethod`
+for this entry — compare against a page still showing a full Why box
+correctly, to isolate what's different.
+
+**Leading hypothesis (UNVERIFIED):** `api/impression.js` (built Session 7
+for the Cloudflare Worker) logs a MINIMAL `log:recent` entry — by its own
+doc comment, it "does NOT call /match or know about variant angles/
+methods/relevance scores." `pageBoard`/`whyWon()` were built in Sessions
+5/6 BEFORE `/impression` existed, and assume every `log:recent` entry has
+the FULL shape from `runMatch()` (method, candidates, relevanceScore,
+variantMethod all present). Session 7's live Worker tests hit
+`/articles/best-isa-2026` repeatedly (3 confirmed impressions, source:
+'worker', in SESSION_LOG Session 7) — if one of THOSE became the most
+recent `log:recent` entry for this URL, `pageServingMap` picks it up as
+"current," and it lacks the fields `whyWon()` needs → falls back to
+"served."
+
+**If confirmed, two complementary fixes:**
+- `whyWon()` (in `api/dashboard-ui.js`): handle the minimal/Worker-sourced
+  shape gracefully (e.g. "Trading 212 served via Cloudflare Worker (full
+  auction detail not logged for edge-sourced impressions)") instead of
+  the bare "X served." fallback.
+- `api/impression.js`: the Worker ALREADY HAS `method`, `candidates`,
+  `relevanceScore`, `variantMethod` from its own `/match` response
+  (`matchResult` in `worker/index.js`) — just isn't passing them through
+  to `/impression`. Extend the `/impression` payload + `log:recent` entry
+  to include these (optional fields, `null` if absent for non-Worker
+  callers), so Worker-sourced impressions get full Why-box treatment too.
+
+### 2. Add more articles + ad creatives via PowerShell
+Mechanical — same pattern as Session 5's variant migration / Session 6's
+demo-page additions. Low complexity, content needs drafting. Independent
+of everything else — can be done any time.
+
+### 3. Dummy publishers — assign articles to `publisher:{pubId}` records
+This is a LIGHTER-WEIGHT version of Task 3, possibly: tag each
+`lib/demo-pages.js` entry with a `pubId`, create `publisher:{pubId}`
+display records (name, etc.), filter dashboard publisher view by `pubId`
+— WITHOUT necessarily doing the full KV-key-namespacing refactor (separate
+`match:{pubId}:...` etc.) that Task 3 originally specified. Whether the
+light version is sufficient depends on the answer to #5 below — don't
+build this until #5 is scoped, to avoid redoing it.
+
+### 4. "All articles aren't shown on the advertiser side"
+Possibly related to #3, or a separate bug. Check: does
+`dashboard?view=advertiser`'s `pageBoard` include all 7 (or more, after
+#2) `listPaths()` pages, or only ones that have been crawled at least
+once? If only-crawled, that may be CORRECT (advertiser sees where ads HAVE
+served, not could-serve) — confirm intent with Aadi before treating as a
+bug.
+
+### 5. ⚠️ NEEDS DESIGN — Account-scoped views ("everything is scattered")
+THE BIG ONE. Aadi's framing: "an advertiser would click their account and
+view all the shown stats, same for publishers." Currently
+`dashboard?view=advertiser`/`?view=publisher` are SINGLE GLOBAL views —
+no concept of "Trading 212's account" vs "Freetrade's account," or
+"Finance Weekly" vs another publisher. This describes PER-ADVERTISER and
+PER-PUBLISHER dashboard filtering (`?advertiserId=Cam_03` style) or
+genuinely separate accounts — a SIGNIFICANT scope expansion beyond Task
+3's original framing (Task 3 = KV namespacing for SERVING; this = UI/
+reporting namespacing). Needs its own design doc. The shape of #3 (dummy
+publishers) should probably be informed by this design, not precede it.
+
+### 6. "Any way to show the live crawl?" — needs clarification
+Unclear ask. Possibly: (a) real-time/streaming indicator when a crawl is
+IN PROGRESS (vs current 5s-poll "last known state"), or (b) surfacing more
+of `log:recent`/`pageBoard`'s existing data that isn't currently
+displayed. Ask Aadi what "live" means here before scoping.
+
+### Suggested order
+1 (Why-box bug — concrete, diagnosable, likely small) → 2 (articles/
+creatives — mechanical, unblocks testing more scenarios) → clarify 5 and 6
+with Aadi (both need a conversation before any code) → 3/4 LAST, once 5's
+shape is known, so "dummy publishers" is built to fit the eventual account
+model rather than redone.
+
+---
+
 ## Open Decisions Aadi Needs to Make (carried from earlier sessions + new)
 
 - **No campaign match → serve what?** Empty (current), house ad, fallback generic? — STILL UNDECIDED. Default behaviour: serve nothing. Honest.

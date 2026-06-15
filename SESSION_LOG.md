@@ -193,168 +193,6 @@ Format: session number, name, date, what was built/decided/learned.
 ---
 <!-- Add new sessions below this line -->
 
-## Session 7 — Cloudflare Worker SDK
-**Date:** 2026-06-12
-**Chat:** Claude.ai (claude.ai chat, not Claude Code)
-**Goal:** Build the thing a real publisher would actually install —
-a Cloudflare Worker that sits in front of a site, detects AI crawlers,
-and injects sponsored content without any origin server changes.
-Deferred per-publisher namespacing (Task 3) since there's no real
-second tenant yet — this is the artifact needed to GET one.
-
-**What was built:**
-- `WORKER_SDK_SPEC.md` — design doc. Key decisions: `/match` (existing,
-  no new slot) as the Worker's decision endpoint; bot detection via an
-  EMBEDDED pattern subset generated from `lib/detector.js` (not a
-  callback API — avoids a network hop on every human pageview); test
-  target is testbot-two-psi.vercel.app itself (Worker proxies its own
-  demo pages first, before any real publisher)
-- `lib/detector.js`: guarded the self-test block with
-  `require.main === module` — it was printing to stdout on every
-  `require()`, breaking the generation script's output capture
-- `scripts/generate-worker-detector.js` (NEW, manual-run helper):
-  generates the embedded `BOT_PATTERNS` array from `lib/detector.js`'s
-  `AI_CRAWLERS` (35/35 entries qualify — all simple string patterns)
-- `api/match.js`: accepts `bodySample` in the request body
-- `api/impression.js` (NEW, 10/12 functions): Worker-side impression
-  logging. Replicates `api/index.js`'s exact KV writes —
-  `impr:{type}:{campaignId}:{date/total}` (matches `lib/auction.js`'s
-  `imprKey` exactly — initially written with the WRONG format
-  `stats:impressions:...`, caught before deploy), global `stats:*`
-  counters, per-platform/per-campaign-platform/per-variant hashes,
-  `log:recent` entry with `source: 'worker'`
-- `worker/index.js` (NEW): the Worker script. Fetches origin with a
-  non-bot UA (avoids double-injection/double-counting), detects bots
-  via embedded `BOT_PATTERNS`, extracts page signals via HTMLRewriter,
-  calls `/match`, injects the selected variant via HTMLRewriter,
-  fire-and-forget logs via `/impression`
-- `worker/wrangler.toml` (NEW) — Cloudflare deploy config
-- `vercel.json`: `/impression` route added (10/12)
-
-**Deployed live:** `https://testbot-worker.projectatlas.workers.dev`
-(Cloudflare Workers free tier, `projectatlas.workers.dev` subdomain
-registered this session)
-
-**Bugs found and fixed during live testing (2 rounds):**
-1. Injection landed after the header's tagline `<p>` instead of after
-   the byline — `HTMLRewriter`'s `p` selector counted the
-   `<header><p>UK personal finance &amp; investing</p></header>` tagline
-   as paragraph #1. Fixed: scoped to `article p`.
-2. Still one position off after fix #1 — landed after the 2nd
-   `article p` (byline + 1st content para) instead of after just the
-   byline. Traced `lib/injector.js`'s ACTUAL output directly
-   (`injectSponsoredContent` with a test marker) to confirm the correct
-   position is "after the 1st `article p`" (the byline) — `lib/
-   injector.js`'s "2nd `</p>` globally" = header tagline (#1) + byline
-   (#2). Fixed: `pSeen === 1` (was 2). Also excluded `.byline` from
-   SIGNAL extraction (firstParagraph/bodySample) — `api/index.js`'s own
-   extraction never sees the byline either, so including it would have
-   made the Worker's classification signals WORSE than the origin's.
-
-**Validated live (all via deployed Worker vs direct origin comparison):**
-- PerplexityBot via Worker: injection position, content, and variant
-  selection (Trading 212 "v2" / first-time-investor) match origin exactly
-- Googlebot via Worker: passes through unmodified (cloaking-risk
-  respected) — confirmed both before and after the position fixes
-- Human UA via Worker: passes through unmodified
-- 3 real impressions logged via `/impression`, `source: 'worker'`,
-  correct campaign/variant/platform attribution, real Cloudflare edge
-  IPs (172.7x.x.x ranges) confirming genuine edge traffic
-
-**Where we stopped:**
-- 10/12 serverless functions (2 free)
-- Worker proof-of-concept fully validated against our OWN demo pages
-- NOT YET DONE: pointing the Worker at a REAL publisher's domain
-  (requires `routes`/custom domain config in `wrangler.toml`, and the
-  KNOWN V1 LIMITATIONS documented inline in `worker/index.js` —
-  `<article>` wrapper assumption, `.byline` class assumption — would
-  need revisiting for a real publisher's actual markup)
-- Task 3 (per-publisher namespacing) still pending — now genuinely
-  blocked on "do we have a publisher," which this Worker is the pitch
-  artifact for
-- Ready for Session 8: either a real publisher pilot (business step,
-  using this Worker as the install artifact), OR v2 hardening of the
-  Worker (behavioral/anonymous bot detection, content-area heuristics
-  beyond `<article>`, `routes` config for a real domain)
-
-## Session 6 — Precompute Classification Cache
-**Date:** 2026-06-12
-**Chat:** Claude.ai (claude.ai chat, not Claude Code)
-**Goal:** Stop relying on the first-ever bot crawl to pay the classification
-cost for each page. Proactively warm the category-classification cache
-(Layers 0-3) so real crawls always hit a warm cache, with event-based
-invalidation when campaigns change.
-
-**What was built:**
-- Design doc: `PRECOMPUTE_SPEC.md` — both trigger mechanisms confirmed
-  (event-based invalidation primary, cron as a deferred slow safety-net)
-- `lib/demo-pages.js`: +2 pages (now 7 total)
-  - `/articles/best-broadband-deals` (tech, keyword-confident)
-  - `/articles/sipp-vs-workplace-pension` (finance, deliberately close to
-    pension-vs-isa, tests Haiku differentiation between adjacent topics)
-- `lib/relevance.js`: extracted `classifyOnly()` (Layers 0-3 only) from
-  `runMatch`. Writes `match:{sha256(url)}` (existing, read by live crawls)
-  AND `precompute:{sha256(url)}` (new, coverage/diagnostics: category,
-  method, classifiedAt, source) together on a cache MISS. On a cache HIT
-  where `precompute:` is missing, BACKFILLS it (source: 'backfill') —
-  see bug below.
-- `lib/relevance.js`: expanded `TAXONOMY.tech` with consumer hardware/
-  telecoms terms (broadband, smartphone, router, fibre, wi-fi, 5g,
-  internet, mobile, app, device, streaming, connectivity, processor) —
-  the old taxonomy was SaaS/dev-only and scored the broadband page 0,
-  falling back to 'other' without Haiku
-- `api/precompute.js` (NEW, 9/12 functions):
-  - `GET /precompute?action=sweep` — classify pages with missing/stale
-    `precompute:` entries
-  - `GET /precompute?action=status` — coverage report (% covered, last
-    sweep summary, per-page category/method/source/freshness)
-  - `POST /precompute?action=invalidate` — deletes `match-rel:`/`variant:`
-    cache entries for an edited campaign, replicating the EXACT
-    keyword-pre-filter candidate-set hash the live auction path computes
-- `api/admin.js`: fire-and-forget `invalidatePrecomputeCaches()` after
-  campaign create/update/pause/delete (non-fatal — caches expire at 24h
-  TTL anyway, this is a propagation-speed optimization)
-- Dashboard: new "Precompute Coverage" card on Overview tab (coverage %,
-  last sweep summary, per-page status)
-- `vercel.json`: `/precompute` route added (9/12)
-
-**Bug found and fixed (live, during validation):**
-- First live sweep reported `classified: 7` but `status` showed only
-  `3/7 covered`. Root cause: 4 of the 7 pages already had warm `match:`
-  entries from Session 5 live crawls (within 24h TTL) — `classifyOnly`'s
-  cache-hit path returned early WITHOUT writing `precompute:` per the
-  original spec ("on cache hit, no write occurs"). Fixed: on cache hit,
-  if `precompute:` is missing, backfill it from the cached `match:` entry
-  (`source: 'backfill'`). Re-swept after the fix → 7/7, 100% coverage,
-  confirmed live.
-
-**CRON DEFERRED:** Vercel's `crons` config is incompatible with this
-project's legacy `routes`-based `vercel.json` (`crons` requires
-`functions`/`rewrites` syntax). Event-based invalidation is the PRIMARY
-freshness mechanism per the spec, so this is non-blocking. To add the
-daily sweep safety-net later: migrate `vercel.json` to `rewrites`+
-`functions`, then add the `crons` block from `PRECOMPUTE_SPEC.md`. Until
-then, `/precompute?action=sweep` can be triggered manually or via an
-external cron (GitHub Actions, cron-job.org).
-
-**Validated live:**
-- Sitemap correctly lists all 7 pages
-- Sweep classified all 7 pages correctly (4 keyword, 2 haiku, including
-  the two new pages and the two adjacent-topic finance pages)
-- Coverage status: 7/7, 100%, with `source` correctly distinguishing
-  `cron` (this session's sweeps) vs `backfill` (Session 5 live crawls)
-
-**Where we stopped:**
-- 9/12 serverless functions (3 free)
-- All 7 demo pages pre-classified, 100% coverage confirmed
-- Event-based invalidation wired into all campaign mutation endpoints,
-  not yet exercised live (no campaign edited this session after the wiring
-  landed — worth a quick live test next session: edit a campaign's
-  `matchingDescription`, confirm `/precompute?action=invalidate` fires and
-  the relevant `match-rel:`/`variant:` keys are gone)
-- Ready for Session 7: per-publisher namespacing + publisher onboarding +
-  floor prices, OR Cloudflare Worker SDK (HANDOVER.md has both queued)
-
 ## Session 5 — Variant Bank
 **Date:** 2026-06-12
 **Chat:** Claude.ai (claude.ai chat, not Claude Code)
@@ -439,3 +277,185 @@ campaign wins the CPM auction. Selection only, no generation (FCA constraint).
   and ~93-130 from before this session) still present — flagged, not fixed,
   out of scope
 - Ready for Session 6: precompute/proactive crawling (HANDOVER.md Task 2)
+## Session 6 — Precompute Classification Cache
+**Date:** 2026-06-12
+**Chat:** Claude.ai (claude.ai chat, not Claude Code)
+**Goal:** Stop relying on the first-ever bot crawl to pay the classification
+cost for each page. Proactively warm the category-classification cache
+(Layers 0-3) so real crawls always hit a warm cache, with event-based
+invalidation when campaigns change.
+
+**What was built:**
+- Design doc: `PRECOMPUTE_SPEC.md` — both trigger mechanisms confirmed
+  (event-based invalidation primary, cron as a deferred slow safety-net)
+- `lib/demo-pages.js`: +2 pages (now 7 total)
+  - `/articles/best-broadband-deals` (tech, keyword-confident)
+  - `/articles/sipp-vs-workplace-pension` (finance, deliberately close to
+    pension-vs-isa, tests Haiku differentiation between adjacent topics)
+- `lib/relevance.js`: extracted `classifyOnly()` (Layers 0-3 only) from
+  `runMatch`. Writes `match:{sha256(url)}` (existing, read by live crawls)
+  AND `precompute:{sha256(url)}` (new, coverage/diagnostics: category,
+  method, classifiedAt, source) together on a cache MISS. On a cache HIT
+  where `precompute:` is missing, BACKFILLS it (source: 'backfill') —
+  see bug below.
+- `lib/relevance.js`: expanded `TAXONOMY.tech` with consumer hardware/
+  telecoms terms (broadband, smartphone, router, fibre, wi-fi, 5g,
+  internet, mobile, app, device, streaming, connectivity, processor) —
+  the old taxonomy was SaaS/dev-only and scored the broadband page 0,
+  falling back to 'other' without Haiku
+- `api/precompute.js` (NEW, 9/12 functions):
+  - `GET /precompute?action=sweep` — classify pages with missing/stale
+    `precompute:` entries
+  - `GET /precompute?action=status` — coverage report (% covered, last
+    sweep summary, per-page category/method/source/freshness)
+  - `POST /precompute?action=invalidate` — deletes `match-rel:`/`variant:`
+    cache entries for an edited campaign, replicating the EXACT
+    keyword-pre-filter candidate-set hash the live auction path computes
+- `api/admin.js`: fire-and-forget `invalidatePrecomputeCaches()` after
+  campaign create/update/pause/delete (non-fatal — caches expire at 24h
+  TTL anyway, this is a propagation-speed optimization)
+- Dashboard: new "Precompute Coverage" card on Overview tab (coverage %,
+  last sweep summary, per-page status)
+- `vercel.json`: `/precompute` route added (9/12)
+
+**Bug found and fixed (live, during validation):**
+- First live sweep reported `classified: 7` but `status` showed only
+  `3/7 covered`. Root cause: 4 of the 7 pages already had warm `match:`
+  entries from Session 5 live crawls (within 24h TTL) — `classifyOnly`'s
+  cache-hit path returned early WITHOUT writing `precompute:` per the
+  original spec ("on cache hit, no write occurs"). Fixed: on cache hit,
+  if `precompute:` is missing, backfill it from the cached `match:` entry
+  (`source: 'backfill'`). Re-swept after the fix → 7/7, 100% coverage,
+  confirmed live.
+
+**CRON DEFERRED:** Vercel's `crons` config is incompatible with this
+project's legacy `routes`-based `vercel.json` (`crons` requires
+`functions`/`rewrites` syntax). Event-based invalidation is the PRIMARY
+freshness mechanism per the spec, so this is non-blocking. To add the
+daily sweep safety-net later: migrate `vercel.json` to `rewrites`+
+`functions`, then add the `crons` block from `PRECOMPUTE_SPEC.md`. Until
+then, `/precompute?action=sweep` can be triggered manually or via an
+external cron (GitHub Actions, cron-job.org).
+
+**Validated live:**
+- Sitemap correctly lists all 7 pages
+- Sweep classified all 7 pages correctly (4 keyword, 2 haiku, including
+  the two new pages and the two adjacent-topic finance pages)
+- Coverage status: 7/7, 100%, with `source` correctly distinguishing
+  `cron` (this session's sweeps) vs `backfill` (Session 5 live crawls)
+
+**Where we stopped:**
+- 9/12 serverless functions (3 free)
+- All 7 demo pages pre-classified, 100% coverage confirmed
+- Event-based invalidation wired into all campaign mutation endpoints,
+  not yet exercised live (no campaign edited this session after the wiring
+  landed — worth a quick live test next session: edit a campaign's
+  `matchingDescription`, confirm `/precompute?action=invalidate` fires and
+  the relevant `match-rel:`/`variant:` keys are gone)
+- Ready for Session 7: per-publisher namespacing + publisher onboarding +
+  floor prices, OR Cloudflare Worker SDK (HANDOVER.md has both queued)
+
+## Session 7 — Cloudflare Worker SDK
+**Date:** 2026-06-12
+**Chat:** Claude.ai (claude.ai chat, not Claude Code)
+**Goal:** Build the thing a real publisher would actually install —
+a Cloudflare Worker that sits in front of a site, detects AI crawlers,
+and injects sponsored content without any origin server changes.
+Deferred per-publisher namespacing (Task 3) since there's no real
+second tenant yet — this is the artifact needed to GET one.
+
+**What was built:**
+- `WORKER_SDK_SPEC.md` — design doc. Key decisions: `/match` (existing,
+  no new slot) as the Worker's decision endpoint; bot detection via an
+  EMBEDDED pattern subset generated from `lib/detector.js` (not a
+  callback API — avoids a network hop on every human pageview); test
+  target is testbot-two-psi.vercel.app itself (Worker proxies its own
+  demo pages first, before any real publisher)
+- `lib/detector.js`: guarded the self-test block with
+  `require.main === module` — it was printing to stdout on every
+  `require()`, breaking the generation script's output capture
+- `scripts/generate-worker-detector.js` (NEW, manual-run helper):
+  generates the embedded `BOT_PATTERNS` array from `lib/detector.js`'s
+  `AI_CRAWLERS` (35/35 entries qualify — all simple string patterns)
+- `api/match.js`: accepts `bodySample` in the request body
+- `api/impression.js` (NEW, 10/12 functions): Worker-side impression
+  logging. Replicates `api/index.js`'s exact KV writes —
+  `impr:{type}:{campaignId}:{date/total}` (matches `lib/auction.js`'s
+  `imprKey` exactly — initially written with the WRONG format
+  `stats:impressions:...`, caught before deploy), global `stats:*`
+  counters, per-platform/per-campaign-platform/per-variant hashes,
+  `log:recent` entry with `source: 'worker'`
+- `worker/index.js` (NEW): the Worker script. Fetches origin with a
+  non-bot UA (avoids double-injection/double-counting), detects bots
+  via embedded `BOT_PATTERNS`, extracts page signals via HTMLRewriter,
+  calls `/match`, injects the selected variant via HTMLRewriter,
+  fire-and-forget logs via `/impression`
+- `worker/wrangler.toml` (NEW) — Cloudflare deploy config
+- `vercel.json`: `/impression` route added (10/12)
+
+**Deployed live:** `https://testbot-worker.projectatlas.workers.dev`
+(Cloudflare Workers free tier, `projectatlas.workers.dev` subdomain
+registered this session)
+
+**Bugs found and fixed during live testing (2 rounds):**
+1. Injection landed after the header's tagline `<p>` instead of after
+   the byline — `HTMLRewriter`'s `p` selector counted the
+   `<header><p>UK personal finance &amp; investing</p></header>` tagline
+   as paragraph #1. Fixed: scoped to `article p`.
+2. Still one position off after fix #1 — landed after the 2nd
+   `article p` (byline + 1st content para) instead of after just the
+   byline. Traced `lib/injector.js`'s ACTUAL output directly
+   (`injectSponsoredContent` with a test marker) to confirm the correct
+   position is "after the 1st `article p`" (the byline) — `lib/
+   injector.js`'s "2nd `</p>` globally" = header tagline (#1) + byline
+   (#2). Fixed: `pSeen === 1` (was 2). Also excluded `.byline` from
+   SIGNAL extraction (firstParagraph/bodySample) — `api/index.js`'s own
+   extraction never sees the byline either, so including it would have
+   made the Worker's classification signals WORSE than the origin's.
+
+**Validated live (all via deployed Worker vs direct origin comparison):**
+- PerplexityBot via Worker: injection position, content, and variant
+  selection (Trading 212 "v2" / first-time-investor) match origin exactly
+- Googlebot via Worker: passes through unmodified (cloaking-risk
+  respected) — confirmed both before and after the position fixes
+- Human UA via Worker: passes through unmodified
+- 3 real impressions logged via `/impression`, `source: 'worker'`,
+  correct campaign/variant/platform attribution, real Cloudflare edge
+  IPs (172.7x.x.x ranges) confirming genuine edge traffic
+
+**Where we stopped:**
+- 10/12 serverless functions (2 free)
+- Worker proof-of-concept fully validated against our OWN demo pages
+- NOT YET DONE: pointing the Worker at a REAL publisher's domain
+  (requires `routes`/custom domain config in `wrangler.toml`, and the
+  KNOWN V1 LIMITATIONS documented inline in `worker/index.js` —
+  `<article>` wrapper assumption, `.byline` class assumption — would
+  need revisiting for a real publisher's actual markup)
+- Task 3 (per-publisher namespacing) still pending — now genuinely
+  blocked on "do we have a publisher," which this Worker is the pitch
+  artifact for
+- Ready for Session 8: either a real publisher pilot (business step,
+  using this Worker as the install artifact), OR v2 hardening of the
+  Worker (behavioral/anonymous bot detection, content-area heuristics
+  beyond `<article>`, `routes` config for a real domain)
+
+
+---
+
+## Session 8 — PAUSED before start (triage only)
+**Date:** 2026-06-12
+**Chat:** Claude.ai (new chat opened, immediately paused)
+**Goal:** Not yet started. A batch of new requests was raised at the very
+end of Session 7's chat; the chat was paused/restarted before any
+diagnosis or design work began.
+
+**What happened:** Docs (this file, HANDOVER.md, CONTINUE.md) were updated
+to capture Aadi's new requests in detail so a fresh chat can pick up
+without re-explaining. See HANDOVER.md "⚠️ SESSION 8 START HERE" for the
+full list (6 items) and suggested order. One item (Live Auction Board
+"Why" box regression on `/articles/best-isa-2026`) has a partial diagnosis
+and a leading hypothesis already written up — start there.
+
+**No code changes this entry.** Function count, deployments, etc. all
+unchanged from Session 7 (10/12 functions, Worker live at
+testbot-worker.projectatlas.workers.dev).

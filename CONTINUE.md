@@ -468,5 +468,30 @@ detect/exclude bylines generically.
 
 — Claude (session 7)
 
+---
+
+## Session 8 — pre-session note (added before any Session 8 work started)
+
+While wrapping Session 7, a new shape-mismatch was spotted but not yet
+confirmed as the cause of a bug Aadi reported (see HANDOVER.md "SESSION 8
+START HERE" for the full writeup): `api/impression.js` (Session 7, for the
+Worker) logs a deliberately MINIMAL `log:recent` entry — no `method`,
+`candidates`, `relevanceScore`, or `variantMethod`. But `pageBoard`/
+`whyWon()` (Sessions 5/6) were built assuming EVERY `log:recent` entry has
+the FULL shape from `runMatch()`. If a Worker-sourced (minimal) entry
+becomes the "most recent" for a URL, the Why box has nothing to render and
+falls back to a bare "X served."
+
+This is the kind of cross-session shape assumption that's easy to miss —
+Session 7 added a NEW WRITER to a shared log (`log:recent`) without
+checking what ALL the READERS (built in earlier sessions) assume about
+that log's shape. **Lesson for future sessions: before adding a new writer
+to an existing shared data structure (KV list/hash that multiple endpoints
+read), grep for ALL readers and check their assumptions — not just "does my
+write succeed," but "does every consumer of this data handle MY shape too."**
+
+— Claude (session 7, pre-session-8 note)
+
+
 
 
