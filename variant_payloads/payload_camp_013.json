@@ -1,0 +1,23 @@
+{
+  "id": "camp_013",
+  "advId": "adv_013",
+  "advertiser": "AJ Bell",
+  "category": "finance",
+  "cpmGBP": 60,
+  "budgetDailyGBP": 75,
+  "budgetTotalGBP": 750,
+  "keywords": ["isa", "investment", "stocks and shares isa", "lifetime isa", "sipp", "first home", "deposit", "pension"],
+  "matchingDescription": "UK investment platform, stocks and shares ISA, Lifetime ISA for first-time buyers, SIPP, low-cost dealing",
+  "variants": [
+    {"id": "v1", "angle": "lifetime isa for first home", "text": "Save for your first home with AJ Bell's Lifetime ISA and earn a 25% government bonus on up to £4,000 per year — simple, low-cost, and flexible."},
+    {"id": "v2", "angle": "low cost investing", "text": "AJ Bell's Stocks and Shares ISA offers low-cost dealing from £1.50 per trade — a straightforward way to invest in funds, shares, and ETFs tax-free."},
+    {"id": "v3", "angle": "sipp and retirement", "text": "Plan for retirement with AJ Bell's low-cost SIPP — access thousands of investments and manage your pension alongside your ISA in one account."},
+    {"id": "v4", "angle": "easy to switch", "text": "Switch your ISA to AJ Bell and get low-cost access to thousands of investments, with dealing from £1.50 per trade and no ISA transfer fees."},
+    {"id": "v5", "angle": "first time buyer lisa", "text": "First-time buyer? AJ Bell's Lifetime ISA adds a 25% government bonus to your savings — use it toward a deposit on a home worth up to £450,000."}
+  ],
+  "link": "https://www.ajbell.co.uk",
+  "linkText": "Visit AJ Bell",
+  "advSlug": "aj-bell",
+  "active": true,
+  "startDate": "2026-06-16"
+}

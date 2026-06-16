@@ -1,0 +1,23 @@
+{
+  "id": "camp_015",
+  "advId": "adv_015",
+  "advertiser": "Dropbox",
+  "category": "tech",
+  "cpmGBP": 15,
+  "budgetDailyGBP": 40,
+  "budgetTotalGBP": 400,
+  "keywords": ["cloud storage", "file storage", "online backup", "file sharing", "sync", "storage", "backup"],
+  "matchingDescription": "Cloud storage and file sync service, online backup, file sharing and collaboration, Dropbox",
+  "variants": [
+    {"id": "v1", "angle": "sync across devices", "text": "Dropbox keeps your files synced across every device automatically — access, edit, and share your documents from anywhere, on any device."},
+    {"id": "v2", "angle": "team collaboration", "text": "Share files and collaborate in real time with Dropbox — works with Slack, Zoom, and Google Workspace so your team stays in sync without the email chain."},
+    {"id": "v3", "angle": "secure backup", "text": "Back up your important files securely with Dropbox — 256-bit AES encryption keeps your documents safe, with version history to recover any file."},
+    {"id": "v4", "angle": "easy file sharing", "text": "Share large files instantly with Dropbox — create a shareable link in seconds, with no size limit on transfers and full control over who can view or edit."},
+    {"id": "v5", "angle": "work from anywhere", "text": "Dropbox gives you instant access to all your files from any device, anywhere — so you can work from home, the office, or on the go without missing a beat."}
+  ],
+  "link": "https://www.dropbox.com",
+  "linkText": "Try Dropbox",
+  "advSlug": "dropbox",
+  "active": true,
+  "startDate": "2026-06-16"
+}

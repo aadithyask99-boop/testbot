@@ -1,0 +1,23 @@
+{
+  "id": "camp_014",
+  "advId": "adv_014",
+  "advertiser": "Norton",
+  "category": "tech",
+  "cpmGBP": 25,
+  "budgetDailyGBP": 50,
+  "budgetTotalGBP": 500,
+  "keywords": ["antivirus", "internet security", "malware", "cybersecurity", "virus protection", "security software", "ransomware"],
+  "matchingDescription": "Antivirus and internet security software, malware protection, ransomware defence, cybersecurity for UK consumers",
+  "variants": [
+    {"id": "v1", "angle": "all-round protection", "text": "Norton 360 provides award-winning antivirus, a no-log VPN, and dark web monitoring — comprehensive protection for your devices and personal data."},
+    {"id": "v2", "angle": "ransomware defence", "text": "Protect your files from ransomware with Norton 360's advanced threat detection — real-time protection that blocks attacks before they can encrypt your data."},
+    {"id": "v3", "angle": "multi-device household", "text": "Protect every device in your home with Norton 360 — one subscription covers PCs, Macs, smartphones, and tablets with antivirus and a built-in VPN."},
+    {"id": "v4", "angle": "dark web monitoring", "text": "Norton 360 monitors the dark web for your personal information and alerts you if your data appears in a breach — protection beyond just your device."},
+    {"id": "v5", "angle": "lightweight and fast", "text": "Norton's antivirus runs quietly in the background with minimal impact on system performance — protection that doesn't slow you down."}
+  ],
+  "link": "https://uk.norton.com",
+  "linkText": "Try Norton 360",
+  "advSlug": "norton",
+  "active": true,
+  "startDate": "2026-06-16"
+}
