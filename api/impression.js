@@ -1,5 +1,5 @@
 // ============================================================
-// /impression — Worker-side impression logging (Session 7)
+// /impression — Worker-side impression logging (Session 7+8)
 // ============================================================
 // The Cloudflare Worker (worker/index.js) can't write to Upstash
 // directly (different security boundary), so it POSTs here,
@@ -11,17 +11,19 @@
 // hash, the per-variant hash, and the log:recent entry that powers the
 // dashboard's Live Auction Board / Recent Activity / Why box.
 //
-// Body: { campaignId, variantId, platform, crawlerType, url,
-//         advertiser, cpmGBP, source }
-//   source: 'worker' | other — informational only, surfaces in
-//   log:recent so the dashboard can distinguish Worker-sourced
-//   impressions from the demo-page direct-serve path during the
-//   proof-of-concept phase.
+// Session 8: body now includes full match metadata (matchMethod,
+// matchCached, matchCategory, relevanceScore, candidates, variantAngle,
+// variantMethod, served) so Worker-sourced log:recent entries have the
+// same shape as api/index.js entries — fixes the Why-box showing only
+// "X served." with no reasoning. Also includes pubId for per-publisher
+// impression tracking.
 //
-// NOTE: this endpoint does NOT call /match or know about variant
-// angles/methods/relevance scores — the Worker already has all of that
-// from its own /match call and could pass it through if richer
-// log:recent entries are wanted later. v1 keeps the payload minimal.
+// Body: { campaignId, variantId, platform, crawlerType, url,
+//         advertiser, cpmGBP, source,
+//         // Session 8 additions:
+//         pubId, matchMethod, matchCached, matchCategory,
+//         relevanceScore, candidates, variantAngle, variantMethod,
+//         served }
 // ============================================================
 
 const { kvIncr, kvHashIncr, kvListPush } = require('../lib/kv');
@@ -56,16 +58,20 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ error: 'campaignId is required' });
   }
 
-  const { campaignId, variantId, platform, crawlerType, url, advertiser, cpmGBP, source } = data;
+  const {
+    campaignId, variantId, platform, crawlerType, url, advertiser, cpmGBP, source,
+    // Session 8 match metadata
+    pubId, matchMethod, matchCached, matchCategory, relevanceScore,
+    candidates, variantAngle, variantMethod, served,
+  } = data;
   const today = todayStr();
   const type = crawlerType === 'training' ? 'training' : 'retrieval';
   const plat = platform || 'unknown';
 
   try {
-    await Promise.all([
+    const ops = [
       // Per-campaign atomic impression counters — MUST match
       // imprKey() in lib/auction.js exactly: impr:{type}:{campaignId}:{date}
-      // (used by getCampaignSpend for revenue calc / dashboard spend display)
       kvIncr(`impr:${type}:${campaignId}:${today}`),
       kvIncr(`impr:${type}:${campaignId}:total`),
 
@@ -84,7 +90,16 @@ module.exports = async function handler(req, res) {
       // Per-variant breakdown (Session 5)
       ...(variantId ? [kvHashIncr('variant-impr:' + campaignId, variantId)] : []),
 
-      // Recent activity log — powers the dashboard
+      // Per-publisher impression tracking (Session 8)
+      ...(pubId ? [
+        kvIncr(`stats:impressions:pub:${pubId}:total`),
+        kvIncr(`stats:impressions:pub:${pubId}:date:${today}`),
+        kvHashIncr(`stats:impr_by_pub_plat:${pubId}`, plat),
+      ] : []),
+
+      // Recent activity log — powers the dashboard.
+      // Session 8: full match metadata included so Why-box works for
+      // Worker-sourced impressions (same shape as api/index.js entries).
       kvListPush('log:recent', {
         time: new Date().toISOString(),
         ip: req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown',
@@ -95,14 +110,21 @@ module.exports = async function handler(req, res) {
         advertiser: advertiser || null,
         cpmGBP: cpmGBP || null,
         variantId: variantId || null,
-        matchCached: false,
+        variantAngle: variantAngle || null,
+        variantMethod: variantMethod || null,
+        matchMethod: matchMethod || null,
+        matchCached: matchCached || false,
+        matchCategory: matchCategory || null,
+        relevanceScore: relevanceScore || null,
+        candidates: candidates || null,
+        served: served || 'yes',
+        pubId: pubId || null,
         source: source || 'worker',
       }, 100),
-    ]);
+    ];
+    await Promise.all(ops);
   } catch (e) {
     console.error('/impression KV write error:', e.message);
-    // Non-fatal — the Worker already served the page. Still return 200
-    // so the Worker doesn't retry/log noise for a logging-only failure.
   }
 
   return res.status(200).json({ message: 'Impression logged', campaignId });

@@ -1,42 +1,43 @@
 {
   "id": "camp_005",
-  "advertiser": "interactive investor ISA",
+  "advertiser": "Smart Pension",
   "category": "finance",
-  "cpmGBP": 100,
+  "cpmGBP": 70,
   "budgetDailyGBP": 50,
   "budgetTotalGBP": 500,
   "keywords": [
-    "isa provider",
-    "investment",
-    "capital",
-    "sipp",
-    "stocks and shares isa"
+    "pension",
+    "isa",
+    "grow",
+    "workplace pension",
+    "retirement"
   ],
-  "matchingDescription": "UK stocks and shares ISA, investment platform, SIPP, flat-fee pricing",
+  "matchingDescription": "UK workplace pension provider, technology-driven retirement saving",
   "variants": [
     {
-      "angle": "award-winning isa",
-      "text": "Open an award-winning Stocks and Shares ISA with interactive investor — start investing tax-efficiently. Capital at risk; tax rules may change."
+      "angle": "workplace pension growth",
+      "text": "Smart Pension is one of the UK's fastest-growing workplace pension providers, setting a new standard for technology-powered retirement saving."
     },
     {
-      "angle": "flat-fee pricing",
-      "text": "interactive investor charges a flat monthly fee rather than a percentage — for larger portfolios this can mean significantly lower costs over time."
+      "angle": "technology-led pension management",
+      "text": "Manage your workplace pension digitally with Smart Pension \u2014 built on technology that makes tracking and growing your retirement savings simple."
     },
     {
-      "angle": "sipp and pension consolidation",
-      "text": "Consolidate old pensions into a SIPP with interactive investor and manage your retirement investments alongside your ISA in one place."
+      "angle": "new to workplace pensions",
+      "text": "Just started a new job? Smart Pension is a fast-growing UK workplace pension provider focused on making retirement saving straightforward."
     },
     {
-      "angle": "long-term investor",
-      "text": "For investors building a long-term portfolio, interactive investor's award-winning ISA gives access to thousands of UK and global investments."
+      "angle": "long-term retirement saving",
+      "text": "Smart Pension helps UK employees build retirement savings over the long term through a technology-powered workplace pension."
     },
     {
-      "angle": "experienced investor tools",
-      "text": "interactive investor's Stocks and Shares ISA offers research tools and a wide investment range suited to hands-on, experienced investors."
+      "angle": "modern pension experience",
+      "text": "Join Smart Pension \u2014 a UK workplace pension provider setting a new standard for how technology can power retirement savings."
     }
   ],
   "link": "",
   "linkText": "Learn more",
-  "advSlug": "interactive-investor",
-  "active": true
+  "advSlug": "smart-pension",
+  "active": true,
+  "advId": "adv_005"
 }

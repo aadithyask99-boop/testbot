@@ -74,6 +74,7 @@ var html = '<!DOCTYPE html>' +
 '</div>' +
 
 '<div id="tab-advertiser" class="tab">' +
+'<div style="padding:10px 0;margin-bottom:8px;display:flex;align-items:center;gap:10px"><label style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.04em">Advertiser Account</label><select id="adv-picker" onchange="setAdvertiser(this.value)" style="border:1px solid #e5e5e5;border-radius:4px;padding:6px 10px;font-size:13px;font-family:inherit;background:#fff"><option value="">All Advertisers</option></select></div>' +
 '<div class="grid" id="adv-cards"></div>' +
 '<section><h2>Live Auction Board <span style="font-size:12px;color:#888;font-weight:400">(per-page — each page runs its own auction at crawl time · updates every 5s)</span></h2>' +
 '<div id="live-board" style="display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(320px,1fr))"><div class="empty">Loading...</div></div></section>' +
@@ -119,8 +120,12 @@ var html = '<!DOCTYPE html>' +
 '</div></section></div>' +
 
 '<div id="tab-publisher" class="tab">' +
+'<div style="padding:10px 0;margin-bottom:8px;display:flex;align-items:center;gap:10px"><label style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.04em">Publisher Account</label><select id="pub-picker" onchange="setPublisher(this.value)" style="border:1px solid #e5e5e5;border-radius:4px;padding:6px 10px;font-size:13px;font-family:inherit;background:#fff"><option value="">All Publishers</option></select></div>' +
 '<div class="grid" id="pub-cards"></div>' +
 '<section><h2>Winning Creative on Your Pages</h2><div class="cbox" id="pub-winning"><div class="empty">Loading...</div></div></section>' +
+'<section><h2>Your Pages <span style="font-size:12px;color:#888;font-weight:400">(what\'s serving on each page right now)</span></h2>' +
+'<table><thead><tr><th>Page</th><th>Serving</th><th>Last Crawler</th><th>Last Crawl</th></tr></thead>' +
+'<tbody id="pub-pages"><tr><td colspan="4" class="empty">Loading...</td></tr></tbody></table></section>' +
 '<section><h2>Crawler Traffic by Platform</h2>' +
 '<table><thead><tr><th>Platform</th><th>Impressions</th><th>Type</th></tr></thead>' +
 '<tbody id="pub-crawlers"><tr><td colspan="3" class="empty">Loading...</td></tr></tbody></table></section>' +
@@ -130,12 +135,32 @@ var html = '<!DOCTYPE html>' +
 '</div></main>' +
 
 '<script>' +
-'var opData=null,advData=null,pubData=null,formLoaded=false,campFilter=\'all\',selectedCampaign=null,formVariants=[];' +
+'var opData=null,advData=null,pubData=null,formLoaded=false,campFilter=\'all\',selectedCampaign=null,formVariants=[],selectedPublisher=null,selectedAdvertiser=null;' +
 'function switchTab(id,btn){' +
 '  document.querySelectorAll(".tab").forEach(function(t){t.classList.remove("active");});' +
 '  document.querySelectorAll("nav button").forEach(function(b){b.classList.remove("active");});' +
 '  document.getElementById("tab-"+id).classList.add("active");' +
 '  btn.classList.add("active");' +
+'}' +
+'function setPublisher(val){selectedPublisher=val||null;renderPublisher();}' +
+'function setAdvertiser(val){selectedAdvertiser=val||null;renderAdvertiser();}' +
+'function populatePickers(){' +
+'  var pp=document.getElementById("pub-picker");' +
+'  if(pp&&pubData&&pubData.publishers){' +
+'    var opts="<option value=\\"\\">" + "All Publishers</option>";' +
+'    pubData.publishers.forEach(function(p){' +
+'      var sel=selectedPublisher===p.pubId?" selected":"";' +
+'      opts+="<option value=\\""+p.pubId+"\\""+sel+">"+p.name+"</option>";' +
+'    });pp.innerHTML=opts;' +
+'  }' +
+'  var ap=document.getElementById("adv-picker");' +
+'  if(ap&&advData&&advData.advertisers){' +
+'    var opts2="<option value=\\"\\">" + "All Advertisers</option>";' +
+'    advData.advertisers.forEach(function(a){' +
+'      var sel2=selectedAdvertiser===a.name?" selected":"";' +
+'      opts2+="<option value=\\""+escAttr(a.name)+"\\""+sel2+">"+a.name+" ("+a.campaigns+")</option>";' +
+'    });ap.innerHTML=opts2;' +
+'  }' +
 '}' +
 'function ago(iso){var s=Math.floor((Date.now()-new Date(iso))/1000);if(s<60)return s+"s ago";if(s<3600)return Math.floor(s/60)+"m ago";if(s<86400)return Math.floor(s/3600)+"h ago";return new Date(iso).toLocaleDateString();}' +
 'function fmt(n){return(n||0).toLocaleString();}' +
@@ -187,16 +212,18 @@ var html = '<!DOCTYPE html>' +
 '}' +
 'function renderAdvertiser(){' +
 '  if(!advData)return;' +
-'  var cl=advData.campaigns||[],agg=advData.aggregate||{};' +
+'  var allCl=advData.campaigns||[],agg=advData.aggregate||{};' +
+'  var cl=selectedAdvertiser?allCl.filter(function(c){return c.advertiser===selectedAdvertiser;}):allCl;' +
 '  var winner=cl.filter(function(x){return x.isWinner;})[0];' +
 '  var activeCount=cl.filter(function(x){return x.active;}).length;' +
 '  var totalImpr=cl.reduce(function(a,c){return a+(c.impressions||0);},0);' +
 '  var totalSpend=cl.reduce(function(a,c){return a+(c.totalSpendGBP||0);},0);' +
+'  var headerLabel=selectedAdvertiser?selectedAdvertiser:"All Advertisers";' +
 '  set("adv-cards",' +
-'    card("Active Campaigns",fmt(activeCount),fmt(cl.length)+" total","")+' +
-'    card("Now Winning",winner?winner.advertiser:"None",winner?("£"+winner.cpmGBP+" CPM"):"no eligible campaign","green")+' +
+'    card("Active Campaigns",fmt(activeCount),headerLabel,"")+' +
+'    card("Now Winning",winner?winner.advertiser:"None",winner?("\\u00a3"+winner.cpmGBP+" CPM"):"no eligible campaign","green")+' +
 '    card("Total Impressions",fmt(totalImpr),fmt(agg.totalViewable||0)+" viewable","blue")+' +
-'    card("Total Spend",money(totalSpend),"£"+(agg.blendedVcpmGBP||0)+" vCPM","")' +
+'    card("Total Spend",money(totalSpend),"\\u00a3"+(agg.blendedVcpmGBP||0)+" vCPM","")' +
 '  );' +
 '  renderCampaignList(cl);' +
 '  renderLiveBoard(advData.pageBoard||[]);' +
@@ -254,7 +281,8 @@ var html = '<!DOCTYPE html>' +
 '  var fk=cands.filter(function(c){return c.outcome==="filtered_keyword";});' +
 '  var el=cands.filter(function(c){return c.outcome==="eligible";});' +
 '  if(!page.servingId){' +
-'    if(page.reason==="other_category")return "Page classified as off-topic ("+( page.category||"other")+") — no campaigns compete here.";' +
+'    if(page.reason==="not_yet_crawled")return "This page has not been crawled by any AI bot yet. Run a test crawl to see auction results.";' +
+'    if(page.reason==="other_category")return "Page classified as off-topic ("+(page.category||"other")+") — no campaigns compete here.";' +
 '    if(page.reason==="haiku_filtered_all"){' +
 '      var names=cands.map(function(c){return c.advertiser;}).join(", ");' +
 '      return "Haiku reviewed "+cands.length+" candidate"+(cands.length===1?"":"s")+" ("+names+") and found none relevant. Strict mode: nothing served.";' +
@@ -267,7 +295,11 @@ var html = '<!DOCTYPE html>' +
 '    return page.reason?page.reason.replace(/_/g," "):"No campaign served.";' +
 '  }' +
 '  var winner=cands.find(function(c){return c.outcome==="won";});' +
-'  if(!winner)return page.servingAdv+" served.";' +
+'  if(!winner){' +
+'    var src=page.source==="worker"?" via Cloudflare Worker":"";' +
+'    var meth=page.method?(" · classified "+page.category+" via "+page.method):"";' +
+'    return page.servingAdv+" served"+src+meth+". Full auction detail not available for this impression.";' +
+'  }' +
 '  var parts=[];' +
 '  if(page.method==="keyword")parts.push("Page classified as "+(page.category||"?")+" via keyword scoring (score "+(page.relevanceScore||"?")+").");' +
 '  else if(page.method==="haiku"&&!page.cached)parts.push("Page classified as "+(page.category||"?")+" via Haiku (fresh call).");' +
@@ -294,15 +326,21 @@ var html = '<!DOCTYPE html>' +
 '  return parts.join(" ");' +
 '}' +
 'function renderLiveBoard(board){' +
-'  if(!board||!board.length){set("live-board","<div class=\'empty\'>No crawls yet — crawl a page as a bot to see the auction</div>");return;}' +
-'  set("live-board",board.map(function(p){' +
+'  if(!board||!board.length){set("live-board","<div class=\'empty\'>No pages registered</div>");return;}' +
+'  var filtered=board;' +
+'  if(selectedAdvertiser){filtered=board.filter(function(p){return p.servingAdv===selectedAdvertiser||!p.servingId;});}' +
+'  set("live-board",filtered.map(function(p){' +
 '    var urlShort=p.url?p.url.replace(/^https?:\\/\\/[^\\/]+/,""):"/";' +
 '    var cat=p.category||"?";' +
 '    var catColor=cat==="finance"?"#16a34a":cat==="tech"?"#2563eb":"#999";' +
-'    var header="<div style=\'display:flex;justify-content:space-between;align-items:center;margin-bottom:8px\'><span style=\'font-family:monospace;font-size:12px;color:#333\'>"+urlShort+"</span><span style=\'background:"+catColor+"22;color:"+catColor+";font-size:10px;padding:2px 7px;border-radius:3px\'>"+cat+"</span></div>";' +
+'    var pubBadge=p.publisherName?("<span style=\'font-size:10px;color:#888;margin-left:6px\'>"+p.publisherName+"</span>"):"";' +
+'    var titleLine=p.title?("<div style=\'font-size:11px;color:#666;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\'>"+escHtml(p.title)+"</div>"):"";' +
+'    var header="<div style=\'display:flex;justify-content:space-between;align-items:center;margin-bottom:4px\'><span style=\'font-family:monospace;font-size:12px;color:#333\'>"+urlShort+pubBadge+"</span><span style=\'background:"+catColor+"22;color:"+catColor+";font-size:10px;padding:2px 7px;border-radius:3px\'>"+cat+"</span></div>"+titleLine;' +
 '    var serving;' +
-'    if(p.servingId){' +
-'      var methodLabel=p.method==="haiku"?(p.cached?"haiku · cached":"haiku · fresh"):(p.method||"—");' +
+'    if(p.reason==="not_yet_crawled"){' +
+'      serving="<div style=\'font-size:14px;font-weight:600;color:#cbd5e1;margin-bottom:2px\'>Not yet crawled</div><div style=\'font-size:11px;color:#aaa;margin-bottom:8px\'>Awaiting first AI bot visit</div>";' +
+'    }else if(p.servingId){' +
+'      var methodLabel=p.method==="haiku"?(p.cached?"haiku · cached":"haiku · fresh"):(p.method==="keyword"?"keyword":(p.method||"—"));' +
 '      serving="<div style=\'font-size:15px;font-weight:600;color:#111;margin-bottom:2px\'>"+p.servingAdv+" <span style=\'font-size:12px;color:#16a34a\'>£"+(p.servingCpmGBP||0)+" CPM</span></div><div style=\'font-size:11px;color:#888;margin-bottom:8px\'>via "+methodLabel+(p.lastPlatform?(" · "+p.lastPlatform):"")+(p.lastCrawl?(" · "+ago(p.lastCrawl)):"")+"</div>"+' +
 '        (p.variantText?("<div style=\'font-size:12px;color:#444;line-height:1.5;background:#f8f9fb;border-radius:4px;padding:6px 8px;margin-bottom:8px\'>"+escHtml(p.variantText)+(p.variantAngle?("<div style=\'font-size:10px;color:#aaa;margin-top:4px\'>variant: "+p.variantAngle+"</div>"):"")+"</div>"):"");' +
 '    }else{' +
@@ -312,16 +350,18 @@ var html = '<!DOCTYPE html>' +
 '    if(p.candidates&&p.candidates.length){' +
 '      cand="<div style=\'border-top:1px solid #eee;padding-top:7px;margin-top:4px\'><div style=\'font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:#aaa;margin-bottom:5px\'>Competed ("+p.candidates.length+")</div>"+p.candidates.map(function(c){' +
 '        var icon,color;' +
-'        if(c.outcome==="won"){icon="✓ won";color="#16a34a";}' +
-'        else if(c.outcome==="eligible"){icon="· lost CPM";color="#888";}' +
-'        else if(c.outcome==="filtered_haiku"){icon="✗ Haiku: off-topic";color="#f59e0b";}' +
-'        else if(c.outcome==="filtered_keyword"){icon="✗ low relevance";color="#cbd5e1";}' +
-'        else if(c.outcome==="over_budget"){icon="✗ over budget";color="#ef4444";}' +
+'        if(c.outcome==="won"){icon="\\u2713 won";color="#16a34a";}' +
+'        else if(c.outcome==="eligible"){icon="\\u00b7 lost CPM";color="#888";}' +
+'        else if(c.outcome==="filtered_haiku"){icon="\\u2717 Haiku: off-topic";color="#f59e0b";}' +
+'        else if(c.outcome==="filtered_keyword"){icon="\\u2717 low relevance";color="#cbd5e1";}' +
+'        else if(c.outcome==="over_budget"){icon="\\u2717 over budget";color="#ef4444";}' +
 '        else{icon=c.outcome;color="#888";}' +
-'        return "<div style=\'display:flex;justify-content:space-between;font-size:12px;padding:2px 0\'><span style=\'color:#333\'>"+c.advertiser+" <span style=\'color:#bbb;font-size:10px\'>£"+c.cpmGBP+" · rel "+(c.relevanceScore!=null?c.relevanceScore:"?")+"</span></span><span style=\'color:"+color+";font-size:11px\'>"+icon+"</span></div>";' +
+'        return "<div style=\'display:flex;justify-content:space-between;font-size:12px;padding:2px 0\'><span style=\'color:#333\'>"+c.advertiser+" <span style=\'color:#bbb;font-size:10px\'>\\u00a3"+c.cpmGBP+" \\u00b7 rel "+(c.relevanceScore!=null?c.relevanceScore:"?")+"</span></span><span style=\'color:"+color+";font-size:11px\'>"+icon+"</span></div>";' +
 '      }).join("")+"</div>";' +
 '    }' +
-'    return "<div style=\'border:1px solid #e5e7eb;border-radius:8px;padding:12px;background:#fff\'>"+header+serving+cand+"<div style=\\\'margin-top:8px;padding:8px;background:#f8f9fa;border-radius:4px;font-size:11px;color:#555;line-height:1.5\\\'><b style=\\\'color:#374151\\\'>Why:</b> "+whyWon(p)+"</div></div>";' +
+'    var borderColor=p.reason==="not_yet_crawled"?"#e5e7eb":"#e5e7eb";' +
+'    var bgColor=p.reason==="not_yet_crawled"?"#fcfcfc":"#fff";' +
+'    return "<div style=\'border:1px solid "+borderColor+";border-radius:8px;padding:12px;background:"+bgColor+"\'>"+header+serving+cand+"<div style=\'margin-top:8px;padding:8px;background:#f8f9fa;border-radius:4px;font-size:11px;color:#555;line-height:1.5\'><b style=\'color:#374151\'>Why:</b> "+whyWon(p)+"</div></div>";' +
 '  }).join(""));' +
 '}' +
 'function renderVariants(c){' +
@@ -479,8 +519,9 @@ var html = '<!DOCTYPE html>' +
 'function renderPublisher(){' +
 '  if(!pubData)return;' +
 '  var c=pubData.campaign||{},e=pubData.earnings||{},t=pubData.traffic||{},au=pubData.auction||{},cl=pubData.clicks||{};' +
+'  var headerLabel=selectedPublisher?((pubData.publishers||[]).find(function(p){return p.pubId===selectedPublisher;})||{}).name||selectedPublisher:"All Publishers";' +
 '  set("pub-cards",' +
-'    card("Your Earnings",money(e.estimatedGBP),"80% share · "+money(e.vcpmGBP)+" vCPM","green")+' +
+'    card("Your Earnings",money(e.estimatedGBP),"80% share · "+headerLabel,"green")+' +
 '    card("Impressions",fmt(t.totalImpressions),fmt(t.today)+" today","")+' +
 '    card("Viewable",fmt(t.viewableImpressions),"retrieval crawlers","blue")+' +
 '    card("Fill Rate",(t.fillRatePct===null||t.fillRatePct===undefined)?"—":(t.fillRatePct+"%"),"served / bot visits","purple")+' +
@@ -488,16 +529,36 @@ var html = '<!DOCTYPE html>' +
 '  );' +
 '  set("pub-winning",' +
 '    "<div class=\'cname\'>"+(c.advertiser||"No active campaign")+"</div>"+' +
-'    "<div class=\'cmeta\'>"+(c.cpmGBP!==null&&c.cpmGBP!==undefined?("£"+c.cpmGBP+" CPM winning · "):"")+(au.competitorCount||0)+" advertiser"+((au.competitorCount===1)?"":"s")+" competing</div>"+' +
+'    "<div class=\'cmeta\'>"+(c.cpmGBP!==null&&c.cpmGBP!==undefined?("\\u00a3"+c.cpmGBP+" CPM winning · "):"")+(au.competitorCount||0)+" advertiser"+((au.competitorCount===1)?"":"s")+" competing</div>"+' +
 '    (c.text?"<div class=\'ccopy\'>"+c.text+"</div>":"<div style=\'font-size:12px;color:#ccc\'>Nothing is being injected right now.</div>")+' +
 '    "<div style=\'font-size:11px;color:#aaa;margin-top:8px\'>This is the creative currently served to AI crawlers on your pages.</div>"' +
 '  );' +
+'  var board=pubData.pageBoard||[];' +
+'  if(selectedPublisher){board=board.filter(function(p){return p.pubId===selectedPublisher;});}' +
+'  var pubPages="";' +
+'  if(board.length){' +
+'    pubPages=board.map(function(p){' +
+'      var urlShort=p.url||"/";' +
+'      var status;' +
+'      if(p.reason==="not_yet_crawled")status="<span style=\'color:#cbd5e1\'>awaiting crawl</span>";' +
+'      else if(p.servingId)status="<b style=\'color:#16a34a\'>"+p.servingAdv+"</b> \\u00a3"+(p.servingCpmGBP||0);' +
+'      else status="<span style=\'color:#ef4444\'>no campaign</span>";' +
+'      var platInfo=p.lastPlatform?p.lastPlatform:"—";' +
+'      var timeInfo=p.lastCrawl?ago(p.lastCrawl):"—";' +
+'      return "<tr><td style=\'font-family:monospace;font-size:12px\'>"+urlShort+"</td><td>"+status+"</td><td>"+platInfo+"</td><td>"+timeInfo+"</td></tr>";' +
+'    }).join("");' +
+'  }else{pubPages="<tr><td colspan=\'4\' class=\'empty\'>No pages for this publisher</td></tr>";}' +
+'  set("pub-pages",pubPages);' +
 '  var pt=t.byPlatform||[];' +
 '  set("pub-crawlers",pt.filter(function(p){return p.impressions>0;}).map(function(p){' +
 '    var isTr=p.platform.indexOf("training")>-1||p.platform.indexOf("Bot")>-1;' +
 '    return "<tr><td>"+p.platform+"</td><td>"+fmt(p.impressions)+"</td><td>"+tag(isTr?"training":"retrieval",isTr?"training":"retrieval")+"</td></tr>";' +
 '  }).join("")||"<tr><td colspan=\'3\' class=\'empty\'>No visits yet</td></tr>");' +
 '  var rv=pubData.recentVisits||[];' +
+'  if(selectedPublisher){' +
+'    var pubUrls={};board.forEach(function(p){pubUrls[p.url]=true;});' +
+'    rv=rv.filter(function(e){return pubUrls[e.url];});' +
+'  }' +
 '  set("pub-visits",rv.length?rv.map(function(e){' +
 '    var what=e.served==="none"?"<span style=\'color:#999\'>no campaign</span>":(e.advertiser||"—");' +
 '    return "<tr><td>"+ago(e.time)+"</td><td>"+(e.platform||"—")+"</td><td>"+tag(e.crawlerType||"—",e.crawlerType||"")+"</td><td>"+(e.confidence||0)+"%</td><td>"+what+"</td></tr>";' +
@@ -508,6 +569,7 @@ var html = '<!DOCTYPE html>' +
 '  .then(function(rs){return Promise.all(rs.map(function(r){return r.json();}));})' +
 '  .then(function(data){' +
 '    opData=data[0];advData=data[1];pubData=data[2];' +
+'    populatePickers();' +
 '    renderOverview();renderAdvertiser();renderPublisher();' +
 '    if(!formLoaded){addCampaign();formLoaded=true;}' +
 '    if(selectedCampaign){selectCampaign(selectedCampaign);}' +

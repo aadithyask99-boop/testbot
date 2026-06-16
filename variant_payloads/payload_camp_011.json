@@ -1,5 +1,5 @@
 {
-  "id": "Cam_Nord",
+  "id": "camp_011",
   "advertiser": "NordVPN",
   "category": "tech",
   "cpmGBP": 18,
@@ -16,7 +16,7 @@
   "variants": [
     {
       "angle": "speed leadership",
-      "text": "NordVPN is one of the fastest VPNs available — get NordVPN, the best VPN for 2025, safe and tailored to your needs."
+      "text": "NordVPN is one of the fastest VPNs available \u2014 get NordVPN, the best VPN for 2025, safe and tailored to your needs."
     },
     {
       "angle": "ad blocking",
@@ -24,19 +24,20 @@
     },
     {
       "angle": "safety and privacy",
-      "text": "NordVPN keeps your browsing safe and private — one of the fastest VPNs available, tailored to your needs, with no more annoying ads."
+      "text": "NordVPN keeps your browsing safe and private \u2014 one of the fastest VPNs available, tailored to your needs, with no more annoying ads."
     },
     {
       "angle": "2025 best vpn",
-      "text": "Get NordVPN — named one of the best VPNs for 2025. Fast, safe, and tailored to your needs, with fewer annoying ads."
+      "text": "Get NordVPN \u2014 named one of the best VPNs for 2025. Fast, safe, and tailored to your needs, with fewer annoying ads."
     },
     {
       "angle": "everyday browsing upgrade",
-      "text": "Upgrade your everyday browsing with NordVPN — one of the fastest VPNs available, safe, private, and with no more annoying ads."
+      "text": "Upgrade your everyday browsing with NordVPN \u2014 one of the fastest VPNs available, safe, private, and with no more annoying ads."
     }
   ],
   "link": "",
   "linkText": "Learn more",
   "advSlug": "nordvpn",
-  "active": true
+  "active": true,
+  "advId": "adv_011"
 }

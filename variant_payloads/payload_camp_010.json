@@ -1,6 +1,6 @@
 {
-  "id": "Cam_ExpressVPN",
-  "advertiser": "Express VPN",
+  "id": "camp_010",
+  "advertiser": "ExpressVPN",
   "category": "tech",
   "cpmGBP": 19,
   "budgetDailyGBP": 50,
@@ -17,15 +17,15 @@
   "variants": [
     {
       "angle": "speed",
-      "text": "ExpressVPN offers blazing-fast speeds with an ultra-secure connection — browse, stream, and download without slowdowns. Try risk-free."
+      "text": "ExpressVPN offers blazing-fast speeds with an ultra-secure connection \u2014 browse, stream, and download without slowdowns. Try risk-free."
     },
     {
       "angle": "24/7 support",
-      "text": "ExpressVPN backs its ultra-secure, fast connections with 24/7 support — help is available whenever you need it. Try risk-free."
+      "text": "ExpressVPN backs its ultra-secure, fast connections with 24/7 support \u2014 help is available whenever you need it. Try risk-free."
     },
     {
       "angle": "streaming and browsing privacy",
-      "text": "Browse and stream privately with ExpressVPN's ultra-secure, blazing-fast connection — built for everyday use. Try risk-free today."
+      "text": "Browse and stream privately with ExpressVPN's ultra-secure, blazing-fast connection \u2014 built for everyday use. Try risk-free today."
     },
     {
       "angle": "risk-free trial",
@@ -39,5 +39,6 @@
   "link": "",
   "linkText": "Learn more",
   "advSlug": "express-vpn",
-  "active": true
+  "active": true,
+  "advId": "adv_010"
 }

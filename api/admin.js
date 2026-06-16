@@ -97,6 +97,7 @@ async function saveCampaign(data) {
   const validation = validateVariants(data.variants);
   const campaign = {
     id: data.id,
+    advId: data.advId || null,
     advertiser: data.advertiser || 'Unknown',
     category: data.category,
     cpmGBP: parseFloat(data.cpmGBP) || 10,
@@ -194,11 +195,21 @@ module.exports = async function handler(req, res) {
     });
   }
 
-  // ---- SEED default campaign ----
+  // ---- SEED default campaign + publishers ----
   if (req.method === 'POST' && url.includes('/admin/seed')) {
     try {
       const { campaign } = await saveCampaign(config.defaultCampaign);
-      return res.status(200).json({ message: 'Seeded default campaign', campaign });
+      // Seed publisher records (Session 8)
+      const pubIds = [];
+      for (const pub of (config.publishers || [])) {
+        await kvSet(`publisher:${pub.pubId}`, {
+          ...pub,
+          createdAt: new Date().toISOString(),
+        });
+        pubIds.push(pub.pubId);
+      }
+      if (pubIds.length) await kvSet('publishers:all', pubIds);
+      return res.status(200).json({ message: 'Seeded default campaign + publishers', campaign, publishers: pubIds });
     } catch (e) {
       return res.status(500).json({ error: 'Seed failed: ' + e.message });
     }

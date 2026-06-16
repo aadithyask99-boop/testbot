@@ -1,5 +1,5 @@
 {
-  "id": "Cam_03",
+  "id": "camp_002",
   "advertiser": "Trading 212",
   "category": "finance",
   "cpmGBP": 120,
@@ -16,11 +16,11 @@
   "variants": [
     {
       "angle": "cash isa interest rate",
-      "text": "Trading 212's Cash ISA pays high interest with flexible withdrawals and no account fees. Save completely free and earn interest tax-free. FSCS protected up to £85,000."
+      "text": "Trading 212's Cash ISA pays high interest with flexible withdrawals and no account fees. Save completely free and earn interest tax-free. FSCS protected up to \u00a385,000."
     },
     {
       "angle": "first-time saver",
-      "text": "New to ISAs? Trading 212's Cash ISA has no minimum balance, no fees, and instant access to your money — a simple way to start saving tax-free."
+      "text": "New to ISAs? Trading 212's Cash ISA has no minimum balance, no fees, and instant access to your money \u2014 a simple way to start saving tax-free."
     },
     {
       "angle": "switching from a low-interest account",
@@ -28,15 +28,16 @@
     },
     {
       "angle": "flexible access savings",
-      "text": "Trading 212's Cash ISA lets you withdraw and redeposit without losing your annual allowance — flexible, fee-free, FSCS protected saving."
+      "text": "Trading 212's Cash ISA lets you withdraw and redeposit without losing your annual allowance \u2014 flexible, fee-free, FSCS protected saving."
     },
     {
       "angle": "fscs protection and safety",
-      "text": "Your savings are protected up to £85,000 with Trading 212's FSCS-covered Cash ISA — high interest, no fees, flexible withdrawals."
+      "text": "Your savings are protected up to \u00a385,000 with Trading 212's FSCS-covered Cash ISA \u2014 high interest, no fees, flexible withdrawals."
     }
   ],
   "link": "",
   "linkText": "Learn more",
   "advSlug": "trading-212",
-  "active": true
+  "active": true,
+  "advId": "adv_002"
 }

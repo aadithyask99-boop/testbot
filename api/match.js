@@ -11,6 +11,7 @@
 // ============================================================
 
 const { runMatch } = require('../lib/relevance');
+const { getPubId } = require('../lib/demo-pages');
 
 async function readBody(req) {
   let body = '';
@@ -51,6 +52,11 @@ module.exports = async function handler(req, res) {
       bodySample: body.bodySample || body.firstParagraph || '',
       publisherCategory: body.publisherCategory || null,
     });
+    // Session 8: include pubId from demo-pages lookup so the Worker
+    // can pass it through to /impression for per-publisher tracking.
+    // In production, the Worker would know its own pubId from config.
+    const urlPath = new URL(body.url, 'https://x').pathname;
+    result.pubId = getPubId(urlPath) || null;
     return res.status(200).json(result);
   } catch (e) {
     console.error('/match error:', e.message);

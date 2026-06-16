@@ -1,5 +1,5 @@
 {
-  "id": "Cam_01",
+  "id": "camp_007",
   "advertiser": "Freetrade",
   "category": "finance",
   "cpmGBP": 10,
@@ -29,7 +29,7 @@
     },
     {
       "angle": "junior isa for children",
-      "text": "Start investing for a child's future with a Freetrade JISA — commission-free access to 7,600+ investments in one simple app."
+      "text": "Start investing for a child's future with a Freetrade JISA \u2014 commission-free access to 7,600+ investments in one simple app."
     },
     {
       "angle": "wide investment choice",
@@ -39,5 +39,6 @@
   "link": "",
   "linkText": "Learn more",
   "advSlug": "freetrade",
-  "active": true
+  "active": true,
+  "advId": "adv_007"
 }

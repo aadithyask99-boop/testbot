@@ -1,0 +1,43 @@
+{
+  "id": "camp_003",
+  "advertiser": "Interactive Investor",
+  "category": "finance",
+  "cpmGBP": 100,
+  "budgetDailyGBP": 50,
+  "budgetTotalGBP": 500,
+  "keywords": [
+    "isa provider",
+    "investment",
+    "capital",
+    "sipp",
+    "stocks and shares isa"
+  ],
+  "matchingDescription": "UK stocks and shares ISA, investment platform, SIPP, flat-fee pricing",
+  "variants": [
+    {
+      "angle": "award-winning isa",
+      "text": "Open an award-winning Stocks and Shares ISA with interactive investor \u2014 start investing tax-efficiently. Capital at risk; tax rules may change."
+    },
+    {
+      "angle": "flat-fee pricing",
+      "text": "interactive investor charges a flat monthly fee rather than a percentage \u2014 for larger portfolios this can mean significantly lower costs over time."
+    },
+    {
+      "angle": "sipp and pension consolidation",
+      "text": "Consolidate old pensions into a SIPP with interactive investor and manage your retirement investments alongside your ISA in one place."
+    },
+    {
+      "angle": "long-term investor",
+      "text": "For investors building a long-term portfolio, interactive investor's award-winning ISA gives access to thousands of UK and global investments."
+    },
+    {
+      "angle": "experienced investor tools",
+      "text": "interactive investor's Stocks and Shares ISA offers research tools and a wide investment range suited to hands-on, experienced investors."
+    }
+  ],
+  "link": "",
+  "linkText": "Learn more",
+  "advSlug": "interactive-investor",
+  "active": true,
+  "advId": "adv_003"
+}

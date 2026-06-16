@@ -223,13 +223,28 @@ function injectIntoResponse(response, injectedHtml, paragraphCount) {
 // ------------------------------------------------------------
 // Fire-and-forget impression logging. Failures are non-fatal — an
 // impression-logging hiccup must never affect what's served.
+// Session 8: passes full match metadata so Worker-sourced log:recent
+// entries have the same shape as api/index.js entries — fixes the
+// dashboard's Why-box showing only "X served." for Worker impressions.
 // ------------------------------------------------------------
-async function logImpression(ctx, { campaignId, variantId, platform, crawlerType, url, advertiser, cpmGBP }) {
+async function logImpression(ctx, { campaignId, variantId, platform, crawlerType, url, advertiser, cpmGBP,
+  pubId, matchMethod, matchCached, matchCategory, relevanceScore, candidates, variantAngle, variantMethod }) {
   ctx.waitUntil(
     fetch(`${PLATFORM_URL}/impression`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ campaignId, variantId, platform, crawlerType, url, advertiser, cpmGBP, source: 'worker' }),
+      body: JSON.stringify({
+        campaignId, variantId, platform, crawlerType, url, advertiser, cpmGBP, source: 'worker',
+        pubId: pubId || null,
+        matchMethod: matchMethod || null,
+        matchCached: matchCached || false,
+        matchCategory: matchCategory || null,
+        relevanceScore: relevanceScore || null,
+        candidates: candidates || null,
+        variantAngle: variantAngle || null,
+        variantMethod: variantMethod || null,
+        served: 'yes',
+      }),
     }).catch(e => console.error('impression log failed (non-fatal):', e.message))
   );
 }
@@ -315,6 +330,15 @@ export default {
       url: url.toString(),
       advertiser: winner.advertiser,
       cpmGBP: winner.cpmGBP,
+      // Session 8: full match metadata for Why-box + per-publisher tracking
+      pubId: matchResult.pubId || null,
+      matchMethod: matchResult.method || null,
+      matchCached: matchResult.cached || false,
+      matchCategory: matchResult.category || null,
+      relevanceScore: matchResult.relevanceScore || null,
+      candidates: matchResult.candidates || null,
+      variantAngle: (variant && variant.angle) || null,
+      variantMethod: matchResult.variantMethod || null,
     });
 
     return modifiedResponse;

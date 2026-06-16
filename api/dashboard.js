@@ -1,6 +1,7 @@
 const { kvGet, kvSet, kvListGet, kvHashGetAll } = require('../lib/kv');
 const { getCampaignSpend } = require('../lib/auction');
 const config = require('../lib/config');
+const { listPages } = require('../lib/demo-pages');
 
 const PLATFORM_URL = process.env.PLATFORM_URL || 'https://testbot-two-psi.vercel.app';
 
@@ -100,55 +101,122 @@ module.exports = async function handler(req, res) {
       }
     }
 
-    const pageBoard = Object.keys(pageServingMap).map(url => {
-      const e = pageServingMap[url];
-      // Resolve the actual served creative text for the Live Auction Board —
-      // look up the campaign that won and find the variant that was selected,
-      // so the board shows WHAT was injected, not just who won.
-      let variantText = null;
-      if (e.campaignId && e.variantId) {
-        const variants = variantLookup[e.campaignId] || [];
-        const v = variants.find(x => x.id === e.variantId);
-        variantText = (v && v.text) || null;
-      }
-      return {
-        url,
-        category:       e.matchCategory || null,
-        servingId:      e.campaignId,
-        servingAdv:     e.advertiser,
-        servingCpmGBP:  e.cpmGBP || null,
-        method:         e.matchMethod || null,
-        cached:         !!e.matchCached,
-        relevanceScore: e.relevanceScore || null,
-        variantId:      e.variantId || null,
-        variantAngle:   e.variantAngle || null,
-        variantMethod:  e.variantMethod || null,
-        variantText,
-        lastPlatform:   e.platform || null,
-        lastCrawl:      e.time || null,
-        candidates:     e.candidates || null,
-      };
-    });
-    // Also capture pages where the latest crawl served NOTHING (strict mode,
-    // off-topic, all over budget) so the board shows them honestly too.
+    // Build latest-entry-per-URL maps from logs. Needed for pageBoard merge.
     const latestByUrl = {};
     for (const e of (recentBotLogs || [])) {
       const url = e.url || '/';
-      if (!latestByUrl[url]) latestByUrl[url] = e;
+      if (!latestByUrl[url]) latestByUrl[url] = e; // logs are newest-first
     }
-    for (const url of Object.keys(latestByUrl)) {
-      const e = latestByUrl[url];
-      if (e.served === 'none' && !pageServingMap[url]) {
+
+    const pageBoard = [];
+    // Session 8: build the board from ALL known demo pages (listPages()),
+    // not just pages that appear in log:recent. Pages that haven't been
+    // crawled yet show as "not yet crawled" instead of being absent.
+    const knownPages = listPages(); // [{path, slug, category, pubId, publisherName, title}]
+    const knownPaths = new Set(knownPages.map(p => p.path));
+
+    for (const kp of knownPages) {
+      const logEntry = pageServingMap[kp.path]; // most recent SERVED entry
+      const latestEntry = latestByUrl[kp.path]; // most recent entry (any outcome)
+
+      if (logEntry) {
+        // Page was crawled and served — full data available
+        let variantText = null;
+        if (logEntry.campaignId && logEntry.variantId) {
+          const variants = variantLookup[logEntry.campaignId] || [];
+          const v = variants.find(x => x.id === logEntry.variantId);
+          variantText = (v && v.text) || null;
+        }
         pageBoard.push({
-          url,
-          category:      e.matchCategory || null,
-          servingId:     null,
-          servingAdv:    null,
-          method:        e.matchMethod || null,
-          reason:        e.matchReason || null,
-          lastPlatform:  e.platform || null,
-          lastCrawl:     e.time || null,
-          candidates:    e.candidates || null,
+          url: kp.path,
+          title: kp.title || null,
+          pubId: kp.pubId || logEntry.pubId || null,
+          publisherName: kp.publisherName || null,
+          category: logEntry.matchCategory || kp.category || null,
+          servingId: logEntry.campaignId,
+          servingAdv: logEntry.advertiser,
+          servingCpmGBP: logEntry.cpmGBP || null,
+          method: logEntry.matchMethod || null,
+          cached: !!logEntry.matchCached,
+          relevanceScore: logEntry.relevanceScore || null,
+          variantId: logEntry.variantId || null,
+          variantAngle: logEntry.variantAngle || null,
+          variantMethod: logEntry.variantMethod || null,
+          variantText,
+          lastPlatform: logEntry.platform || null,
+          lastCrawl: logEntry.time || null,
+          candidates: logEntry.candidates || null,
+          source: logEntry.source || 'demo',
+        });
+      } else if (latestEntry && latestEntry.served === 'none') {
+        // Page was crawled but nothing served (off-topic, no budget, etc.)
+        pageBoard.push({
+          url: kp.path,
+          title: kp.title || null,
+          pubId: kp.pubId || latestEntry.pubId || null,
+          publisherName: kp.publisherName || null,
+          category: latestEntry.matchCategory || kp.category || null,
+          servingId: null,
+          servingAdv: null,
+          method: latestEntry.matchMethod || null,
+          reason: latestEntry.matchReason || null,
+          lastPlatform: latestEntry.platform || null,
+          lastCrawl: latestEntry.time || null,
+          candidates: latestEntry.candidates || null,
+          source: latestEntry.source || 'demo',
+        });
+      } else {
+        // Page has never been crawled — show as pending
+        pageBoard.push({
+          url: kp.path,
+          title: kp.title || null,
+          pubId: kp.pubId || null,
+          publisherName: kp.publisherName || null,
+          category: kp.category || null,
+          servingId: null,
+          servingAdv: null,
+          method: null,
+          reason: 'not_yet_crawled',
+          lastPlatform: null,
+          lastCrawl: null,
+          candidates: null,
+        });
+      }
+    }
+
+    // Also include any URLs from logs that aren't in the known demo pages
+    // (e.g. Worker-proxied external pages in future)
+    for (const url of Object.keys(latestByUrl)) {
+      if (knownPaths.has(url)) continue; // already handled above
+      const e = latestByUrl[url];
+      if (pageServingMap[url]) {
+        const logEntry = pageServingMap[url];
+        let variantText = null;
+        if (logEntry.campaignId && logEntry.variantId) {
+          const variants = variantLookup[logEntry.campaignId] || [];
+          const v = variants.find(x => x.id === logEntry.variantId);
+          variantText = (v && v.text) || null;
+        }
+        pageBoard.push({
+          url, title: null, pubId: logEntry.pubId || null, publisherName: null,
+          category: logEntry.matchCategory || null,
+          servingId: logEntry.campaignId, servingAdv: logEntry.advertiser,
+          servingCpmGBP: logEntry.cpmGBP || null,
+          method: logEntry.matchMethod || null, cached: !!logEntry.matchCached,
+          relevanceScore: logEntry.relevanceScore || null,
+          variantId: logEntry.variantId || null, variantAngle: logEntry.variantAngle || null,
+          variantMethod: logEntry.variantMethod || null, variantText,
+          lastPlatform: logEntry.platform || null, lastCrawl: logEntry.time || null,
+          candidates: logEntry.candidates || null, source: logEntry.source || 'unknown',
+        });
+      } else if (e.served === 'none') {
+        pageBoard.push({
+          url, title: null, pubId: e.pubId || null, publisherName: null,
+          category: e.matchCategory || null,
+          servingId: null, servingAdv: null,
+          method: e.matchMethod || null, reason: e.matchReason || null,
+          lastPlatform: e.platform || null, lastCrawl: e.time || null,
+          candidates: e.candidates || null, source: e.source || 'unknown',
         });
       }
     }
@@ -353,8 +421,17 @@ module.exports = async function handler(req, res) {
 
     // ── ADVERTISER VIEW ────────────────────────────────────────
     if (view === 'advertiser') {
+      // Session 8: publisher/advertiser lists for account pickers
+      const publisherList = (config.publishers || []).map(p => ({
+        pubId: p.pubId, name: p.name,
+      }));
+      const advertiserList = [...new Set(campaignList.map(c => c.advertiser))].sort()
+        .map(name => ({ name, campaigns: campaignList.filter(c => c.advertiser === name).length }));
+
       return res.status(200).json({
         _view: 'advertiser',
+        publishers: publisherList,
+        advertisers: advertiserList,
         // Per-page live board: what's actually serving on each page right now,
         // with the full candidate breakdown per resolved auction. Real logs.
         pageBoard,
@@ -427,8 +504,14 @@ module.exports = async function handler(req, res) {
 
     // ── PUBLISHER VIEW ─────────────────────────────────────────
     if (view === 'publisher') {
+      const publisherList = (config.publishers || []).map(p => ({
+        pubId: p.pubId, name: p.name,
+      }));
+
       return res.status(200).json({
         _view: 'publisher',
+        publishers: publisherList,
+        pageBoard,
         campaign: cc ? {
           advertiser: cc.advertiser,
           category:   cc.category,
@@ -476,10 +559,19 @@ module.exports = async function handler(req, res) {
     }
 
     // ── OPERATOR VIEW (default) ─────────────────────────────────
+    // Session 8: include publisher/advertiser lists for account pickers
+    const publisherList = (config.publishers || []).map(p => ({
+      pubId: p.pubId, name: p.name, active: p.active !== false,
+    }));
+    const advertiserList = [...new Set(campaignList.map(c => c.advertiser))].sort()
+      .map(name => ({ name, campaigns: campaignList.filter(c => c.advertiser === name).length }));
+
     return res.status(200).json({
       _view: 'operator',
       pageBoard,
       campaigns: campaignList,
+      publishers: publisherList,
+      advertisers: advertiserList,
       summary: {
         totalImpressions:  impressions,
         todayImpressions:  n(todayImpressions),

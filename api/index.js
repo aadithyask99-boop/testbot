@@ -111,6 +111,7 @@ module.exports = async function handler(req, res) {
             matchCategory: matchResult.category || null,
             matchCached: matchResult.cached || false,
             candidates: matchResult.candidates || null,
+            pubId: page.pubId || null,
           }, 100),
         ]);
       } catch (e) {}
@@ -143,6 +144,12 @@ module.exports = async function handler(req, res) {
         kvIncr(`stats:impressions:type:${detection.crawlerType || 'unknown'}`),
         kvIncr(`stats:impressions:date:${today}`),
         kvHashIncr('stats:impr_by_platform', detection.platform || 'unknown'),
+        // Per-publisher impression tracking (Session 8)
+        ...(page.pubId ? [
+          kvIncr(`stats:impressions:pub:${page.pubId}:total`),
+          kvIncr(`stats:impressions:pub:${page.pubId}:date:${today}`),
+          kvHashIncr(`stats:impr_by_pub_plat:${page.pubId}`, detection.platform || 'unknown'),
+        ] : []),
         kvListPush('log:recent', {
           time: new Date().toISOString(),
           ip,
@@ -161,6 +168,7 @@ module.exports = async function handler(req, res) {
           relevanceScore: matchResult.relevanceScore || null,
           matchCategory: matchResult.category || null,
           candidates: matchResult.candidates || null,
+          pubId: page.pubId || null,
         }, 100),
       ]);
     } catch (e) {}
