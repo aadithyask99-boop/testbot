@@ -565,7 +565,8 @@ var html = '<!DOCTYPE html>' +
 '  }).join(""):"<tr><td colspan=\'5\' class=\'empty\'>No visits yet</td></tr>");' +
 '}' +
 'function load(){' +
-'  Promise.all([fetch("/dashboard"),fetch("/dashboard?view=advertiser"),fetch("/dashboard?view=publisher")])' +
+'  var pubQ=selectedPublisher?("&pubId="+encodeURIComponent(selectedPublisher)):"";' +
+'  Promise.all([fetch("/dashboard"),fetch("/dashboard?view=advertiser"),fetch("/dashboard?view=publisher"+pubQ)])' +
 '  .then(function(rs){return Promise.all(rs.map(function(r){return r.json();}));})' +
 '  .then(function(data){' +
 '    opData=data[0];advData=data[1];pubData=data[2];' +

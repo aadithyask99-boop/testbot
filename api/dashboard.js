@@ -508,53 +508,92 @@ module.exports = async function handler(req, res) {
         pubId: p.pubId, name: p.name,
       }));
 
+      // Session 8: scope stats to selected publisher if pubId param provided.
+      const pubId = (req.query && req.query.pubId) || null;
+
+      // Per-publisher impression counts from KV counters
+      let pubImpressions = impressions;
+      let pubTodayImpressions = n(todayImpressions);
+      let pubRevenueGBP = revenueGBP;
+      let pubFillRatePct = fillRatePct;
+      let pubPageBoard = pageBoard;
+
+      if (pubId) {
+        const [pubTotalRaw, pubTodayRaw] = await Promise.all([
+          kvGet('stats:impressions:pub:' + pubId + ':total'),
+          kvGet('stats:impressions:pub:' + pubId + ':date:' + today),
+        ]);
+        pubImpressions = n(pubTotalRaw);
+        pubTodayImpressions = n(pubTodayRaw);
+        pubRevenueGBP = (pubImpressions * campaignCPM) / 1000;
+        pubPageBoard = pageBoard.filter(p => p.pubId === pubId);
+        const pubServed = pubPageBoard.filter(p => p.servingId).length;
+        pubFillRatePct = pubPageBoard.length > 0
+          ? Math.round((pubServed / pubPageBoard.length) * 100)
+          : null;
+      }
+
+      // Winning creative: highest-CPM campaign serving on this publisher's pages
+      let pubWinningCampaign = cc;
+      if (pubId && pubPageBoard.length > 0) {
+        const serving = pubPageBoard
+          .filter(p => p.servingId)
+          .sort((a, b) => (b.servingCpmGBP || 0) - (a.servingCpmGBP || 0));
+        if (serving.length > 0) {
+          pubWinningCampaign = campaignList.find(c => c.id === serving[0].servingId) || cc;
+        } else {
+          pubWinningCampaign = null;
+        }
+      }
+
+      // Recent visits scoped to publisher pages
+      const pubUrls = new Set(pubPageBoard.map(p => p.url));
+      const pubRecentVisits = (recentBotLogs || [])
+        .filter(e => !pubId || pubUrls.has(e.url || '/'))
+        .slice(0, 10);
+
       return res.status(200).json({
         _view: 'publisher',
         publishers: publisherList,
-        pageBoard,
-        campaign: cc ? {
-          advertiser: cc.advertiser,
-          category:   cc.category,
-          cpmGBP:     cc.cpmGBP,
-          text:       cc.text,      // publisher sees what's injected on their pages
-          advSlug:    cc.advSlug,
+        pageBoard: pubPageBoard,
+        campaign: pubWinningCampaign ? {
+          advertiser: pubWinningCampaign.advertiser,
+          category:   pubWinningCampaign.category,
+          cpmGBP:     pubWinningCampaign.cpmGBP,
+          text:       pubWinningCampaign.text,
+          advSlug:    pubWinningCampaign.advSlug,
         } : {
           advertiser: 'No active campaign',
           category:   '',
           cpmGBP:     null,
           text:       '',
-          note:       'No campaign is currently winning the auction (none active, in-budget, and in-date).',
+          note:       'No campaign is currently winning the auction on your pages.',
         },
-        // Publisher sees the WINNING CPM and how many advertisers are competing —
-        // not the itemised bid list (competitors' pricing stays private).
         auction: {
           competitorCount: eligibleCount,
-          winningCPM:      cc ? cc.cpmGBP : null,
+          winningCPM:      pubWinningCampaign ? pubWinningCampaign.cpmGBP : null,
         },
         earnings: {
-          estimatedGBP:    parseFloat((revenueGBP * 0.8).toFixed(4)),
+          estimatedGBP:    parseFloat((pubRevenueGBP * 0.8).toFixed(4)),
           revenueSharePct: 80,
-          grossGBP:        parseFloat(revenueGBP.toFixed(4)),
+          grossGBP:        parseFloat(pubRevenueGBP.toFixed(4)),
           vcpmGBP:         blendedVcpm,
         },
         traffic: {
-          totalImpressions: impressions,
+          totalImpressions:    pubImpressions,
           viewableImpressions: totalViewable,
-          today:            n(todayImpressions),
-          fillRatePct:      fillRatePct,
-          byPlatform:       platformTable,
+          today:               pubTodayImpressions,
+          fillRatePct:         pubFillRatePct,
+          byPlatform:          platformTable,
         },
         clicks: {
           total:      pubClicks,
           unique:     uniqClicks,
           today:      n(todayPubClicks),
-          // CTR only meaningful once real referrer clicks exist. Showing a
-          // CTR computed from zero (or stale) clicks produced a misleading
-          // 100% figure — suppress until there is genuine click data.
-          overallCTR: pubClicks > 0 ? pct(pubClicks, impressions) : null,
-          uniqueCTR:  uniqClicks > 0 ? pct(uniqClicks, impressions) : null,
+          overallCTR: pubClicks > 0 ? pct(pubClicks, pubImpressions) : null,
+          uniqueCTR:  uniqClicks > 0 ? pct(uniqClicks, pubImpressions) : null,
         },
-        recentVisits: (recentBotLogs || []).slice(0, 10),
+        recentVisits: pubRecentVisits,
       });
     }
 
