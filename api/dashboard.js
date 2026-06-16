@@ -541,10 +541,26 @@ module.exports = async function handler(req, res) {
           .sort((a, b) => (b.servingCpmGBP || 0) - (a.servingCpmGBP || 0));
         if (serving.length > 0) {
           pubWinningCampaign = campaignList.find(c => c.id === serving[0].servingId) || cc;
+          // Attach the currently-serving variant text so publisher sees what's injected
+          if (pubWinningCampaign && serving[0].variantId) {
+            const winVariant = (pubWinningCampaign.variants || [])
+              .find(v => v.id === serving[0].variantId);
+            pubWinningCampaign = {
+              ...pubWinningCampaign,
+              text: (winVariant && winVariant.text) || pubWinningCampaign.text || '',
+            };
+          }
         } else {
           pubWinningCampaign = null;
         }
       }
+
+      // Viewable impressions scoped to publisher (retrieval only on their pages)
+      const pubViewable = pubPageBoard.reduce((sum, p) => {
+        if (!p.servingId) return sum;
+        const camp = campaignList.find(c => c.id === p.servingId);
+        return sum + ((camp && camp.viewableImpressions) || 0);
+      }, 0);
 
       // Recent visits scoped to publisher pages
       const pubUrls = new Set(pubPageBoard.map(p => p.url));
@@ -581,7 +597,7 @@ module.exports = async function handler(req, res) {
         },
         traffic: {
           totalImpressions:    pubImpressions,
-          viewableImpressions: totalViewable,
+          viewableImpressions: pubId ? pubViewable : totalViewable,
           today:               pubTodayImpressions,
           fillRatePct:         pubFillRatePct,
           byPlatform:          platformTable,
