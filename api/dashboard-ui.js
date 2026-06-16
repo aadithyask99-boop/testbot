@@ -579,3 +579,4 @@ var html = '<!DOCTYPE html>' +
 '}' +
 'load();setInterval(load,5000);' +
 '</script></body></html>';
+
