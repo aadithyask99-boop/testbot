@@ -538,3 +538,38 @@ When an advertiser is selected, the Live Auction Board should show all pages whe
 
 ### GitHub PAT configured for direct pushes
 PAT stored in git remote URL in Claude environment. Direct git push works. Scoped to aadithyask99-boop org with repo access.
+
+---
+
+## Session 9: Publisher Integration Architecture
+
+### How publisher onboarding actually works
+
+The platform uses a Cloudflare Worker for server-side injection. AI crawlers don't execute JavaScript, so a `<script>` tag approach doesn't work — injection must happen at the HTTP response level before HTML reaches the crawler.
+
+**The correct onboarding flow:**
+
+1. Publisher already uses Cloudflare (most do for CDN/DDoS protection)
+2. We create a Worker script configured for their site:
+   - `ORIGIN_URL` = their site (e.g. `https://financeweekly.co.uk`)
+   - `PLATFORM_URL` = our platform API (`https://testbot-two-psi.vercel.app`)
+   - `PUB_ID` = their publisher ID (e.g. `pub_001`)
+   - `PUB_TOKEN` = their auth token (e.g. `pk_pub_001_financeweekly`)
+3. Publisher goes to Cloudflare dashboard → Workers & Pages → Create Worker → pastes our script
+4. Publisher adds a route: `*.theirsite.com/*`
+5. Done — no DNS changes, no server changes, no CMS changes
+
+The Worker intercepts bot traffic at the Cloudflare edge:
+- Bot hits `financeweekly.co.uk/articles/best-isa-2026`
+- Cloudflare Worker fires before the request reaches the origin
+- Worker detects bot UA → calls /match → gets winning campaign → injects ad → serves modified HTML
+- Human hits same URL → Worker passes through cleanly → origin serves unmodified page
+
+**If publisher is NOT already on Cloudflare:**
+They point their domain's nameservers to Cloudflare (one-time setup, Cloudflare guides them through it). After that, same flow as above.
+
+**Our demo setup (why it looks different):**
+The demo Vercel sites (`finance-weekly.vercel.app`, `tech-briefing-tau.vercel.app`) don't have custom domains, so we can't put Cloudflare in front of them at DNS level. Instead the Workers run as standalone proxies (`finance-weekly-worker.projectatlas.workers.dev`) that fetch from the Vercel origin. This is architecturally equivalent — just accessed via the Worker URL instead of the publisher's domain URL. For a real publisher with a custom domain on Cloudflare, the Worker URL and the publisher URL would be the same thing.
+
+**What "the script we send publishers" actually is:**
+Not a `<script>` tag. It's a Cloudflare Worker script (~400 lines) with 4 config constants at the top that the publisher customises. Everything else is platform code they never need to touch.
