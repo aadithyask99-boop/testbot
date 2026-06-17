@@ -65,20 +65,52 @@ const BOT_PATTERNS = [
   { "name": "Doubao (ByteDance)", "patterns": ["Doubaobot", "TikTokSpider"], "type": "training", "cloakingRisk": false },
 ];
 
-// Detect a bot from the User-Agent. Returns { isBot, name, type,
-// cloakingRisk } or { isBot: false }. v1: simple substring match,
-// case-sensitive (matches lib/detector.js's behaviour for these entries
-// — the patterns themselves include both-case variants where relevant,
-// e.g. "Claude-User" and "claude-user" as separate entries).
-function detectBot(userAgent) {
+// Detect a bot from the User-Agent and request headers.
+// Returns { isBot, name, type, cloakingRisk, detectionMethod } or { isBot: false }.
+// v2: adds anonymous crawler detection for bots faking browser UAs (e.g. DeepSeek).
+// Mirrors lib/combined-detector.js's anonymous_crawler path.
+function detectBot(userAgent, request) {
   if (!userAgent) return { isBot: false };
+
+  // Layer 1: UA pattern match (self-identifying bots)
   for (const entry of BOT_PATTERNS) {
     for (const pattern of entry.patterns) {
       if (userAgent.includes(pattern)) {
-        return { isBot: true, name: entry.name, type: entry.type, cloakingRisk: entry.cloakingRisk };
+        return {
+          isBot: true,
+          name: entry.name,
+          type: entry.type,
+          cloakingRisk: entry.cloakingRisk,
+          detectionMethod: 'ua_match',
+          confidence: 85,
+        };
       }
     }
   }
+
+  // Layer 2: Anonymous crawler detection (DeepSeek pattern)
+  // Real Chrome/Chromium browsers ALWAYS send Accept-Language, sec-ch-ua,
+  // or sec-fetch-mode. A Chrome UA without ANY of these is not a real browser.
+  if (request) {
+    const uaLower = userAgent.toLowerCase();
+    const claimsToBeChrome = uaLower.includes('chrome') || uaLower.includes('webkit');
+    const hasBrowserProof = !!(
+      request.headers.get('accept-language') ||
+      request.headers.get('sec-ch-ua') ||
+      request.headers.get('sec-fetch-mode')
+    );
+    if (claimsToBeChrome && !hasBrowserProof) {
+      return {
+        isBot: true,
+        name: 'Anonymous Crawler (DeepSeek pattern)',
+        type: 'retrieval',
+        cloakingRisk: false,
+        detectionMethod: 'anonymous_crawler',
+        confidence: 75,
+      };
+    }
+  }
+
   return { isBot: false };
 }
 
@@ -275,7 +307,7 @@ export default {
       return originResponse;
     }
 
-    const detection = detectBot(ua);
+    const detection = detectBot(ua, request);
 
     // Human, or a bot we don't recognise: pass through unmodified.
     // Cloaking-risk bots (Googlebot/GoogleOther): pass through
