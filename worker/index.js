@@ -301,10 +301,16 @@ export default {
     const url = new URL(request.url);
     const ua = request.headers.get('User-Agent') || '';
 
+    // originUrl: the canonical URL of this page on the publisher's site.
+    // Used in /match and /impression so logs show the real publisher URL
+    // (e.g. https://finance-weekly.vercel.app/articles/best-isa-2026.html)
+    // rather than the Worker proxy URL.
+    const originUrl = ORIGIN_URL + url.pathname + url.search;
+
     // Fetch the origin page. v1: ORIGIN_URL is hardcoded to
     // testbot-two-psi.vercel.app itself (proof-of-concept). For a real
     // publisher, this becomes their own origin (e.g. via env binding).
-    const originRequest = new Request(ORIGIN_URL + url.pathname + url.search, {
+    const originRequest = new Request(originUrl, {
       method: request.method,
       headers: new Headers(request.headers),
     });
@@ -340,7 +346,7 @@ export default {
           'X-Pub-Token': PUB_TOKEN,
         },
         body: JSON.stringify({
-          url: url.toString(),
+          url: originUrl,
           title: signals.title,
           metaDescription: signals.metaDescription,
           firstParagraph: signals.firstParagraph,
@@ -375,7 +381,7 @@ export default {
       variantId: variant.id,
       platform: detection.name,
       crawlerType: detection.type,
-      url: url.toString(),
+      url: originUrl,
       advertiser: winner.advertiser,
       cpmGBP: winner.cpmGBP,
       // Session 8: full match metadata for Why-box + per-publisher tracking

@@ -185,10 +185,32 @@ module.exports = async function handler(req, res) {
     }
 
     // Also include any URLs from logs that aren't in the known demo pages
-    // (e.g. Worker-proxied external pages in future)
+    // (Worker-proxied real publisher pages). Match by domain to publisher.
+    const pubDomainMap = {};
+    for (const pub of (config.publishers || [])) {
+      for (const domain of (pub.domains || [])) {
+        pubDomainMap[domain] = pub;
+      }
+    }
+
     for (const url of Object.keys(latestByUrl)) {
       if (knownPaths.has(url)) continue; // already handled above
       const e = latestByUrl[url];
+
+      // Resolve publisher from URL domain or pubId on log entry
+      let pubName = null;
+      let resolvedPubId = e.pubId || null;
+      try {
+        const domain = new URL(url).hostname;
+        const pub = pubDomainMap[domain];
+        if (pub) { pubName = pub.name; resolvedPubId = resolvedPubId || pub.pubId; }
+      } catch {}
+      // Also resolve by pubId from log entry
+      if (!pubName && resolvedPubId) {
+        const pub = (config.publishers || []).find(p => p.pubId === resolvedPubId);
+        if (pub) pubName = pub.name;
+      }
+
       if (pageServingMap[url]) {
         const logEntry = pageServingMap[url];
         let variantText = null;
@@ -198,7 +220,7 @@ module.exports = async function handler(req, res) {
           variantText = (v && v.text) || null;
         }
         pageBoard.push({
-          url, title: null, pubId: logEntry.pubId || null, publisherName: null,
+          url, title: null, pubId: resolvedPubId, publisherName: pubName,
           category: logEntry.matchCategory || null,
           servingId: logEntry.campaignId, servingAdv: logEntry.advertiser,
           servingCpmGBP: logEntry.cpmGBP || null,
@@ -207,16 +229,16 @@ module.exports = async function handler(req, res) {
           variantId: logEntry.variantId || null, variantAngle: logEntry.variantAngle || null,
           variantMethod: logEntry.variantMethod || null, variantText,
           lastPlatform: logEntry.platform || null, lastCrawl: logEntry.time || null,
-          candidates: logEntry.candidates || null, source: logEntry.source || 'unknown',
+          candidates: logEntry.candidates || null, source: logEntry.source || 'worker',
         });
       } else if (e.served === 'none') {
         pageBoard.push({
-          url, title: null, pubId: e.pubId || null, publisherName: null,
+          url, title: null, pubId: resolvedPubId, publisherName: pubName,
           category: e.matchCategory || null,
           servingId: null, servingAdv: null,
           method: e.matchMethod || null, reason: e.matchReason || null,
           lastPlatform: e.platform || null, lastCrawl: e.time || null,
-          candidates: e.candidates || null, source: e.source || 'unknown',
+          candidates: e.candidates || null, source: e.source || 'worker',
         });
       }
     }
@@ -440,9 +462,20 @@ module.exports = async function handler(req, res) {
         // dashboard's "Recent Match Decisions" table can read them directly.
         // Includes served AND unserved entries — the diagnostic value is
         // seeing WHY matching rejects things, not just successes.
-        recentMatches: (recentBotLogs || []).slice(0, 15).map(e => ({
+        recentMatches: (recentBotLogs || []).slice(0, 15).map(e => {
+          // Normalise URL — strip Worker proxy domain so dashboard shows
+          // just the path (e.g. /articles/best-isa-2026.html) regardless
+          // of whether impression came from demo path or real Worker.
+          let displayUrl = e.url || null;
+          try {
+            if (displayUrl && displayUrl.startsWith('http')) {
+              const u = new URL(displayUrl);
+              displayUrl = u.pathname + (u.search || '');
+            }
+          } catch {}
+          return ({
           time:           e.time,
-          url:            e.url || null,
+          url:            displayUrl,
           platform:       e.platform,
           crawlerType:    e.crawlerType,
           campaignId:     e.campaignId || null,
@@ -455,7 +488,10 @@ module.exports = async function handler(req, res) {
           relevanceScore: e.relevanceScore || null,
           variantId:      e.variantId || null,
           variantAngle:   e.variantAngle || null,
-        })),
+          pubId:          e.pubId || null,
+          source:         e.source || null,
+        });
+        }),
         aggregate: {
           totalViewable: totalViewable,
           blendedVcpmGBP: blendedVcpm,
