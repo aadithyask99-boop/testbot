@@ -143,7 +143,7 @@ var html = '<!DOCTYPE html>' +
 '  document.getElementById("tab-"+id).classList.add("active");' +
 '  btn.classList.add("active");' +
 '}' +
-'function setPublisher(val){selectedPublisher=val||null;renderPublisher();}' +
+'function setPublisher(val){selectedPublisher=val||null;load();}' +
 'function setAdvertiser(val){selectedAdvertiser=val||null;renderAdvertiser();}' +
 'function populatePickers(){' +
 '  var pp=document.getElementById("pub-picker");' +
