@@ -586,6 +586,6 @@ var html = '<!DOCTYPE html>' +
 '    document.getElementById("ts").textContent="Updated "+new Date().toLocaleTimeString("en-GB");' +
 '  }).catch(function(e){document.getElementById("ts").textContent="Error: "+e.message;});' +
 '}' +
-'load();setInterval(load,5000);' +
+'load();setInterval(load,10000);' +
 '</script></body></html>';
 

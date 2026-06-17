@@ -9,9 +9,17 @@ const PLATFORM_URL = process.env.PLATFORM_URL || 'https://testbot-two-psi.vercel
 // dashboard card. Failure is non-fatal — the card just shows nothing.
 async function getPrecomputeStatus() {
   try {
+    // Cache for 60 seconds — avoids recomputing on every 5s dashboard poll
+    const { kvGet, kvSetWithTTL } = require('../lib/kv');
+    const cached = await kvGet('precompute:meta:status-cache');
+    if (cached && cached.cachedAt && (Date.now() - cached.cachedAt) < 60000) {
+      return cached;
+    }
     const resp = await fetch(`${PLATFORM_URL}/precompute?action=status`);
     if (!resp.ok) return null;
-    return await resp.json();
+    const data = await resp.json();
+    await kvSetWithTTL('precompute:meta:status-cache', { ...data, cachedAt: Date.now() }, 120);
+    return data;
   } catch (e) {
     return null;
   }
