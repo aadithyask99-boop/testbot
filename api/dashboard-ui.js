@@ -138,12 +138,15 @@ var html = '<!DOCTYPE html>' +
 '<script>' +
 'var opData=null,advData=null,pubData=null,formLoaded=false,campFilter=\'all\',selectedCampaign=null,formVariants=[],selectedPublisher=null,selectedAdvertiser=null;' +
 'function switchTab(id,btn){' +
+'  activeView=id;' +
 '  document.querySelectorAll(".tab").forEach(function(t){t.classList.remove("active");});' +
 '  document.querySelectorAll("nav button").forEach(function(b){b.classList.remove("active");});' +
 '  document.getElementById("tab-"+id).classList.add("active");' +
 '  btn.classList.add("active");' +
+'  if(id==="advertiser"&&!advData)loadAdv();' +
+'  if(id==="publisher"&&!pubData)loadPub();' +
 '}' +
-'function setPublisher(val){selectedPublisher=val||null;load();}' +
+'function setPublisher(val){selectedPublisher=val||null;pubData=null;loadPub();}' +
 'function setAdvertiser(val){selectedAdvertiser=val||null;renderAdvertiser();}' +
 'function populatePickers(){' +
 '  var pp=document.getElementById("pub-picker");' +
@@ -573,14 +576,29 @@ var html = '<!DOCTYPE html>' +
 '    return "<tr><td>"+ago(e.time)+"</td><td>"+(e.platform||"—")+"</td><td>"+tag(e.crawlerType||"—",e.crawlerType||"")+"</td><td>"+(e.confidence||0)+"%</td><td>"+what+"</td></tr>";' +
 '  }).join(""):"<tr><td colspan=\'5\' class=\'empty\'>No visits yet</td></tr>");' +
 '}' +
-'function load(){' +
+'var activeView="overview";' +
+'function switchView(v){' +
+'  activeView=v;' +
+'  document.querySelectorAll(".tab-btn").forEach(function(b){b.classList.toggle("active",b.getAttribute("data-tab")===v);});' +
+'  document.querySelectorAll(".tab-pane").forEach(function(p){p.style.display=p.id==="tab-"+v?"":"none";});' +
+'  if(v==="advertiser"&&!advData)loadAdv();' +
+'  if(v==="publisher"&&!pubData)loadPub();' +
+'}' +
+'function loadPub(){' +
 '  var pubQ=selectedPublisher?("&pubId="+encodeURIComponent(selectedPublisher)):"";' +
-'  Promise.all([fetch("/dashboard"),fetch("/dashboard?view=advertiser"),fetch("/dashboard?view=publisher"+pubQ)])' +
-'  .then(function(rs){return Promise.all(rs.map(function(r){return r.json();}));})' +
-'  .then(function(data){' +
-'    opData=data[0];advData=data[1];pubData=data[2];' +
-'    populatePickers();' +
-'    renderOverview();renderAdvertiser();renderPublisher();' +
+'  fetch("/dashboard?view=publisher"+pubQ).then(function(r){return r.json();}).then(function(d){pubData=d;renderPublisher();}).catch(function(){});' +
+'}' +
+'function loadAdv(){' +
+'  fetch("/dashboard?view=advertiser").then(function(r){return r.json();}).then(function(d){advData=d;renderAdvertiser();}).catch(function(){});' +
+'}' +
+'function load(){' +
+'  fetch("/dashboard")' +
+'  .then(function(r){return r.json();})' +
+'  .then(function(d){' +
+'    opData=d;' +
+'    populatePickers();renderOverview();' +
+'    if(activeView==="advertiser"){loadAdv();}' +
+'    if(activeView==="publisher"){loadPub();}' +
 '    if(!formLoaded){addCampaign();formLoaded=true;}' +
 '    if(selectedCampaign){selectCampaign(selectedCampaign);}' +
 '    document.getElementById("ts").textContent="Updated "+new Date().toLocaleTimeString("en-GB");' +
