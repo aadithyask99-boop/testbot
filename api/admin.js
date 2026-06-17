@@ -195,7 +195,36 @@ module.exports = async function handler(req, res) {
     });
   }
 
-  // ---- SEED default campaign + publishers ----
+  // ---- REINDEX campaigns:finance + campaigns:tech from existing campaign:{id} keys ----
+  // Useful after reset-stats clears category indexes. Safe to call any time.
+  if (req.method === 'POST' && url.includes('/admin/reindex')) {
+    try {
+      const { kvList, kvGet, kvSet } = require('../lib/kv');
+      // List all campaign:{id} keys
+      const keyResult = await kvList('campaign:');
+      const keys = (keyResult && keyResult.keys) || [];
+      const financeIds = [];
+      const techIds = [];
+      let found = 0;
+      for (const key of keys) {
+        const camp = await kvGet(key);
+        if (!camp || !camp.id || !camp.category) continue;
+        found++;
+        if (camp.category === 'finance') financeIds.push(camp.id);
+        else if (camp.category === 'tech') techIds.push(camp.id);
+      }
+      await kvSet('campaigns:finance', financeIds);
+      await kvSet('campaigns:tech', techIds);
+      return res.status(200).json({
+        message: 'Reindex complete',
+        found,
+        finance: financeIds,
+        tech: techIds,
+      });
+    } catch (e) {
+      return res.status(500).json({ error: 'Reindex failed: ' + e.message });
+    }
+  }
   if (req.method === 'POST' && url.includes('/admin/seed')) {
     try {
       const { campaign } = await saveCampaign(config.defaultCampaign);
