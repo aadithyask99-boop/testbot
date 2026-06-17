@@ -12,6 +12,19 @@
 
 const { runMatch } = require('../lib/relevance');
 const { getPubId } = require('../lib/demo-pages');
+const { kvGet } = require('../lib/kv');
+
+// Resolve pubId from request — either explicit body field or token auth.
+// Token auth: Worker sends X-Pub-Token header, we look up pub_token:{token} → pubId.
+// Falls back to body.pubId (demo path, no auth required).
+async function resolvePubId(body, req) {
+  const token = (req.headers && req.headers['x-pub-token']) || body.pubToken || null;
+  if (token) {
+    const pubId = await kvGet(`pub_token:${token}`);
+    if (pubId) return pubId;
+  }
+  return body.pubId || null;
+}
 
 async function readBody(req) {
   let body = '';
@@ -44,6 +57,9 @@ module.exports = async function handler(req, res) {
   }
 
   try {
+    // Resolve pubId from token auth or body
+    const resolvedPubId = await resolvePubId(body, req);
+
     const result = await runMatch({
       url: body.url,
       title: body.title || '',
@@ -54,9 +70,9 @@ module.exports = async function handler(req, res) {
     });
     // Session 8: include pubId from demo-pages lookup so the Worker
     // can pass it through to /impression for per-publisher tracking.
-    // In production, the Worker would know its own pubId from config.
+    // Session 9: prefer token-resolved pubId over demo-pages lookup.
     const urlPath = new URL(body.url, 'https://x').pathname;
-    result.pubId = getPubId(urlPath) || null;
+    result.pubId = resolvedPubId || getPubId(urlPath) || null;
     return res.status(200).json(result);
   } catch (e) {
     console.error('/match error:', e.message);

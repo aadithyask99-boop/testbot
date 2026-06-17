@@ -238,21 +238,44 @@ module.exports = async function handler(req, res) {
   if (req.method === 'POST' && url.includes('/admin/seed')) {
     try {
       const { campaign } = await saveCampaign(config.defaultCampaign);
-      // Seed publisher records (Session 8)
+      // Seed publisher records (Session 8+9: now includes token + domains)
       const pubIds = [];
       for (const pub of (config.publishers || [])) {
         await kvSet(`publisher:${pub.pubId}`, {
           pubId: pub.pubId,
           name: pub.name,
           sitemapUrl: pub.sitemapUrl || null,
+          domains: pub.domains || [],
+          token: pub.token || null,
           floorCPM: pub.floorCPM || null,
           active: pub.active !== false,
           createdAt: new Date().toISOString(),
         });
+        // Token → pubId reverse lookup (for fast auth in /match + /impression)
+        if (pub.token) await kvSet(`pub_token:${pub.token}`, pub.pubId);
         pubIds.push(pub.pubId);
       }
       if (pubIds.length) await kvSet('publishers:all', pubIds);
-      return res.status(200).json({ message: 'Seeded default campaign + publishers', campaign, publishers: pubIds });
+
+      // Seed advertiser records (Session 9)
+      const advIds = [];
+      for (const adv of (config.advertisers || [])) {
+        await kvSet(`advertiser:${adv.advId}`, {
+          advId: adv.advId,
+          name: adv.name,
+          status: adv.status || 'active',
+          createdAt: new Date().toISOString(),
+        });
+        advIds.push(adv.advId);
+      }
+      if (advIds.length) await kvSet('advertisers:all', advIds);
+
+      return res.status(200).json({
+        message: 'Seeded default campaign + publishers + advertisers',
+        campaign,
+        publishers: pubIds,
+        advertisers: advIds,
+      });
     } catch (e) {
       return res.status(500).json({ error: 'Seed failed: ' + e.message });
     }

@@ -17,9 +17,17 @@
 // the Worker's fetch, BOTH would inject + log, double-counting.
 // ============================================================
 
-const ORIGIN_URL = 'https://testbot-two-psi.vercel.app';
-const PLATFORM_URL = 'https://testbot-two-psi.vercel.app'; // /match + /impression + /click all live here
-const WORKER_FETCH_UA = 'Mozilla/5.0 (compatible; TestbotWorkerProxy/1.0)';
+// ============================================================
+// PUBLISHER CONFIGURATION — edit these 4 lines when deploying
+// for a new publisher. Everything else is platform code.
+// ============================================================
+const ORIGIN_URL    = 'https://finance-weekly-demo.vercel.app'; // publisher's site
+const PLATFORM_URL  = 'https://testbot-two-psi.vercel.app';     // boop platform
+const PUB_ID        = 'pub_001';                                 // your publisher ID
+const PUB_TOKEN     = 'pk_pub_001_financeweekly';               // your auth token
+// ============================================================
+
+const WORKER_FETCH_UA = 'Mozilla/5.0 (compatible; BoopWorkerProxy/1.0)';
 
 // ------------------------------------------------------------
 // BOT_PATTERNS — generated from lib/detector.js via
@@ -265,7 +273,10 @@ async function logImpression(ctx, { campaignId, variantId, platform, crawlerType
   ctx.waitUntil(
     fetch(`${PLATFORM_URL}/impression`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Pub-Token': PUB_TOKEN,
+      },
       body: JSON.stringify({
         campaignId, variantId, platform, crawlerType, url, advertiser, cpmGBP, source: 'worker',
         pubId: pubId || null,
@@ -324,13 +335,17 @@ export default {
     try {
       const matchResp = await fetch(`${PLATFORM_URL}/match`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Pub-Token': PUB_TOKEN,
+        },
         body: JSON.stringify({
           url: url.toString(),
           title: signals.title,
           metaDescription: signals.metaDescription,
           firstParagraph: signals.firstParagraph,
           bodySample: signals.bodySample,
+          pubId: PUB_ID,
         }),
       });
       matchResult = await matchResp.json();

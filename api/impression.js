@@ -26,7 +26,17 @@
 //         served }
 // ============================================================
 
-const { kvIncr, kvHashIncr, kvListPush } = require('../lib/kv');
+const { kvIncr, kvHashIncr, kvListPush, kvGet } = require('../lib/kv');
+
+// Resolve pubId from token header (Session 9)
+async function resolvePubId(data, req) {
+  const token = (req.headers && req.headers['x-pub-token']) || data.pubToken || null;
+  if (token) {
+    const pubId = await kvGet(`pub_token:${token}`);
+    if (pubId) return pubId;
+  }
+  return data.pubId || null;
+}
 
 async function readBody(req) {
   let body = '';
@@ -60,10 +70,10 @@ module.exports = async function handler(req, res) {
 
   const {
     campaignId, variantId, platform, crawlerType, url, advertiser, cpmGBP, source,
-    // Session 8 match metadata
-    pubId, matchMethod, matchCached, matchCategory, relevanceScore,
+    matchMethod, matchCached, matchCategory, relevanceScore,
     candidates, variantAngle, variantMethod, served,
   } = data;
+  const pubId = await resolvePubId(data, req);
   const today = todayStr();
   const type = crawlerType === 'training' ? 'training' : 'retrieval';
   const plat = platform || 'unknown';
