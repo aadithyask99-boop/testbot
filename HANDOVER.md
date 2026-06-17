@@ -468,3 +468,15 @@ Final files Aadi pulled into the repo at end of Session 4:
 - session4-admin-fixes.zip → delete endpoint, Targeting Description field, btndanger CSS (3 files: api/admin.js, api/dashboard-ui.js, vercel.json)
 
 For new sessions: produce focused zips of changed files only, with clear scope per zip. Aadi unzips into the local repo, commits, pushes.
+
+---
+
+## Session 9 Next Tasks (priority order)
+
+1. **Real AI validation** — ask Perplexity "What are the best ISA accounts in 2026 UK?" and check if Trading 212 or Finance Weekly content surfaces. ChatGPT Browse too. ~25 min lag for Perplexity retrieval.
+
+2. **Publisher floor prices** — `floorCPM` field exists on publisher records but not enforced in auction. Add check in `lib/auction.js`: if `campaign.cpmGBP < publisher.floorCPM` → skip campaign.
+
+3. **Precompute for real publisher pages** — currently `pending` because Vercel can't fetch remote HTML. Options: (a) have Worker send full text to `/precompute/notify` endpoint on first crawl, or (b) accept lazy classification (happens on first bot crawl anyway).
+
+4. **Cloudflare Workers redeployed** with Readability-lite + full text extraction — verify by crawling and checking relevance scores improve for edge cases (broadband, antivirus pages).
