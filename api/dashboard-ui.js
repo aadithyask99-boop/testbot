@@ -143,7 +143,11 @@ var html = '<!DOCTYPE html>' +
 '  document.getElementById("tab-"+id).classList.add("active");' +
 '  btn.classList.add("active");' +
 '}' +
-'function setPublisher(val){selectedPublisher=val||null;load();}' +
+'function setPublisher(val){' +
+'  selectedPublisher=val||null;' +
+'  var pubQ=selectedPublisher?("&pubId="+encodeURIComponent(selectedPublisher)):"";' +
+'  fetch("/dashboard?view=publisher"+pubQ).then(function(r){return r.json();}).then(function(d){pubData=d;renderPublisher();}).catch(function(){});' +
+'}' +
 'function setAdvertiser(val){selectedAdvertiser=val||null;renderAdvertiser();}' +
 'function populatePickers(){' +
 '  var pp=document.getElementById("pub-picker");' +

@@ -152,6 +152,14 @@ module.exports = async function handler(req, res) {
                   `impr:retrieval:${id}:${today}`, `impr:training:${id}:${today}`);
       }
     }
+    // Add per-publisher impression counters
+    for (const pub of (config.publishers || [])) {
+      keys.push(
+        `stats:impressions:pub:${pub.pubId}:total`,
+        `stats:impressions:pub:${pub.pubId}:date:${today}`,
+        `stats:impr_by_pub_plat:${pub.pubId}`,
+      );
+    }
     await Promise.all(keys.map(k => kvDel(k)));
     return res.status(200).json({ message: 'Stats reset', clearedKeys: keys.length });
   }
