@@ -143,11 +143,7 @@ var html = '<!DOCTYPE html>' +
 '  document.getElementById("tab-"+id).classList.add("active");' +
 '  btn.classList.add("active");' +
 '}' +
-'function setPublisher(val){' +
-'  selectedPublisher=val||null;' +
-'  var pubQ=selectedPublisher?("&pubId="+encodeURIComponent(selectedPublisher)):"";' +
-'  fetch("/dashboard?view=publisher"+pubQ).then(function(r){return r.json();}).then(function(d){pubData=d;renderPublisher();}).catch(function(){});' +
-'}' +
+'function setPublisher(val){selectedPublisher=val||null;load();}' +
 'function setAdvertiser(val){selectedAdvertiser=val||null;renderAdvertiser();}' +
 'function populatePickers(){' +
 '  var pp=document.getElementById("pub-picker");' +
@@ -577,11 +573,14 @@ var html = '<!DOCTYPE html>' +
 '    return "<tr><td>"+ago(e.time)+"</td><td>"+(e.platform||"—")+"</td><td>"+tag(e.crawlerType||"—",e.crawlerType||"")+"</td><td>"+(e.confidence||0)+"%</td><td>"+what+"</td></tr>";' +
 '  }).join(""):"<tr><td colspan=\'5\' class=\'empty\'>No visits yet</td></tr>");' +
 '}' +
+'var loadSeq=0;' +
 'function load(){' +
+'  var seq=++loadSeq;' +
 '  var pubQ=selectedPublisher?("&pubId="+encodeURIComponent(selectedPublisher)):"";' +
 '  Promise.all([fetch("/dashboard"),fetch("/dashboard?view=advertiser"),fetch("/dashboard?view=publisher"+pubQ)])' +
 '  .then(function(rs){return Promise.all(rs.map(function(r){return r.json();}));})' +
 '  .then(function(data){' +
+'    if(seq!==loadSeq)return;' +
 '    opData=data[0];advData=data[1];pubData=data[2];' +
 '    populatePickers();' +
 '    renderOverview();renderAdvertiser();renderPublisher();' +
