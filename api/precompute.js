@@ -35,31 +35,145 @@
 // ============================================================
 
 const crypto = require('crypto');
-const { kvGet, kvSetWithTTL, kvDel } = require('../lib/kv');
+const { kvGet, kvSet, kvSetWithTTL, kvDel } = require('../lib/kv');
 const { classifyOnly, CACHE_TTL_SECONDS } = require('../lib/relevance');
 const { listPaths, getPage } = require('../lib/demo-pages');
 const config = require('../lib/config');
 
 const SITE_URL = process.env.PLATFORM_URL || 'https://testbot-two-psi.vercel.app';
-const STALE_MS = CACHE_TTL_SECONDS * 1000; // 24h — same lifetime as match:/precompute:
+const STALE_MS = CACHE_TTL_SECONDS * 1000;
 
-// Build the same pageSignals shape api/index.js builds for a live crawl.
-function buildPageSignals(path) {
-  const page = getPage(path);
-  if (!page) return null;
-  const allParas = [...((page.body || '').matchAll(/<p>([\s\S]*?)<\/p>/g))]
-    .map(m => m[1].replace(/<[^>]+>/g, '').trim());
-  const firstParagraph = (allParas[0] || '').slice(0, 500);
-  const bodySample = allParas.join(' ').slice(0, 1500);
-  return {
-    url: SITE_URL + (page.path || path),
-    title: page.title,
-    metaDescription: page.metaDescription,
-    firstParagraph,
-    bodySample,
-    publisherCategory: null,
-    precomputeSource: 'cron',
-  };
+// --------------------------------------------------------
+// Sitemap-driven URL discovery (Session 9)
+// --------------------------------------------------------
+// Fetches and parses a sitemap.xml, extracting all <loc> URLs.
+// Returns array of { url, path, pubId } objects.
+// Falls back to [] on any fetch/parse error (non-fatal).
+async function fetchSitemapUrls(sitemapUrl, pubId) {
+  try {
+    const res = await fetch(sitemapUrl, {
+      headers: { 'User-Agent': 'boop-precompute/1.0' },
+      // 5 second timeout via AbortController
+      signal: AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined,
+    });
+    if (!res.ok) return [];
+    const xml = await res.text();
+    // Extract all <loc>...</loc> entries
+    const locs = [...xml.matchAll(/<loc>\s*([^<]+)\s*<\/loc>/gi)].map(m => m[1].trim());
+    return locs.map(url => {
+      try {
+        const parsed = new URL(url);
+        return { url, path: parsed.pathname || '/', pubId };
+      } catch {
+        return null;
+      }
+    }).filter(Boolean);
+  } catch (e) {
+    console.error('fetchSitemapUrls failed for', sitemapUrl, e.message);
+    return [];
+  }
+}
+
+// Aggregate URLs from all registered publisher sitemaps.
+// Deduplicates by URL. Returns [{ url, path, pubId }].
+async function fetchAllPublisherUrls() {
+  const publishers = config.publishers || [];
+  if (!publishers.length) {
+    // Fallback: use hardcoded demo-pages list
+    return listPaths().map(path => ({ url: SITE_URL + path, path, pubId: null }));
+  }
+
+  const seen = new Set();
+  const results = [];
+  for (const pub of publishers) {
+    if (!pub.active || !pub.sitemapUrl) continue;
+    const urls = await fetchSitemapUrls(pub.sitemapUrl, pub.pubId);
+    for (const entry of urls) {
+      if (!seen.has(entry.url)) {
+        seen.add(entry.url);
+        results.push(entry);
+      }
+    }
+  }
+
+  // If sitemap fetch returned nothing, fall back to hardcoded list
+  if (!results.length) {
+    return listPaths().map(path => ({ url: SITE_URL + path, path, pubId: null }));
+  }
+  return results;
+}
+
+// Build pageSignals for a URL.
+// For known demo pages: uses local page object (fast, no network).
+// For remote publisher pages: fetches the URL and extracts signals.
+async function buildPageSignals(urlOrPath, pubId) {
+  // Try local demo page first (path lookup)
+  const pathOnly = urlOrPath.startsWith('http')
+    ? (() => { try { return new URL(urlOrPath).pathname; } catch { return urlOrPath; } })()
+    : urlOrPath;
+  const page = getPage(pathOnly);
+
+  if (page) {
+    // Local demo page — fast path, no network
+    const allParas = [...((page.body || '').matchAll(/<p>([\s\S]*?)<\/p>/g))]
+      .map(m => m[1].replace(/<[^>]+>/g, '').trim());
+    const firstParagraph = (allParas[0] || '').slice(0, 500);
+    const bodySample = allParas.join(' ').slice(0, 1500);
+    return {
+      url: SITE_URL + (page.path || pathOnly),
+      title: page.title,
+      metaDescription: page.metaDescription,
+      firstParagraph,
+      bodySample,
+      publisherCategory: null,
+      precomputeSource: 'cron',
+      pubId: page.pubId || pubId || null,
+    };
+  }
+
+  // Remote publisher page — fetch and extract signals
+  const fullUrl = urlOrPath.startsWith('http') ? urlOrPath : SITE_URL + urlOrPath;
+  try {
+    const resp = await fetch(fullUrl, {
+      headers: {
+        'User-Agent': 'boop-precompute/1.0',
+        'Accept': 'text/html',
+      },
+      signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined,
+    });
+    if (!resp.ok) return null;
+    const html = await resp.text();
+
+    // Extract title
+    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+    const title = titleMatch ? titleMatch[1].trim() : '';
+
+    // Extract meta description
+    const metaMatch = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i)
+      || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']description["']/i);
+    const metaDescription = metaMatch ? metaMatch[1].trim() : '';
+
+    // Extract paragraph text (strip tags)
+    const paras = [...html.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)]
+      .map(m => m[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim())
+      .filter(t => t.length > 30); // skip short/empty paragraphs
+    const firstParagraph = (paras[0] || '').slice(0, 500);
+    const bodySample = paras.join(' ').slice(0, 1500);
+
+    return {
+      url: fullUrl,
+      title,
+      metaDescription,
+      firstParagraph,
+      bodySample,
+      publisherCategory: null,
+      precomputeSource: 'sitemap',
+      pubId: pubId || null,
+    };
+  } catch (e) {
+    console.error('buildPageSignals fetch failed for', fullUrl, e.message);
+    return null;
+  }
 }
 
 module.exports = async function handler(req, res) {
@@ -77,45 +191,47 @@ module.exports = async function handler(req, res) {
   // SWEEP — classify any page that's missing or stale.
   // --------------------------------------------------------
   if (req.method === 'GET' && action === 'sweep') {
-    const paths = listPaths();
+    // Session 9: fetch URLs from publisher sitemaps instead of hardcoded listPaths()
+    const urlEntries = await fetchAllPublisherUrls();
     let classified = 0, skipped = 0;
     const errors = [];
     const results = [];
 
-    for (const path of paths) {
+    for (const entry of urlEntries) {
+      const { url, path, pubId } = entry;
       try {
-        const signals = buildPageSignals(path);
-        if (!signals) { errors.push({ path, error: 'no page data' }); continue; }
-
-        const precomputeKey = 'precompute:' + crypto.createHash('sha256').update(signals.url).digest('hex');
+        const precomputeKey = 'precompute:' + crypto.createHash('sha256').update(url).digest('hex');
         const existing = await kvGet(precomputeKey);
         const isFresh = existing && existing.classifiedAt && (Date.now() - existing.classifiedAt) < STALE_MS;
 
         if (isFresh) {
           skipped++;
-          results.push({ path, status: 'skipped', category: existing.category, age_h: ((Date.now() - existing.classifiedAt) / 3600000).toFixed(1) });
+          results.push({ path: path || url, status: 'skipped', category: existing.category, age_h: ((Date.now() - existing.classifiedAt) / 3600000).toFixed(1) });
           continue;
         }
 
+        const signals = await buildPageSignals(url, pubId);
+        if (!signals) { errors.push({ path: path || url, error: 'no page data' }); continue; }
+
         const result = await classifyOnly(signals);
         classified++;
-        results.push({ path, status: 'classified', category: result.category, method: result.method });
+        results.push({ path: path || url, status: 'classified', category: result.category, method: result.method, source: signals.precomputeSource });
       } catch (e) {
-        errors.push({ path, error: e.message });
+        errors.push({ path: path || url, error: e.message });
       }
     }
 
-    // Record sweep metadata for the status endpoint / dashboard card.
     try {
       await kvSetWithTTL('precompute:meta:last-sweep', {
         time: Date.now(),
         classified, skipped, errors: errors.length,
-      }, CACHE_TTL_SECONDS * 7); // keep meta around longer than individual entries
+        pagesTotal: urlEntries.length,
+      }, CACHE_TTL_SECONDS * 7);
     } catch (e) { /* non-fatal */ }
 
     return res.status(200).json({
       message: 'Sweep complete',
-      pagesTotal: paths.length,
+      pagesTotal: urlEntries.length,
       classified, skipped,
       errors,
       results,
@@ -126,19 +242,19 @@ module.exports = async function handler(req, res) {
   // STATUS — coverage report for the dashboard.
   // --------------------------------------------------------
   if (req.method === 'GET' && action === 'status') {
-    const paths = listPaths();
+    // Session 9: use publisher sitemaps as source of truth for coverage
+    const urlEntries = await fetchAllPublisherUrls();
     const pages = [];
     let covered = 0;
 
-    for (const path of paths) {
-      const page = getPage(path);
-      const fullUrl = SITE_URL + (page.path || path);
+    for (const entry of urlEntries) {
+      const { url: fullUrl, path } = entry;
       const precomputeKey = 'precompute:' + crypto.createHash('sha256').update(fullUrl).digest('hex');
       const entry = await kvGet(precomputeKey);
       const isFresh = entry && entry.classifiedAt && (Date.now() - entry.classifiedAt) < STALE_MS;
       if (isFresh) covered++;
       pages.push({
-        path,
+        path: path || fullUrl,
         category: (entry && entry.category) || null,
         method: (entry && entry.method) || null,
         source: (entry && entry.source) || null,
@@ -150,9 +266,9 @@ module.exports = async function handler(req, res) {
     const lastSweep = await kvGet('precompute:meta:last-sweep');
 
     return res.status(200).json({
-      pagesTotal: paths.length,
+      pagesTotal: urlEntries.length,
       covered,
-      coveragePct: paths.length ? parseFloat(((covered / paths.length) * 100).toFixed(1)) : 0,
+      coveragePct: urlEntries.length ? parseFloat(((covered / urlEntries.length) * 100).toFixed(1)) : 0,
       lastSweep: lastSweep || null,
       pages,
     });

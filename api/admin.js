@@ -242,7 +242,11 @@ module.exports = async function handler(req, res) {
       const pubIds = [];
       for (const pub of (config.publishers || [])) {
         await kvSet(`publisher:${pub.pubId}`, {
-          ...pub,
+          pubId: pub.pubId,
+          name: pub.name,
+          sitemapUrl: pub.sitemapUrl || null,
+          floorCPM: pub.floorCPM || null,
+          active: pub.active !== false,
           createdAt: new Date().toISOString(),
         });
         pubIds.push(pub.pubId);
