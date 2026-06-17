@@ -599,12 +599,16 @@ module.exports = async function handler(req, res) {
         }
       }
 
-      // Viewable impressions scoped to publisher (retrieval only on their pages)
-      const pubViewable = pubPageBoard.reduce((sum, p) => {
-        if (!p.servingId) return sum;
-        const camp = campaignList.find(c => c.id === p.servingId);
-        return sum + ((camp && camp.viewableImpressions) || 0);
-      }, 0);
+      // Viewable impressions scoped to publisher — count retrieval-type
+      // entries in recentBotLogs for this publisher's URLs only.
+      // Campaign.viewableImpressions is GLOBAL so cannot be used here.
+      const pubViewable = pubId
+        ? (recentBotLogs || []).filter(e =>
+            e && e.pubId === pubId &&
+            e.crawlerType === 'retrieval' &&
+            e.campaignId
+          ).length
+        : totalViewable;
 
       // Recent visits scoped to publisher pages
       const pubUrls = new Set(pubPageBoard.map(p => p.url));
