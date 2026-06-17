@@ -524,3 +524,14 @@ testbot-worker.projectatlas.workers.dev).
 - LIVE badge in dashboard (30s pulse after real crawl)
 - All 15 campaigns indexed correctly
 - Next: crawl all articles on both publisher sites, verify dashboard shows them, update HANDOVER
+
+**Late Session 9 additions:**
+- Worker now extracts full article text (no 1500 char truncation) + headings
+- Headings prepended to bodySample — highest signal for topic classification
+- Both publisher Worker scripts regenerated and pushed
+- Architecture documented: Worker = "the script we send publishers", not a <script> tag
+- Publisher onboarding: paste Worker into Cloudflare dashboard, add route *.domain.com/* — no DNS changes needed if already on Cloudflare
+- Precompute status now reads from log:recent URLs (live crawl cache) since outbound HTTP from Vercel is restricted
+- Demo pages retired from lib/demo-pages.js — testbot-two-psi.vercel.app is now platform API only
+- Real publisher sites: finance-weekly.vercel.app (pub_001), tech-briefing-tau.vercel.app (pub_002)
+- Workers: finance-weekly-worker.projectatlas.workers.dev, tech-briefing-worker.projectatlas.workers.dev
