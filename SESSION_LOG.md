@@ -459,3 +459,18 @@ and a leading hypothesis already written up — start there.
 **No code changes this entry.** Function count, deployments, etc. all
 unchanged from Session 7 (10/12 functions, Worker live at
 testbot-worker.projectatlas.workers.dev).
+
+**Late fixes Session 8:**
+- Root cause of HL/AJ Bell not competing: campaigns:finance index was null after reset-stats cleared it
+- Added /admin/reindex endpoint to rebuild category indexes from existing campaign:{id} KV keys
+- Added /admin/reindex route to vercel.json
+- Added missing payload_camp_006.json (Moneybox)
+- After reindex: HL competing on all 7 finance pages, AJ Bell winning first-time-buyer-guide
+- Fixed advertiser viewable card to derive from filtered campaign list not global totalViewable
+- GitHub PAT configured in Claude environment for direct pushes
+
+**Final state Session 8:**
+- 12 pages: 8 Finance Weekly, 4 Tech Briefing
+- 15 campaigns: camp_001-camp_015
+- All category indexes rebuilt and verified
+- All advertisers competing correctly
