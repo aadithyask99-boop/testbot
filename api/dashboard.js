@@ -695,7 +695,26 @@ module.exports = async function handler(req, res) {
       recentImpressions:  (recentBotLogs || []).slice(0, 20),
       recentPubClicks:    (recentPubClicks || []).slice(0, 10),
       recentAdvClicks:    (recentAdvClicks || []).slice(0, 10),
-      precompute:         await getPrecomputeStatus(),
+      precompute:         (() => {
+        // Inline from already-fetched recentBotLogs — no extra KV or HTTP call
+        const seen = new Set();
+        let covered = 0;
+        const pages = [];
+        for (const e of (recentBotLogs || [])) {
+          if (!e.url || seen.has(e.url)) continue;
+          seen.add(e.url);
+          const fresh = !!(e.matchCategory);
+          if (fresh) covered++;
+          pages.push({ path: e.url, category: e.matchCategory || null, fresh });
+        }
+        const pagesTotal = pages.length;
+        return {
+          pagesTotal,
+          covered,
+          coveragePct: pagesTotal ? parseFloat(((covered / pagesTotal) * 100).toFixed(1)) : 0,
+          pages,
+        };
+      })(),
     });
 
   } catch (e) {
