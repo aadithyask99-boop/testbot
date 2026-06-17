@@ -580,7 +580,7 @@ var html = '<!DOCTYPE html>' +
 '  Promise.all([fetch("/dashboard"),fetch("/dashboard?view=advertiser"),fetch("/dashboard?view=publisher"+pubQ)])' +
 '  .then(function(rs){return Promise.all(rs.map(function(r){return r.json();}));})' +
 '  .then(function(data){' +
-'    if(seq!==loadSeq)return;' +
+'    if(seq<loadSeq)return;' +
 '    opData=data[0];advData=data[1];pubData=data[2];' +
 '    populatePickers();' +
 '    renderOverview();renderAdvertiser();renderPublisher();' +
