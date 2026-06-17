@@ -111,8 +111,9 @@ function detectBot(userAgent) {
 //    (articlePCount) — see injectIntoResponse.
 // ------------------------------------------------------------
 function extractSignals(response) {
-  const signals = { title: '', metaDescription: '', paragraphs: [] };
-  let articlePCount = 0; // ALL article p (including byline) — injection positioning
+  const signals = { title: '', metaDescription: '', paragraphs: [], articlePCount: 0, mainPCount: 0 };
+  let articlePCount = 0;
+  let mainPCount = 0;
 
   const rewriter = new HTMLRewriter()
     .on('title', {
@@ -124,6 +125,7 @@ function extractSignals(response) {
         if (content) signals.metaDescription = content;
       },
     })
+    // Primary: article p (our demo pages + well-structured publishers)
     .on('article p', {
       element(el) { articlePCount++; },
     })
@@ -138,11 +140,20 @@ function extractSignals(response) {
         signals.paragraphs.push('');
         signals._currentP = signals.paragraphs.length - 1;
       },
+    })
+    // Fallback: main p (catches publishers without <article>)
+    .on('main p', {
+      element(el) { mainPCount++; },
+    })
+    .on('[role=main] p', {
+      element(el) { mainPCount++; },
     });
 
-  // Run the rewriter over a CLONED response so we don't consume the
-  // body we need to return/inject into.
   return rewriter.transform(response.clone()).text().then(() => {
+    // If article had no paragraphs, re-scan using main p as fallback.
+    // Signals extraction runs again on a fresh clone — cheap since
+    // it's a text parse, not a network request.
+    const usingFallback = articlePCount === 0 && mainPCount > 0;
     const firstParagraph = (signals.paragraphs[0] || '').trim().slice(0, 500);
     const bodySample = signals.paragraphs.join(' ').trim().slice(0, 1500);
     return {
@@ -150,10 +161,9 @@ function extractSignals(response) {
       metaDescription: signals.metaDescription,
       firstParagraph,
       bodySample,
-      // articlePCount (includes byline) drives injection positioning —
-      // injectIntoResponse's pSeen===1 lands after the byline, matching
-      // lib/injector.js's verified behaviour.
       paragraphCount: articlePCount,
+      mainParagraphCount: mainPCount,
+      usingFallback,
     };
   });
 }
@@ -178,28 +188,21 @@ function buildInjectedHtml(variant, winner) {
   return `<p>${text}</p>`;
 }
 
-function injectIntoResponse(response, injectedHtml, paragraphCount) {
+function injectIntoResponse(response, injectedHtml, paragraphCount, mainParagraphCount) {
   let pSeen = 0;
   let injected = false;
+  const useMain = paragraphCount === 0 && mainParagraphCount > 0;
+  const targetSelector = useMain ? 'main p' : 'article p';
 
   const rewriter = new HTMLRewriter()
-    // Scoped to `article p` — the header's tagline <p> (e.g.
-    // "<header>...<p>UK personal finance &amp; investing</p></header>")
-    // must NOT count toward "the 2nd paragraph." This mirrors
-    // lib/injector.js's behaviour, which starts its search at character
-    // 200 (past the <header> block) — counting from the start of
-    // <article> achieves the same intent via HTMLRewriter's selector
-    // scoping instead of a character offset.
-    .on('article p', {
+    .on(targetSelector, {
       element(el) {
         pSeen++;
-        // lib/injector.js's "2nd </p> after char 200" lands after the
-        // BYLINE — which is article's 1ST <p> (the header tagline <p>
-        // is globally #1, byline is globally #2). So "after the 1st
-        // article p" is the correct equivalent, not the 2nd. Verified
-        // against lib/injector.js's actual output for this page
-        // (Session 7 live test — see commit history).
-        if (pSeen === 1 && paragraphCount >= 1) {
+        // After the 1st content paragraph (byline-equivalent position).
+        // For main p fallback, inject after the 2nd p (no byline to skip).
+        const threshold = useMain ? 2 : 1;
+        const hasEnough = useMain ? mainParagraphCount >= 2 : paragraphCount >= 1;
+        if (pSeen === threshold && hasEnough && !injected) {
           el.after(injectedHtml, { html: true });
           injected = true;
         }
@@ -207,10 +210,8 @@ function injectIntoResponse(response, injectedHtml, paragraphCount) {
     })
     .on('body', {
       element(el) {
-        if (paragraphCount < 1) {
-          // Fallback: NO <p> elements inside <article> — append before
-          // </body>, mirroring lib/injector.js's injectBeforeBodyClose
-          // fallback.
+        // Final fallback: no article p AND no main p — append before </body>
+        if (!injected && paragraphCount < 1 && mainParagraphCount < 2) {
           el.append(injectedHtml, { html: true });
           injected = true;
         }
@@ -320,7 +321,7 @@ export default {
     }
 
     const injectedHtml = buildInjectedHtml(variant, winner);
-    const modifiedResponse = injectIntoResponse(originResponse, injectedHtml, signals.paragraphCount);
+    const modifiedResponse = injectIntoResponse(originResponse, injectedHtml, signals.paragraphCount, signals.mainParagraphCount || 0);
 
     logImpression(ctx, {
       campaignId: winner.id,

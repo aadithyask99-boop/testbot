@@ -34,6 +34,7 @@ var html = '<!DOCTYPE html>' +
 '.cbox{padding:14px}.cname{font-size:14px;font-weight:600;margin-bottom:3px}' +
 '.cmeta{font-size:11px;color:#999;margin-bottom:8px}.ccopy{font-size:12px;color:#555;line-height:1.6;border-left:2px solid #e5e5e5;padding-left:10px;margin-bottom:8px}' +
 '.empty{color:#ccc;font-size:12px;padding:14px;text-align:center}' +
+'@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.4;transform:scale(1.3)}}' +
 '.fbody{padding:16px;display:grid;gap:12px}.frow{display:grid;grid-template-columns:1fr 1fr;gap:10px}' +
 '.field label{display:block;font-size:11px;color:#777;margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em}' +
 '.field input,.field textarea{width:100%;border:1px solid #e5e5e5;border-radius:4px;padding:8px 10px;font-size:13px;font-family:inherit;background:#fff}' +
@@ -340,8 +341,10 @@ var html = '<!DOCTYPE html>' +
 '    var cat=p.category||"?";' +
 '    var catColor=cat==="finance"?"#16a34a":cat==="tech"?"#2563eb":"#999";' +
 '    var pubBadge=p.publisherName?("<span style=\'font-size:10px;color:#888;margin-left:6px\'>"+p.publisherName+"</span>"):"";' +
+'    var isLive=p.lastCrawl&&(Date.now()-new Date(p.lastCrawl).getTime())<30000;' +
+'    var liveBadge=isLive?"<span style=\'display:inline-flex;align-items:center;gap:4px;background:#dcfce7;color:#15803d;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;margin-left:8px;letter-spacing:0.05em\'><span style=\'width:6px;height:6px;background:#16a34a;border-radius:50%;display:inline-block;animation:pulse 1s infinite\'>\\u200b</span>LIVE</span>":"";' +
 '    var titleLine=p.title?("<div style=\'font-size:11px;color:#666;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\'>"+escHtml(p.title)+"</div>"):"";' +
-'    var header="<div style=\'display:flex;justify-content:space-between;align-items:center;margin-bottom:4px\'><span style=\'font-family:monospace;font-size:12px;color:#333\'>"+urlShort+pubBadge+"</span><span style=\'background:"+catColor+"22;color:"+catColor+";font-size:10px;padding:2px 7px;border-radius:3px\'>"+cat+"</span></div>"+titleLine;' +
+'    var header="<div style=\'display:flex;justify-content:space-between;align-items:center;margin-bottom:4px\'><span style=\'font-family:monospace;font-size:12px;color:#333\'>"+urlShort+pubBadge+liveBadge+"</span><span style=\'background:"+catColor+"22;color:"+catColor+";font-size:10px;padding:2px 7px;border-radius:3px\'>"+cat+"</span></div>"+titleLine;' +
 '    var serving;' +
 '    if(p.reason==="not_yet_crawled"){' +
 '      serving="<div style=\'font-size:14px;font-weight:600;color:#cbd5e1;margin-bottom:2px\'>Not yet crawled</div><div style=\'font-size:11px;color:#aaa;margin-bottom:8px\'>Awaiting first AI bot visit</div>";' +

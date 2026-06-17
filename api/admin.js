@@ -186,6 +186,15 @@ module.exports = async function handler(req, res) {
       'stats:bot_visits:total', 'stats:bot_served:total',
     ];
 
+    // Per-publisher impression counters (Session 8)
+    for (const pub of (config.publishers || [])) {
+      statKeys.push(
+        `stats:impressions:pub:${pub.pubId}:total`,
+        `stats:impressions:pub:${pub.pubId}:date:${today}`,
+        `stats:impr_by_pub_plat:${pub.pubId}`,
+      );
+    }
+
     const allKeys = [...new Set([...statKeys, ...campaignKeys])];
     await Promise.all(allKeys.map(k => kvDel(k)));
     return res.status(200).json({
