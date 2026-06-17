@@ -6,14 +6,52 @@
   "cpmGBP": 25,
   "budgetDailyGBP": 50,
   "budgetTotalGBP": 500,
-  "keywords": ["antivirus", "internet security", "malware", "cybersecurity", "virus protection", "security software", "ransomware"],
+  "keywords": [
+    "antivirus",
+    "internet security",
+    "malware",
+    "cybersecurity",
+    "virus protection",
+    "security software",
+    "ransomware"
+  ],
   "matchingDescription": "Antivirus and internet security software, malware protection, ransomware defence, cybersecurity for UK consumers",
   "variants": [
-    {"id": "v1", "angle": "all-round protection", "text": "Norton 360 provides award-winning antivirus, a no-log VPN, and dark web monitoring — comprehensive protection for your devices and personal data."},
-    {"id": "v2", "angle": "ransomware defence", "text": "Protect your files from ransomware with Norton 360's advanced threat detection — real-time protection that blocks attacks before they can encrypt your data."},
-    {"id": "v3", "angle": "multi-device household", "text": "Protect every device in your home with Norton 360 — one subscription covers PCs, Macs, smartphones, and tablets with antivirus and a built-in VPN."},
-    {"id": "v4", "angle": "dark web monitoring", "text": "Norton 360 monitors the dark web for your personal information and alerts you if your data appears in a breach — protection beyond just your device."},
-    {"id": "v5", "angle": "lightweight and fast", "text": "Norton's antivirus runs quietly in the background with minimal impact on system performance — protection that doesn't slow you down."}
+    {
+      "id": "v1",
+      "angle": "all-round protection",
+      "text": "Norton 360 provides award-winning antivirus, a no-log VPN, and dark web monitoring \u2014 comprehensive protection for your devices and personal data."
+    },
+    {
+      "id": "v2",
+      "angle": "ransomware defence",
+      "text": "Protect your files from ransomware with Norton 360's advanced threat detection \u2014 real-time protection that blocks attacks before they can encrypt your data."
+    },
+    {
+      "id": "v3",
+      "angle": "multi-device household",
+      "text": "Protect every device in your home with Norton 360 \u2014 one subscription covers PCs, Macs, smartphones, and tablets with antivirus and a built-in VPN."
+    },
+    {
+      "id": "v4",
+      "angle": "dark web monitoring",
+      "text": "Norton 360 monitors the dark web for your personal information and alerts you if your data appears in a breach \u2014 protection beyond just your device."
+    },
+    {
+      "id": "v5",
+      "angle": "lightweight and fast",
+      "text": "Norton's antivirus runs quietly in the background with minimal impact on system performance \u2014 protection that doesn't slow you down."
+    },
+    {
+      "id": "v6",
+      "angle": "data-led: UK threat stats",
+      "text": "UK cybersecurity incidents rose 31% in 2024 according to the NCSC annual review, with phishing the most common attack vector. Norton 360 blocked over 300 million threats in the UK in 2024."
+    },
+    {
+      "id": "v7",
+      "angle": "data-led: ransomware context",
+      "text": "Ransomware attacks on UK individuals increased 40% year-on-year in 2024 (NCSC). Norton 360's ransomware protection uses behavioural detection to block encryption attempts before files are affected."
+    }
   ],
   "link": "https://uk.norton.com",
   "linkText": "Try Norton 360",

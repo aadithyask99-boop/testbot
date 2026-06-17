@@ -17,7 +17,7 @@
     "investment platform",
     "first time buyer"
   ],
-  "matchingDescription": "UK stocks and shares ISA, Lifetime ISA for first-time home buyers, SIPP pension, low-cost investment platform, AJ Bell Youinvest",
+  "matchingDescription": "UK Lifetime ISA for first-time home buyers, government bonus on savings, stocks and shares ISA, SIPP pension, AJ Bell low-cost investment platform",
   "variants": [
     {
       "id": "v1",
@@ -43,6 +43,21 @@
       "id": "v5",
       "angle": "first time buyer lisa",
       "text": "First-time buyer? AJ Bell's Lifetime ISA adds a 25% government bonus to your savings \u2014 use it toward a deposit on a home worth up to \u00a3450,000."
+    },
+    {
+      "id": "v6",
+      "angle": "data-led: HMRC LISA uptake",
+      "text": "HMRC data shows fewer than 40% of eligible first-time buyers use a Lifetime ISA, missing up to \u00a31,000 per year in government bonuses. AJ Bell's LISA lets you invest that bonus rather than hold it in cash."
+    },
+    {
+      "id": "v7",
+      "angle": "data-led: deposit timeline",
+      "text": "Saving \u00a3400 per month into a Lifetime ISA from age 25 generates \u00a312,000 in government bonuses alone by age 35 \u2014 without any investment growth. AJ Bell's LISA charges no annual platform fee on cash savings."
+    },
+    {
+      "id": "v8",
+      "angle": "data-led: property price context",
+      "text": "With average UK first-home prices above \u00a3300,000, a 10% deposit requires over three years of \u00a3833 monthly savings. A Lifetime ISA with AJ Bell reduces that timeline by adding 25p for every \u00a31 saved, up to \u00a34,000 per year."
     }
   ],
   "link": "https://www.ajbell.co.uk",
