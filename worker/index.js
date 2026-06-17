@@ -151,7 +151,7 @@ function detectBot(userAgent, request) {
 //    (articlePCount) — see injectIntoResponse.
 // ------------------------------------------------------------
 function extractSignals(response) {
-  const signals = { title: '', metaDescription: '', paragraphs: [], articlePCount: 0, mainPCount: 0 };
+  const signals = { title: '', metaDescription: '', paragraphs: [], headings: [], articlePCount: 0, mainPCount: 0 };
   let articlePCount = 0;
   let mainPCount = 0;
 
@@ -163,6 +163,12 @@ function extractSignals(response) {
       element(el) {
         const content = el.getAttribute('content');
         if (content) signals.metaDescription = content;
+      },
+    })
+    // Extract headings — high signal for topic matching
+    .on('article h1, article h2, article h3, main h1, main h2, main h3', {
+      text(text) {
+        if (text.text.trim()) signals.headings.push(text.text.trim());
       },
     })
     // Primary: article p (our demo pages + well-structured publishers)
@@ -195,7 +201,13 @@ function extractSignals(response) {
     // it's a text parse, not a network request.
     const usingFallback = articlePCount === 0 && mainPCount > 0;
     const firstParagraph = (signals.paragraphs[0] || '').trim().slice(0, 500);
-    const bodySample = signals.paragraphs.join(' ').trim().slice(0, 1500);
+    // Full body text — no truncation. Better input = better relevance scoring.
+    // Headings prepended as they're highest-signal for topic classification.
+    const headingText = signals.headings.join(' ');
+    const bodyText = signals.paragraphs.join(' ').trim();
+    const bodySample = headingText
+      ? (headingText + ' ' + bodyText).trim()
+      : bodyText;
     return {
       title: signals.title.trim(),
       metaDescription: signals.metaDescription,
