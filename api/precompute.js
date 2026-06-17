@@ -242,23 +242,27 @@ module.exports = async function handler(req, res) {
   // STATUS — coverage report for the dashboard.
   // --------------------------------------------------------
   if (req.method === 'GET' && action === 'status') {
-    // Session 9: use publisher sitemaps as source of truth for coverage
-    const urlEntries = await fetchAllPublisherUrls();
+    // Status uses listPaths() (local, no network) — fast enough for
+    // the dashboard poll. The sweep uses fetchAllPublisherUrls() to
+    // discover new pages from sitemaps; status just reads what the
+    // sweep already classified and stored in KV.
+    const paths = listPaths();
     const pages = [];
     let covered = 0;
 
-    for (const entry of urlEntries) {
-      const { url: fullUrl, path } = entry;
+    for (const path of paths) {
+      const page = getPage(path);
+      const fullUrl = SITE_URL + (page ? (page.path || path) : path);
       const precomputeKey = 'precompute:' + crypto.createHash('sha256').update(fullUrl).digest('hex');
-      const entry = await kvGet(precomputeKey);
-      const isFresh = entry && entry.classifiedAt && (Date.now() - entry.classifiedAt) < STALE_MS;
+      const cached = await kvGet(precomputeKey);
+      const isFresh = cached && cached.classifiedAt && (Date.now() - cached.classifiedAt) < STALE_MS;
       if (isFresh) covered++;
       pages.push({
-        path: path || fullUrl,
-        category: (entry && entry.category) || null,
-        method: (entry && entry.method) || null,
-        source: (entry && entry.source) || null,
-        classifiedAt: (entry && entry.classifiedAt) || null,
+        path,
+        category: (cached && cached.category) || null,
+        method: (cached && cached.method) || null,
+        source: (cached && cached.source) || null,
+        classifiedAt: (cached && cached.classifiedAt) || null,
         fresh: !!isFresh,
       });
     }
@@ -266,9 +270,9 @@ module.exports = async function handler(req, res) {
     const lastSweep = await kvGet('precompute:meta:last-sweep');
 
     return res.status(200).json({
-      pagesTotal: urlEntries.length,
+      pagesTotal: paths.length,
       covered,
-      coveragePct: urlEntries.length ? parseFloat(((covered / urlEntries.length) * 100).toFixed(1)) : 0,
+      coveragePct: paths.length ? parseFloat(((covered / paths.length) * 100).toFixed(1)) : 0,
       lastSweep: lastSweep || null,
       pages,
     });
