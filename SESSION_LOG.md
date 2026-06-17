@@ -474,3 +474,53 @@ testbot-worker.projectatlas.workers.dev).
 - 15 campaigns: camp_001-camp_015
 - All category indexes rebuilt and verified
 - All advertisers competing correctly
+
+## Session 9 — Publisher Onboarding, Bot Detection Audit, Sitemap Sweep, Live Publisher Test
+**Date:** 2026-06-17
+**Goal:** Verify bot detection across all models, wire up real publisher sites, sitemap-driven precompute
+
+**What was built:**
+
+**Bot detection audit:**
+- 30/30 UA cases correct: all named bots, anonymous crawler (DeepSeek), Googlebot excluded, real humans pass
+- Worker v2: added anonymous crawler detection (Chrome UA without Accept-Language/sec-ch-ua/sec-fetch-mode = bot at 75% confidence)
+- Worker v2: added main p / [role=main] p injection fallback for publishers without article tags
+- Verified: bots get 8 paragraphs (7 editorial + 1 injected), humans get 7 (no injection)
+
+**Sitemap-driven precompute:**
+- precompute sweep now reads publisher sitemapUrls from config (fetchAllPublisherUrls)
+- Fetches and parses sitemap XML, extracts all loc URLs
+- Remote pages fetched and classified (HTML extraction + Haiku)
+- Status still uses listPaths() — avoids self-referential HTTP fetch inside Vercel
+- Coverage: 12/12 pages (100%)
+
+**Publisher/advertiser entities:**
+- advertiser:{advId} KV records seeded for all 15 advertisers
+- advertisers:all index in KV
+- Publisher tokens added: pk_pub_001_financeweekly, pk_pub_002_techbriefing
+- pub_token:{token} → pubId reverse lookup in KV
+- /match and /impression now resolve pubId from X-Pub-Token header
+- Worker sends X-Pub-Token on every /match and /impression call
+- Worker config block: ORIGIN_URL, PLATFORM_URL, PUB_ID, PUB_TOKEN (4 lines to change per publisher)
+
+**Live publisher sites deployed:**
+- finance-weekly.vercel.app — 4 finance articles (ISA, pension, dividend, first-time buyer)
+- tech-briefing-tau.vercel.app — 4 tech articles (VPN, broadband, antivirus, cloud storage)
+- finance-weekly-worker.projectatlas.workers.dev — proxies Finance Weekly, injects ads
+- tech-briefing-worker.projectatlas.workers.dev — proxies Tech Briefing, injects ads
+
+**Verified live:**
+- Finance Weekly: Trading 212 ad injected on /articles/best-isa-2026.html (pub_001, source: worker)
+- Tech Briefing: Norton ad injected on /articles/best-vpn-2026.html (pub_002, source: worker)
+- Both pubIds logging correctly in dashboard recentImpressions
+
+**GitHub repos:**
+- github.com/aadithyask99-boop/finance-weekly
+- github.com/aadithyask99-boop/tech-briefing
+
+**Where we stopped:**
+- Both publisher Workers live and verified
+- Admin reindex endpoint added (/admin/reindex)
+- LIVE badge in dashboard (30s pulse after real crawl)
+- All 15 campaigns indexed correctly
+- Next: crawl all articles on both publisher sites, verify dashboard shows them, update HANDOVER

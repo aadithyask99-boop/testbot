@@ -184,7 +184,9 @@ partnership for the sitemap-crawl half (today uses `listPaths()` from
 Built, deployed, and validated live in Session 7. See "What's new this
 session" above and SESSION_LOG.md Session 7 for full detail.
 `WORKER_SDK_SPEC.md` has the design doc, `worker/index.js` is the script,
-live at https://testbot-worker.projectatlas.workers.dev.
+Workers live at:
+  - finance-weekly-worker.projectatlas.workers.dev (pub_001)
+  - tech-briefing-worker.projectatlas.workers.dev (pub_002).
 
 ### Session 8 — Two paths, pick based on what's actionable
 
