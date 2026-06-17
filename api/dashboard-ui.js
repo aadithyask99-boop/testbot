@@ -329,7 +329,12 @@ var html = '<!DOCTYPE html>' +
 'function renderLiveBoard(board){' +
 '  if(!board||!board.length){set("live-board","<div class=\'empty\'>No pages registered</div>");return;}' +
 '  var filtered=board;' +
-'  if(selectedAdvertiser){filtered=board.filter(function(p){return p.servingAdv===selectedAdvertiser||!p.servingId;});}' +
+'  if(selectedAdvertiser){filtered=board.filter(function(p){' +
+'    if(p.servingAdv===selectedAdvertiser)return true;' +
+'    if(!p.servingId)return false;' +
+'    var cands=p.candidates||[];' +
+'    return cands.some(function(c){return c&&c.advertiser===selectedAdvertiser;});' +
+'  });}' +
 '  set("live-board",filtered.map(function(p){' +
 '    var urlShort=p.url?p.url.replace(/^https?:\\/\\/[^\\/]+/,""):"/";' +
 '    var cat=p.category||"?";' +
