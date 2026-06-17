@@ -218,11 +218,12 @@ var html = '<!DOCTYPE html>' +
 '  var activeCount=cl.filter(function(x){return x.active;}).length;' +
 '  var totalImpr=cl.reduce(function(a,c){return a+(c.impressions||0);},0);' +
 '  var totalSpend=cl.reduce(function(a,c){return a+(c.totalSpendGBP||0);},0);' +
+'  var totalViewable=cl.reduce(function(a,c){return a+(c.viewableImpressions||0);},0);' +
 '  var headerLabel=selectedAdvertiser?selectedAdvertiser:"All Advertisers";' +
 '  set("adv-cards",' +
 '    card("Active Campaigns",fmt(activeCount),headerLabel,"")+' +
 '    card("Now Winning",winner?winner.advertiser:"None",winner?("\\u00a3"+winner.cpmGBP+" CPM"):"no eligible campaign","green")+' +
-'    card("Total Impressions",fmt(totalImpr),fmt(agg.totalViewable||0)+" viewable","blue")+' +
+'    card("Total Impressions",fmt(totalImpr),fmt(totalViewable)+" viewable","blue")+' +
 '    card("Total Spend",money(totalSpend),"\\u00a3"+(agg.blendedVcpmGBP||0)+" vCPM","")' +
 '  );' +
 '  renderCampaignList(cl);' +

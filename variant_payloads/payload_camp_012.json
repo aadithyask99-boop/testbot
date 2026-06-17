@@ -6,14 +6,45 @@
   "cpmGBP": 80,
   "budgetDailyGBP": 100,
   "budgetTotalGBP": 1000,
-  "keywords": ["isa", "investment", "stocks and shares isa", "sipp", "pension", "dividend", "shares", "fund"],
-  "matchingDescription": "UK investment platform, stocks and shares ISA, SIPP, shares dealing, funds, largest UK investment platform",
+  "keywords": [
+    "isa",
+    "stocks and shares isa",
+    "investment platform",
+    "sipp",
+    "pension",
+    "dividend",
+    "shares",
+    "fund",
+    "hargreaves",
+    "investor"
+  ],
+  "matchingDescription": "UK stocks and shares ISA, SIPP, investment platform for retail investors, dividend investing, fund dealing, Hargreaves Lansdown",
   "variants": [
-    {"id": "v1", "angle": "uk largest platform", "text": "Hargreaves Lansdown is the UK's largest investment platform. Open a Stocks and Shares ISA and invest in funds, shares, and ETFs — all in one place."},
-    {"id": "v2", "angle": "isa and sipp", "text": "Manage your ISA and pension in one place with Hargreaves Lansdown — the UK's largest investment platform, trusted by over 1.8 million clients."},
-    {"id": "v3", "angle": "dividend income", "text": "Build an income portfolio with Hargreaves Lansdown's Stocks and Shares ISA — access thousands of income-paying shares, funds, and investment trusts."},
-    {"id": "v4", "angle": "first time investor", "text": "New to investing? Hargreaves Lansdown makes it simple to open a Stocks and Shares ISA and start building your portfolio, with expert guidance available."},
-    {"id": "v5", "angle": "wide investment choice", "text": "Hargreaves Lansdown gives access to thousands of UK and global investments inside a Stocks and Shares ISA — shares, funds, ETFs, and investment trusts."}
+    {
+      "id": "v1",
+      "angle": "uk largest platform",
+      "text": "Hargreaves Lansdown is the UK's largest investment platform. Open a Stocks and Shares ISA and invest in funds, shares, and ETFs \u2014 all in one place."
+    },
+    {
+      "id": "v2",
+      "angle": "isa and sipp",
+      "text": "Manage your ISA and pension in one place with Hargreaves Lansdown \u2014 the UK's largest investment platform, trusted by over 1.8 million clients."
+    },
+    {
+      "id": "v3",
+      "angle": "dividend income",
+      "text": "Build an income portfolio with Hargreaves Lansdown's Stocks and Shares ISA \u2014 access thousands of income-paying shares, funds, and investment trusts."
+    },
+    {
+      "id": "v4",
+      "angle": "first time investor",
+      "text": "New to investing? Hargreaves Lansdown makes it simple to open a Stocks and Shares ISA and start building your portfolio, with expert guidance available."
+    },
+    {
+      "id": "v5",
+      "angle": "wide investment choice",
+      "text": "Hargreaves Lansdown gives access to thousands of UK and global investments inside a Stocks and Shares ISA \u2014 shares, funds, ETFs, and investment trusts."
+    }
   ],
   "link": "https://www.hl.co.uk",
   "linkText": "Visit Hargreaves Lansdown",
