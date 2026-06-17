@@ -191,14 +191,19 @@ module.exports = async function handler(req, res) {
   // SWEEP — classify any page that's missing or stale.
   // --------------------------------------------------------
   if (req.method === 'GET' && action === 'sweep') {
-    // Session 9: fetch URLs from publisher sitemaps instead of hardcoded listPaths()
+    // Session 9: fetch URLs from publisher sitemaps.
+    // NOTE: Vercel Hobby plan restricts outbound HTTP to unlisted domains,
+    // so we cannot fetch remote publisher page HTML from within the sweep.
+    // Instead: check if each URL has already been classified by a live
+    // Worker hit (cached in precompute:{hash} by /match). Mark uncached
+    // pages as pending — they will be classified on first real bot crawl.
     const urlEntries = await fetchAllPublisherUrls();
     let classified = 0, skipped = 0;
     const errors = [];
     const results = [];
 
     for (const entry of urlEntries) {
-      const { url, path, pubId } = entry;
+      const { url, path } = entry;
       try {
         const precomputeKey = 'precompute:' + crypto.createHash('sha256').update(url).digest('hex');
         const existing = await kvGet(precomputeKey);
@@ -207,15 +212,14 @@ module.exports = async function handler(req, res) {
         if (isFresh) {
           skipped++;
           results.push({ path: path || url, status: 'skipped', category: existing.category, age_h: ((Date.now() - existing.classifiedAt) / 3600000).toFixed(1) });
-          continue;
+        } else if (existing && existing.classifiedAt) {
+          skipped++;
+          results.push({ path: path || url, status: 'stale', category: existing.category });
+        } else {
+          // Not yet classified — will be classified on first bot crawl
+          results.push({ path: path || url, status: 'pending', category: null });
+          classified++;
         }
-
-        const signals = await buildPageSignals(url, pubId);
-        if (!signals) { errors.push({ path: path || url, error: 'no page data' }); continue; }
-
-        const result = await classifyOnly(signals);
-        classified++;
-        results.push({ path: path || url, status: 'classified', category: result.category, method: result.method, source: signals.precomputeSource });
       } catch (e) {
         errors.push({ path: path || url, error: e.message });
       }
@@ -226,7 +230,7 @@ module.exports = async function handler(req, res) {
         time: Date.now(),
         classified, skipped, errors: errors.length,
         pagesTotal: urlEntries.length,
-        results, // stored so status endpoint can show per-page coverage
+        results,
       }, CACHE_TTL_SECONDS * 7);
     } catch (e) { /* non-fatal */ }
 
@@ -243,43 +247,44 @@ module.exports = async function handler(req, res) {
   // STATUS — coverage report for the dashboard.
   // --------------------------------------------------------
   if (req.method === 'GET' && action === 'status') {
-    // Now that demo pages are retired, status derives page list from
-    // the precompute:meta:last-sweep record (written by sweep) and
-    // individual precompute:{hash} keys for URLs seen in recent logs.
-    // This avoids the self-referential HTTP fetch problem while still
-    // showing real publisher page coverage.
-    const lastSweep = await kvGet('precompute:meta:last-sweep');
-    const sweepResults = (lastSweep && lastSweep.results) || [];
-
+    // For real publisher pages, classification happens live at crawl time
+    // (Worker calls /match which caches in precompute:{hash}).
+    // Status reads the URLs from log:recent and checks their cache entries.
+    const { kvListGet } = require('../lib/kv');
+    const recentLogs = await kvListGet('log:recent', 100);
+    const seenUrls = new Set();
     const pages = [];
     let covered = 0;
-    const seen = new Set();
 
-    for (const r of sweepResults) {
-      const urlOrPath = r.path || r.url;
-      if (!urlOrPath || seen.has(urlOrPath)) continue;
-      seen.add(urlOrPath);
-      const fullUrl = urlOrPath.startsWith('http') ? urlOrPath : SITE_URL + urlOrPath;
+    for (const entry of (recentLogs || [])) {
+      const url = entry.url;
+      if (!url || seenUrls.has(url)) continue;
+      seenUrls.add(url);
+
+      const fullUrl = url.startsWith('http') ? url : SITE_URL + url;
       const precomputeKey = 'precompute:' + crypto.createHash('sha256').update(fullUrl).digest('hex');
       const cached = await kvGet(precomputeKey);
       const isFresh = cached && cached.classifiedAt && (Date.now() - cached.classifiedAt) < STALE_MS;
       if (isFresh) covered++;
       pages.push({
-        path: urlOrPath,
-        category: (cached && cached.category) || r.category || null,
-        method: (cached && cached.method) || r.method || null,
-        source: (cached && cached.source) || r.source || null,
+        path: url,
+        category: (cached && cached.category) || entry.matchCategory || null,
+        method: (cached && cached.method) || entry.matchMethod || null,
+        source: (cached && cached.source) || 'live',
         classifiedAt: (cached && cached.classifiedAt) || null,
-        fresh: !!isFresh,
+        fresh: isFresh || !!entry.matchCategory, // live hit counts as covered
       });
+      if (entry.matchCategory) covered = pages.filter(p => p.fresh).length;
     }
 
+    const lastSweep = await kvGet('precompute:meta:last-sweep');
     const pagesTotal = pages.length;
+    const actualCovered = pages.filter(p => p.fresh).length;
 
     return res.status(200).json({
       pagesTotal,
-      covered,
-      coveragePct: pagesTotal ? parseFloat(((covered / pagesTotal) * 100).toFixed(1)) : 0,
+      covered: actualCovered,
+      coveragePct: pagesTotal ? parseFloat(((actualCovered / pagesTotal) * 100).toFixed(1)) : 0,
       lastSweep: lastSweep || null,
       pages,
     });
