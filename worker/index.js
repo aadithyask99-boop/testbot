@@ -332,6 +332,10 @@ export default {
     // (e.g. https://finance-weekly.vercel.app/articles/best-isa-2026.html)
     // rather than the Worker proxy URL.
     const originUrl = ORIGIN_URL + url.pathname + url.search;
+    // publicUrl: what users/bots see — the Worker's own URL.
+    // In production (Worker on publisher's domain), this equals originUrl.
+    // In our demo, it's the workers.dev URL which is what Bing indexes.
+    const publicUrl = request.url;
 
     // Fetch the origin page. v1: ORIGIN_URL is hardcoded to
     // testbot-two-psi.vercel.app itself (proof-of-concept). For a real
@@ -407,7 +411,7 @@ export default {
       variantId: variant.id,
       platform: detection.name,
       crawlerType: detection.type,
-      url: originUrl,
+      url: publicUrl,  // public Worker URL — what Bing/dashboard shows
       advertiser: winner.advertiser,
       cpmGBP: winner.cpmGBP,
       // Session 8: full match metadata for Why-box + per-publisher tracking
