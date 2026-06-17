@@ -226,6 +226,7 @@ module.exports = async function handler(req, res) {
         time: Date.now(),
         classified, skipped, errors: errors.length,
         pagesTotal: urlEntries.length,
+        results, // stored so status endpoint can show per-page coverage
       }, CACHE_TTL_SECONDS * 7);
     } catch (e) { /* non-fatal */ }
 
@@ -242,37 +243,43 @@ module.exports = async function handler(req, res) {
   // STATUS — coverage report for the dashboard.
   // --------------------------------------------------------
   if (req.method === 'GET' && action === 'status') {
-    // Status uses listPaths() (local, no network) — fast enough for
-    // the dashboard poll. The sweep uses fetchAllPublisherUrls() to
-    // discover new pages from sitemaps; status just reads what the
-    // sweep already classified and stored in KV.
-    const paths = listPaths();
+    // Now that demo pages are retired, status derives page list from
+    // the precompute:meta:last-sweep record (written by sweep) and
+    // individual precompute:{hash} keys for URLs seen in recent logs.
+    // This avoids the self-referential HTTP fetch problem while still
+    // showing real publisher page coverage.
+    const lastSweep = await kvGet('precompute:meta:last-sweep');
+    const sweepResults = (lastSweep && lastSweep.results) || [];
+
     const pages = [];
     let covered = 0;
+    const seen = new Set();
 
-    for (const path of paths) {
-      const page = getPage(path);
-      const fullUrl = SITE_URL + (page ? (page.path || path) : path);
+    for (const r of sweepResults) {
+      const urlOrPath = r.path || r.url;
+      if (!urlOrPath || seen.has(urlOrPath)) continue;
+      seen.add(urlOrPath);
+      const fullUrl = urlOrPath.startsWith('http') ? urlOrPath : SITE_URL + urlOrPath;
       const precomputeKey = 'precompute:' + crypto.createHash('sha256').update(fullUrl).digest('hex');
       const cached = await kvGet(precomputeKey);
       const isFresh = cached && cached.classifiedAt && (Date.now() - cached.classifiedAt) < STALE_MS;
       if (isFresh) covered++;
       pages.push({
-        path,
-        category: (cached && cached.category) || null,
-        method: (cached && cached.method) || null,
-        source: (cached && cached.source) || null,
+        path: urlOrPath,
+        category: (cached && cached.category) || r.category || null,
+        method: (cached && cached.method) || r.method || null,
+        source: (cached && cached.source) || r.source || null,
         classifiedAt: (cached && cached.classifiedAt) || null,
         fresh: !!isFresh,
       });
     }
 
-    const lastSweep = await kvGet('precompute:meta:last-sweep');
+    const pagesTotal = pages.length;
 
     return res.status(200).json({
-      pagesTotal: paths.length,
+      pagesTotal,
       covered,
-      coveragePct: paths.length ? parseFloat(((covered / paths.length) * 100).toFixed(1)) : 0,
+      coveragePct: pagesTotal ? parseFloat(((covered / pagesTotal) * 100).toFixed(1)) : 0,
       lastSweep: lastSweep || null,
       pages,
     });
