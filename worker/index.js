@@ -123,35 +123,42 @@ function detectBot(userAgent, request) {
 }
 
 // ------------------------------------------------------------
-// Page-signal extraction via HTMLRewriter.
-// Collects title, meta description, and text from article paragraphs —
-// mirrors api/index.js's extraction (which uses ALL <p> elements from
-// page.body up to 1500 chars; v1 here uses the first 2 non-byline
-// paragraphs, sufficient for classification/relevance and avoids
-// buffering the whole page).
+// ============================================================
+// CONTENT EXTRACTION (Session 9 — Readability-lite)
+// ============================================================
+// Strips noise elements (nav, header, footer, ads, scripts) and
+// extracts clean article text from HTML. Mirrors what Perplexity
+// and ChatGPT do with publisher pages before indexing them.
+// Uses HTMLRewriter (Cloudflare-native, streaming) — no DOM parser
+// needed, no external dependencies.
 //
-// KNOWN V1 LIMITATIONS:
-// 1. Scoped to `article p` (see injectIntoResponse for why the header's
-//    tagline <p> must not count). Assumes an <article> wrapper, true
-//    for all of lib/demo-pages.js. A real publisher's page may not use
-//    <article> — if `article p` matches zero elements, paragraphCount
-//    is 0 and injection falls back to "before </body>" (still works,
-//    loses "after the intro" placement). v2: fall back to plain `p` or
-//    a content-area heuristic (main, [role=main], .content,
-//    .post-content) if article-scoped matches are zero.
-// 2. SIGNALS additionally exclude `.byline` — lib/demo-pages.js's
-//    makePage() template always has `<p class="byline">By ... ·
-//    DATE</p>` as the first article p, and api/index.js's own
-//    extraction (from page.body, which excludes the byline) never sees
-//    it. Without excluding it here, the Worker's "firstParagraph" would
-//    be byline text instead of real content — worse signal quality than
-//    the origin. `:not(.byline)` is a best-effort match for THIS demo
-//    template; a real publisher's byline markup will differ or be
-//    absent. The byline STILL counts toward injection positioning
-//    (articlePCount) — see injectIntoResponse.
-// ------------------------------------------------------------
+// Extraction priority:
+//   1. <article> content — most publishers use semantic HTML
+//   2. <main> / [role=main] content — fallback for non-semantic HTML
+//   3. Heading text (h1-h3) — highest signal for topic classification
+//
+// Noise stripped: nav, header, footer, aside, .nav, .menu, .sidebar,
+//   .ad, .advertisement, .widget, script, style, noscript.
+// ============================================================
+
+// Elements to skip entirely — navigation, ads, boilerplate
+const NOISE_SELECTORS = [
+  'nav', 'header', 'footer', 'aside',
+  'script', 'style', 'noscript',
+  '.nav', '.menu', '.sidebar', '.widget',
+  '.ad', '.ads', '.advertisement', '.sponsored',
+  '.cookie', '.popup', '.modal', '.banner',
+  '#nav', '#menu', '#sidebar', '#footer', '#header',
+];
+
 function extractSignals(response) {
-  const signals = { title: '', metaDescription: '', paragraphs: [], headings: [], articlePCount: 0, mainPCount: 0 };
+  const signals = {
+    title: '', metaDescription: '',
+    paragraphs: [], headings: [],
+    articlePCount: 0, mainPCount: 0,
+    inNoise: 0, // depth counter for noise elements
+  };
+
   let articlePCount = 0;
   let mainPCount = 0;
 
@@ -165,46 +172,53 @@ function extractSignals(response) {
         if (content) signals.metaDescription = content;
       },
     })
-    // Extract headings — high signal for topic matching
-    .on('article h1, article h2, article h3, main h1, main h2, main h3', {
-      text(text) {
-        if (text.text.trim()) signals.headings.push(text.text.trim());
+    // Track entry/exit of noise containers so we can skip their text
+    .on(NOISE_SELECTORS.join(', '), {
+      element(el) {
+        signals.inNoise++;
+        el.onEndTag(() => { signals.inNoise = Math.max(0, signals.inNoise - 1); });
       },
     })
-    // Primary: article p (our demo pages + well-structured publishers)
+    // Headings — extract from article/main only, skip noise
+    .on('article h1, article h2, article h3, main h1, main h2, main h3', {
+      text(text) {
+        if (!signals.inNoise && text.text.trim()) {
+          signals.headings.push(text.text.trim());
+        }
+      },
+    })
+    // Article paragraphs (primary)
     .on('article p', {
-      element(el) { articlePCount++; },
+      element(el) { if (!signals.inNoise) articlePCount++; },
     })
     .on('article p:not(.byline)', {
       text(text) {
+        if (signals.inNoise) return;
         if (signals.paragraphs.length === 0) signals.paragraphs.push('');
         const idx = signals._currentP ?? signals.paragraphs.length - 1;
         signals.paragraphs[idx] = (signals.paragraphs[idx] || '') + text.text;
         if (text.lastInTextNode) signals._currentP = undefined;
       },
       element(el) {
+        if (signals.inNoise) return;
         signals.paragraphs.push('');
         signals._currentP = signals.paragraphs.length - 1;
       },
     })
-    // Fallback: main p (catches publishers without <article>)
+    // Main paragraphs (fallback)
     .on('main p', {
-      element(el) { mainPCount++; },
+      element(el) { if (!signals.inNoise) mainPCount++; },
     })
     .on('[role=main] p', {
-      element(el) { mainPCount++; },
+      element(el) { if (!signals.inNoise) mainPCount++; },
     });
 
   return rewriter.transform(response.clone()).text().then(() => {
-    // If article had no paragraphs, re-scan using main p as fallback.
-    // Signals extraction runs again on a fresh clone — cheap since
-    // it's a text parse, not a network request.
     const usingFallback = articlePCount === 0 && mainPCount > 0;
     const firstParagraph = (signals.paragraphs[0] || '').trim().slice(0, 500);
-    // Full body text — no truncation. Better input = better relevance scoring.
-    // Headings prepended as they're highest-signal for topic classification.
+    // Full clean body text — headings first (highest signal), then paragraphs
     const headingText = signals.headings.join(' ');
-    const bodyText = signals.paragraphs.join(' ').trim();
+    const bodyText = signals.paragraphs.filter(p => p.trim().length > 20).join(' ').trim();
     const bodySample = headingText
       ? (headingText + ' ' + bodyText).trim()
       : bodyText;
