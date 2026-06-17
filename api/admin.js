@@ -199,15 +199,16 @@ module.exports = async function handler(req, res) {
   // Useful after reset-stats clears category indexes. Safe to call any time.
   if (req.method === 'POST' && url.includes('/admin/reindex')) {
     try {
-      const { kvList, kvGet, kvSet } = require('../lib/kv');
-      // List all campaign:{id} keys
-      const keyResult = await kvList('campaign:');
-      const keys = (keyResult && keyResult.keys) || [];
+      // Known campaign IDs — scan all camp_001 through camp_020
+      const allIds = [];
+      for (let i = 1; i <= 20; i++) {
+        allIds.push('camp_' + String(i).padStart(3, '0'));
+      }
       const financeIds = [];
       const techIds = [];
       let found = 0;
-      for (const key of keys) {
-        const camp = await kvGet(key);
+      for (const id of allIds) {
+        const camp = await kvGet('campaign:' + id);
         if (!camp || !camp.id || !camp.category) continue;
         found++;
         if (camp.category === 'finance') financeIds.push(camp.id);
