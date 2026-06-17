@@ -495,3 +495,46 @@ write succeed," but "does every consumer of this data handle MY shape too."**
 
 
 
+
+---
+
+## Session 8 Learnings
+
+### The category index gets wiped by reset-stats
+`campaigns:finance` and `campaigns:tech` are KV keys that get cleared by `/admin/reset-stats`. When they're null, the auction fetches nothing and no campaigns compete — everything silently serves nothing. This is hard to diagnose because campaigns still exist as `campaign:{id}` in KV, and the dashboard shows them, but they never appear in auction logs.
+
+**Fix:** `/admin/reindex` rebuilds both index keys by scanning `campaign:camp_001` through `camp_020`. Always run this after a stats reset.
+
+**Prevention:** reset-stats should explicitly exclude `campaigns:*` keys. Add this to the next session.
+
+### kvList does not exist — use scan-by-known-IDs pattern
+`lib/kv.js` has no `kvList` or key-scan function. If you need to iterate all campaigns, scan known ID ranges (`camp_001` through `camp_020`) rather than listing KV keys. Do not add kvList without checking Upstash REST API docs first.
+
+### Advertiser account filter should show competed pages, not just won pages
+When an advertiser is selected, the Live Auction Board should show all pages where they competed — not just pages they won. A campaign competing and losing is useful signal (shows the advertiser where they're being outbid and by how much). Filter by `candidates.some(c => c.advertiser === selectedAdvertiser)`.
+
+### GitHub PAT configured for direct pushes
+The PAT is stored in the git remote URL in this Claude environment. Direct `git push` works without user interaction. The PAT is scoped to the `aadithyask99-boop` org with `repo` access.
+
+### dashboard-ui.js string escaping: use \\u00a3 not £
+Inside JS strings in dashboard-ui.js, the £ symbol must be written as `\\u00a3` (which renders as `\u00a3` in the actual string, which the browser interprets as £). Using the literal £ character inside single-quoted JS strings in the Node.js string concatenation layer causes silent rendering failures.
+
+---
+
+## Session 8 Learnings
+
+### The category index gets wiped by reset-stats
+`campaigns:finance` and `campaigns:tech` are KV keys that get cleared by `/admin/reset-stats`. When they're null, the auction fetches nothing and no campaigns compete — everything silently serves nothing. This is hard to diagnose because campaigns still exist as `campaign:{id}` in KV, and the dashboard shows them, but they never appear in auction logs.
+
+**Fix:** `/admin/reindex` rebuilds both index keys by scanning `campaign:camp_001` through `camp_020`. Always run this after a stats reset.
+
+**Prevention:** reset-stats should explicitly exclude `campaigns:*` keys. Add this to the next session.
+
+### kvList does not exist — use scan-by-known-IDs pattern
+`lib/kv.js` has no `kvList` or key-scan function. If you need to iterate all campaigns, scan known ID ranges (`camp_001` through `camp_020`) rather than listing KV keys.
+
+### Advertiser account filter should show competed pages, not just won pages
+When an advertiser is selected, the Live Auction Board should show all pages where they competed — not just pages they won. Filter by `candidates.some(c => c.advertiser === selectedAdvertiser)`.
+
+### GitHub PAT configured for direct pushes
+PAT stored in git remote URL in Claude environment. Direct git push works. Scoped to aadithyask99-boop org with repo access.
