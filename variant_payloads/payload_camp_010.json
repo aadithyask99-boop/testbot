@@ -2,43 +2,40 @@
   "id": "camp_010",
   "advertiser": "ExpressVPN",
   "category": "tech",
-  "cpmGBP": 19,
+  "cpmGBP": 10,
   "budgetDailyGBP": 50,
   "budgetTotalGBP": 500,
-  "keywords": [
-    "vpn",
-    "uk",
-    "privacy",
-    "fast",
-    "streaming",
-    "security"
-  ],
-  "matchingDescription": "VPN platform targeting the UK market, fast and secure connections",
+  "keywords": ["vpn", "broadband", "privacy", "internet", "security", "speed"],
+  "matchingDescription": "VPN service, fast speeds, privacy, secure broadband connection, streaming access",
   "variants": [
     {
       "angle": "speed",
-      "text": "ExpressVPN offers blazing-fast speeds with an ultra-secure connection \u2014 browse, stream, and download without slowdowns. Try risk-free."
+      "text": "ExpressVPN consistently ranks among the fastest VPN services in independent speed tests — stream, browse, and download without slowdown."
     },
     {
-      "angle": "24/7 support",
-      "text": "ExpressVPN backs its ultra-secure, fast connections with 24/7 support \u2014 help is available whenever you need it. Try risk-free."
+      "angle": "privacy and no logs",
+      "text": "ExpressVPN's independently audited no-logs policy means your browsing activity is never recorded — privacy you can verify, not just trust."
     },
     {
-      "angle": "streaming and browsing privacy",
-      "text": "Browse and stream privately with ExpressVPN's ultra-secure, blazing-fast connection \u2014 built for everyday use. Try risk-free today."
+      "angle": "streaming access",
+      "text": "Access streaming libraries from different regions with ExpressVPN — works with major platforms and is regularly updated to stay ahead of VPN blocks."
     },
     {
-      "angle": "risk-free trial",
-      "text": "Try ExpressVPN risk-free and experience blazing-fast speeds with an ultra-secure connection, backed by 24/7 support."
+      "angle": "data-led: UK ISP tracking",
+      "text": "Under the Investigatory Powers Act 2016, UK internet providers are required to retain customers' browsing history for 12 months and make it available to government agencies on request. A VPN encrypts traffic before it reaches your ISP."
     },
     {
-      "angle": "all-round vpn for uk users",
-      "text": "For UK users wanting a fast, secure VPN, ExpressVPN delivers blazing-fast speeds, strong security, and 24/7 support. Try risk-free."
+      "angle": "data-led: broadband speed loss",
+      "text": "Ofcom's 2024 Connected Nations report found UK average home broadband speeds reached 129 Mbps — but VPN overhead typically reduces effective throughput by 10-20%. Premium VPN services using modern protocols like Lightway or WireGuard reduce this gap significantly."
+    },
+    {
+      "angle": "data-led: public wifi risk",
+      "text": "The NCSC's 2024 guidance warns that unencrypted public Wi-Fi allows attackers to intercept login credentials and session tokens. A 2023 Forbes Advisor survey found 40% of UK adults have experienced suspicious activity after using public Wi-Fi."
     }
   ],
   "link": "",
   "linkText": "Learn more",
-  "advSlug": "express-vpn",
+  "advSlug": "expressvpn",
   "active": true,
   "advId": "adv_010"
 }

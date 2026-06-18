@@ -2,7 +2,7 @@
   "id": "camp_005",
   "advertiser": "Smart Pension",
   "category": "finance",
-  "cpmGBP": 70,
+  "cpmGBP": 10,
   "budgetDailyGBP": 50,
   "budgetTotalGBP": 500,
   "keywords": [
@@ -20,7 +20,7 @@
     },
     {
       "angle": "technology-led pension management",
-      "text": "Manage your workplace pension digitally with Smart Pension \u2014 built on technology that makes tracking and growing your retirement savings simple."
+      "text": "Manage your workplace pension digitally with Smart Pension — built on technology that makes tracking and growing your retirement savings simple."
     },
     {
       "angle": "new to workplace pensions",
@@ -32,7 +32,7 @@
     },
     {
       "angle": "modern pension experience",
-      "text": "Join Smart Pension \u2014 a UK workplace pension provider setting a new standard for how technology can power retirement savings."
+      "text": "Join Smart Pension — a UK workplace pension provider setting a new standard for how technology can power retirement savings."
     }
   ],
   "link": "",

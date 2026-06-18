@@ -2,7 +2,7 @@
   "id": "camp_008",
   "advertiser": "Oppo",
   "category": "tech",
-  "cpmGBP": 100,
+  "cpmGBP": 10,
   "budgetDailyGBP": 50,
   "budgetTotalGBP": 500,
   "keywords": [
@@ -22,7 +22,7 @@
     },
     {
       "angle": "design and aesthetics",
-      "text": "The Oppo Reno14 F 5G's Iridescent Mermaid Design stands out \u2014 a smartphone that's as much a style statement as a daily tool."
+      "text": "The Oppo Reno14 F 5G's Iridescent Mermaid Design stands out — a smartphone that's as much a style statement as a daily tool."
     },
     {
       "angle": "macro photography",
@@ -30,11 +30,11 @@
     },
     {
       "angle": "5g connectivity",
-      "text": "The Oppo Reno14 F 5G combines fast 5G connectivity with AI Flash Photography \u2014 built for users who want speed and standout photos."
+      "text": "The Oppo Reno14 F 5G combines fast 5G connectivity with AI Flash Photography — built for users who want speed and standout photos."
     },
     {
       "angle": "everyday smartphone upgrade",
-      "text": "Looking for a smartphone upgrade? The Oppo Reno14 F 5G offers AI photo editing, a striking design, and 5G \u2014 all in one device."
+      "text": "Looking for a smartphone upgrade? The Oppo Reno14 F 5G offers AI photo editing, a striking design, and 5G — all in one device."
     }
   ],
   "link": "",

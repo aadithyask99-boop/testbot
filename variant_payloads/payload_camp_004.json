@@ -2,7 +2,7 @@
   "id": "camp_004",
   "advertiser": "E*TRADE",
   "category": "finance",
-  "cpmGBP": 70,
+  "cpmGBP": 10,
   "budgetDailyGBP": 50,
   "budgetTotalGBP": 500,
   "keywords": [
@@ -17,7 +17,7 @@
   "variants": [
     {
       "angle": "broad asset range",
-      "text": "At E*TRADE, trade stocks, bonds, ETFs, mutual funds, and more \u2014 all from one platform built for active and long-term investors alike."
+      "text": "At E*TRADE, trade stocks, bonds, ETFs, mutual funds, and more — all from one platform built for active and long-term investors alike."
     },
     {
       "angle": "platform demos and education",
@@ -29,7 +29,7 @@
     },
     {
       "angle": "options and active trading",
-      "text": "For active traders, E*TRADE's platform supports stocks, options, and more \u2014 with tools designed for hands-on portfolio management."
+      "text": "For active traders, E*TRADE's platform supports stocks, options, and more — with tools designed for hands-on portfolio management."
     },
     {
       "angle": "long-term portfolio building",

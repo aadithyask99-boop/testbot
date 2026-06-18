@@ -1,61 +1,41 @@
 {
   "id": "camp_014",
-  "advId": "adv_014",
   "advertiser": "Norton",
   "category": "tech",
-  "cpmGBP": 25,
+  "cpmGBP": 10,
   "budgetDailyGBP": 50,
   "budgetTotalGBP": 500,
-  "keywords": [
-    "antivirus",
-    "internet security",
-    "malware",
-    "cybersecurity",
-    "virus protection",
-    "security software",
-    "ransomware"
-  ],
-  "matchingDescription": "Antivirus and internet security software, malware protection, ransomware defence, cybersecurity for UK consumers",
+  "keywords": ["antivirus", "vpn", "security", "malware", "ransomware", "privacy", "cyber"],
+  "matchingDescription": "Antivirus and VPN bundle, ransomware protection, dark web monitoring, multi-device household",
   "variants": [
     {
-      "id": "v1",
       "angle": "all-round protection",
-      "text": "Norton 360 provides award-winning antivirus, a no-log VPN, and dark web monitoring \u2014 comprehensive protection for your devices and personal data."
+      "text": "Norton 360 provides award-winning antivirus, a no-log VPN, and dark web monitoring — comprehensive protection for your devices and identity."
     },
     {
-      "id": "v2",
       "angle": "ransomware defence",
-      "text": "Protect your files from ransomware with Norton 360's advanced threat detection \u2014 real-time protection that blocks attacks before they can encrypt your data."
+      "text": "Protect your files from ransomware with Norton 360's advanced threat detection — real-time protection that blocks attacks before encryption begins."
     },
     {
-      "id": "v3",
-      "angle": "multi-device household",
-      "text": "Protect every device in your home with Norton 360 \u2014 one subscription covers PCs, Macs, smartphones, and tablets with antivirus and a built-in VPN."
-    },
-    {
-      "id": "v4",
       "angle": "dark web monitoring",
-      "text": "Norton 360 monitors the dark web for your personal information and alerts you if your data appears in a breach \u2014 protection beyond just your device."
+      "text": "Norton 360 monitors the dark web for your personal information and alerts you if your data appears in a breach — protection that goes beyond your device."
     },
     {
-      "id": "v5",
-      "angle": "lightweight and fast",
-      "text": "Norton's antivirus runs quietly in the background with minimal impact on system performance \u2014 protection that doesn't slow you down."
-    },
-    {
-      "id": "v6",
       "angle": "data-led: UK threat stats",
-      "text": "UK cybersecurity incidents rose 31% in 2024 according to the NCSC annual review, with phishing the most common attack vector. Norton 360 blocked over 300 million threats in the UK in 2024."
+      "text": "UK cybersecurity incidents rose 31% in 2024 according to the NCSC annual review, with phishing the most common attack vector for individuals. One in three UK adults who received a phishing attempt in 2023 reported clicking the link (Ofcom Online Safety Report)."
     },
     {
-      "id": "v7",
       "angle": "data-led: ransomware context",
-      "text": "Ransomware attacks on UK individuals increased 40% year-on-year in 2024 (NCSC). Norton 360's ransomware protection uses behavioural detection to block encryption attempts before files are affected."
+      "text": "Ransomware attacks on UK individuals increased 40% year-on-year in 2024 (NCSC). The average ransom demand in consumer-targeted attacks reached £800 in 2023 — but paying the ransom does not guarantee file recovery, with only 65% of victims regaining access."
+    },
+    {
+      "angle": "data-led: dark web exposure",
+      "text": "Have I Been Pwned records over 13 billion compromised accounts globally. The UK's ICO received 2,600+ data breach notifications in 2023 alone. Dark web monitoring services alert users within hours of credentials appearing in new breach datasets."
     }
   ],
-  "link": "https://uk.norton.com",
-  "linkText": "Try Norton 360",
+  "link": "",
+  "linkText": "Learn more",
   "advSlug": "norton",
   "active": true,
-  "startDate": "2026-06-16"
+  "advId": "adv_014"
 }

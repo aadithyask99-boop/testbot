@@ -2,47 +2,39 @@
   "id": "camp_003",
   "advertiser": "Interactive Investor",
   "category": "finance",
-  "cpmGBP": 100,
+  "cpmGBP": 10,
   "budgetDailyGBP": 50,
   "budgetTotalGBP": 500,
-  "keywords": [
-    "isa provider",
-    "investment",
-    "capital",
-    "sipp",
-    "stocks and shares isa"
-  ],
-  "matchingDescription": "UK stocks and shares ISA, investment platform, SIPP, flat-fee pricing",
+  "keywords": ["isa", "pension", "sipp", "dividend", "investment", "stocks", "shares"],
+  "matchingDescription": "UK flat-fee investment platform, stocks and shares ISA, SIPP pension, dividend investing",
   "variants": [
     {
       "angle": "award-winning isa",
-      "text": "Open an award-winning Stocks and Shares ISA with interactive investor \u2014 start investing tax-efficiently. Capital at risk; tax rules may change."
-    },
-    {
-      "angle": "flat-fee pricing",
-      "text": "interactive investor charges a flat monthly fee rather than a percentage \u2014 for larger portfolios this can mean significantly lower costs over time."
+      "text": "Open an award-winning Stocks and Shares ISA with interactive investor — start investing tax-efficiently. Capital at risk."
     },
     {
       "angle": "sipp and pension consolidation",
-      "text": "Consolidate old pensions into a SIPP with interactive investor and manage your retirement investments alongside your ISA in one place."
+      "text": "Consolidate old pensions into a SIPP with interactive investor and manage your retirement investments alongside your ISA in one place. Capital at risk."
     },
     {
       "angle": "long-term investor",
-      "text": "For investors building a long-term portfolio, interactive investor's award-winning ISA gives access to thousands of UK and global investments."
+      "text": "For investors building a long-term portfolio, interactive investor's award-winning ISA gives access to thousands of UK and international investments. Capital at risk."
     },
     {
-      "angle": "experienced investor tools",
-      "text": "interactive investor's Stocks and Shares ISA offers research tools and a wide investment range suited to hands-on, experienced investors."
-    },
-    {
-      "id": "v6",
       "angle": "data-led: flat fee advantage",
-      "text": "A \u00a3100,000 ISA on a 0.25% annual fee platform costs \u00a3250 per year; the same portfolio on Interactive Investor's flat \u00a39.99 monthly plan costs \u00a3120 \u2014 a saving of \u00a3130 annually that compounds over time."
+      "text": "A £100,000 ISA on a 0.25% annual fee platform costs £250 per year; the same portfolio on Interactive Investor's flat £9.99 monthly plan costs £120 — a difference that compounds over a 20-year investment horizon."
     },
     {
-      "id": "v7",
       "angle": "data-led: long-term cost",
-      "text": "Over 20 years, the difference between a 0.45% platform fee and a flat monthly fee can exceed \u00a315,000 on a \u00a3100,000 portfolio. Interactive Investor charges a flat \u00a39.99 per month regardless of portfolio size."
+      "text": "Over 20 years, the difference between a 0.45% platform fee and a flat monthly fee can exceed £15,000 on a £100,000 portfolio (assuming 7% annual growth). The break-even point for a flat fee is typically around £50,000 invested."
+    },
+    {
+      "angle": "data-led: dividend reinvestment",
+      "text": "FTSE 100 companies paid out £78.8bn in dividends in 2023 according to AJ Bell's Dividend Dashboard. Investors who reinvested dividends in UK equities over the past 20 years saw returns roughly double those who did not."
+    },
+    {
+      "angle": "data-led: pension consolidation scale",
+      "text": "The Pensions Policy Institute estimates 2.8 million pension pots in the UK are currently 'lost' — deferred workplace pensions whose holders have lost track of them, totalling an estimated £26.6bn in unclaimed retirement savings."
     }
   ],
   "link": "",

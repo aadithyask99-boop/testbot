@@ -2,7 +2,7 @@
   "id": "camp_009",
   "advertiser": "Xiaomi",
   "category": "tech",
-  "cpmGBP": 64,
+  "cpmGBP": 10,
   "budgetDailyGBP": 50,
   "budgetTotalGBP": 500,
   "keywords": [
@@ -21,7 +21,7 @@
     },
     {
       "angle": "storage speed",
-      "text": "With fast UFS 4.0 storage, the Xiaomi 14 loads apps and transfers files quickly \u2014 built for users who demand responsive performance."
+      "text": "With fast UFS 4.0 storage, the Xiaomi 14 loads apps and transfers files quickly — built for users who demand responsive performance."
     },
     {
       "angle": "performance for multitasking",

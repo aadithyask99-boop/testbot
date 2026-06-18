@@ -1,54 +1,41 @@
 {
   "id": "camp_012",
-  "advId": "adv_012",
   "advertiser": "Hargreaves Lansdown",
   "category": "finance",
-  "cpmGBP": 80,
-  "budgetDailyGBP": 100,
-  "budgetTotalGBP": 1000,
-  "keywords": [
-    "isa",
-    "stocks and shares isa",
-    "investment platform",
-    "sipp",
-    "pension",
-    "dividend",
-    "shares",
-    "fund",
-    "hargreaves",
-    "investor"
-  ],
-  "matchingDescription": "UK stocks and shares ISA, SIPP, investment platform for retail investors, dividend investing, fund dealing, Hargreaves Lansdown",
+  "cpmGBP": 10,
+  "budgetDailyGBP": 50,
+  "budgetTotalGBP": 500,
+  "keywords": ["isa", "pension", "sipp", "investment", "stocks", "shares", "fund"],
+  "matchingDescription": "UK largest investment platform, stocks and shares ISA, SIPP, fund supermarket, over 1.8 million clients",
   "variants": [
     {
-      "id": "v1",
       "angle": "uk largest platform",
-      "text": "Hargreaves Lansdown is the UK's largest investment platform. Open a Stocks and Shares ISA and invest in funds, shares, and ETFs \u2014 all in one place."
+      "text": "Hargreaves Lansdown is the UK's largest investment platform — manage your ISA, SIPP, and investments in one place. Over 1.8 million clients. Capital at risk."
     },
     {
-      "id": "v2",
       "angle": "isa and sipp",
-      "text": "Manage your ISA and pension in one place with Hargreaves Lansdown \u2014 the UK's largest investment platform, trusted by over 1.8 million clients."
+      "text": "Open a Stocks and Shares ISA or SIPP with Hargreaves Lansdown — access thousands of investments with expert research tools. Capital at risk."
     },
     {
-      "id": "v3",
-      "angle": "dividend income",
-      "text": "Build an income portfolio with Hargreaves Lansdown's Stocks and Shares ISA \u2014 access thousands of income-paying shares, funds, and investment trusts."
+      "angle": "data-led: platform scale",
+      "text": "Hargreaves Lansdown administers over £140bn in assets on behalf of 1.8 million UK clients — making it the largest investment platform in the UK by both assets and client count, ahead of AJ Bell and interactive investor."
     },
     {
-      "id": "v4",
-      "angle": "first time investor",
-      "text": "New to investing? Hargreaves Lansdown makes it simple to open a Stocks and Shares ISA and start building your portfolio, with expert guidance available."
+      "angle": "data-led: ISA millionaire stats",
+      "text": "HMRC data shows approximately 4,000 UK ISA accounts hold more than £1 million, accumulated entirely through tax-free growth over the ISA's 25-year history. The maximum contribution has risen from £7,000 in 1999 to £20,000 today."
     },
     {
-      "id": "v5",
-      "angle": "wide investment choice",
-      "text": "Hargreaves Lansdown gives access to thousands of UK and global investments inside a Stocks and Shares ISA \u2014 shares, funds, ETFs, and investment trusts."
+      "angle": "data-led: pension gap",
+      "text": "The average UK pension pot at retirement is £61,897 according to the Pensions Policy Institute — significantly below the £237,000 estimated to fund a moderate retirement. Starting a SIPP in your 30s rather than 40s can more than double the final pot size."
+    },
+    {
+      "angle": "data-led: fund charges impact",
+      "text": "A 1% annual fund charge on a £50,000 pension over 25 years (assuming 7% growth) costs approximately £43,000 in foregone returns. Comparing ongoing charge figures (OCF) across fund options is one of the highest-impact decisions an investor makes."
     }
   ],
-  "link": "https://www.hl.co.uk",
-  "linkText": "Visit Hargreaves Lansdown",
+  "link": "",
+  "linkText": "Learn more",
   "advSlug": "hargreaves-lansdown",
   "active": true,
-  "startDate": "2026-06-16"
+  "advId": "adv_012"
 }

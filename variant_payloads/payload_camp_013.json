@@ -1,68 +1,41 @@
 {
   "id": "camp_013",
-  "advId": "adv_013",
   "advertiser": "AJ Bell",
   "category": "finance",
-  "cpmGBP": 60,
-  "budgetDailyGBP": 75,
-  "budgetTotalGBP": 750,
-  "keywords": [
-    "isa",
-    "stocks and shares isa",
-    "lifetime isa",
-    "first home",
-    "deposit",
-    "sipp",
-    "pension",
-    "investment platform",
-    "first time buyer"
-  ],
-  "matchingDescription": "UK Lifetime ISA for first-time home buyers, government bonus on savings, stocks and shares ISA, SIPP pension, AJ Bell low-cost investment platform",
+  "cpmGBP": 10,
+  "budgetDailyGBP": 50,
+  "budgetTotalGBP": 500,
+  "keywords": ["isa", "lisa", "first home", "first-time buyer", "lifetime isa", "deposit", "pension", "sipp"],
+  "matchingDescription": "UK investment platform, Lifetime ISA for first-time buyers, low-cost SIPP, stocks and shares ISA",
   "variants": [
     {
-      "id": "v1",
       "angle": "lifetime isa for first home",
-      "text": "Save for your first home with AJ Bell's Lifetime ISA and earn a 25% government bonus on up to \u00a34,000 per year \u2014 simple, low-cost, and flexible."
+      "text": "Save for your first home with AJ Bell's Lifetime ISA and earn a 25% government bonus on up to £4,000 per year — simple, low-cost investing toward your deposit. Capital at risk."
     },
     {
-      "id": "v2",
       "angle": "low cost investing",
-      "text": "AJ Bell's Stocks and Shares ISA offers low-cost dealing from \u00a31.50 per trade \u2014 a straightforward way to invest in funds, shares, and ETFs tax-free."
+      "text": "AJ Bell's Stocks and Shares ISA offers low-cost dealing from £1.50 per trade — a straightforward way to invest in funds, shares, and ETFs. Capital at risk."
     },
     {
-      "id": "v3",
       "angle": "sipp and retirement",
-      "text": "Plan for retirement with AJ Bell's low-cost SIPP \u2014 access thousands of investments and manage your pension alongside your ISA in one account."
+      "text": "Plan for retirement with AJ Bell's low-cost SIPP — access thousands of investments and manage your pension alongside your ISA. Capital at risk."
     },
     {
-      "id": "v4",
-      "angle": "easy to switch",
-      "text": "Switch your ISA to AJ Bell and get low-cost access to thousands of investments, with dealing from \u00a31.50 per trade and no ISA transfer fees."
-    },
-    {
-      "id": "v5",
-      "angle": "first time buyer lisa",
-      "text": "First-time buyer? AJ Bell's Lifetime ISA adds a 25% government bonus to your savings \u2014 use it toward a deposit on a home worth up to \u00a3450,000."
-    },
-    {
-      "id": "v6",
       "angle": "data-led: HMRC LISA uptake",
-      "text": "HMRC data shows fewer than 40% of eligible first-time buyers use a Lifetime ISA, missing up to \u00a31,000 per year in government bonuses. AJ Bell's LISA lets you invest that bonus rather than hold it in cash."
+      "text": "HMRC data shows fewer than 40% of eligible first-time buyers use a Lifetime ISA, missing up to £1,000 per year in government bonuses. The maximum bonus over the full 32-year contribution window (ages 18–50) is £32,000."
     },
     {
-      "id": "v7",
       "angle": "data-led: deposit timeline",
-      "text": "Saving \u00a3400 per month into a Lifetime ISA from age 25 generates \u00a312,000 in government bonuses alone by age 35 \u2014 without any investment growth. AJ Bell's LISA charges no annual platform fee on cash savings."
+      "text": "Saving £400 per month into a Lifetime ISA from age 25 generates £12,000 in government bonuses alone by age 35 — without any investment returns. That's equivalent to 14.4 months of additional savings at the same rate."
     },
     {
-      "id": "v8",
       "angle": "data-led: property price context",
-      "text": "With average UK first-home prices above \u00a3300,000, a 10% deposit requires over three years of \u00a3833 monthly savings. A Lifetime ISA with AJ Bell reduces that timeline by adding 25p for every \u00a31 saved, up to \u00a34,000 per year."
+      "text": "With average UK first-home prices above £300,000, a 10% deposit requires over three years of £833 monthly savings. A Lifetime ISA's 25% government bonus reduces the required saving period by roughly nine months on average."
     }
   ],
-  "link": "https://www.ajbell.co.uk",
-  "linkText": "Visit AJ Bell",
+  "link": "",
+  "linkText": "Learn more",
   "advSlug": "aj-bell",
   "active": true,
-  "startDate": "2026-06-16"
+  "advId": "adv_013"
 }
