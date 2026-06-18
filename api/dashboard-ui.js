@@ -104,7 +104,7 @@ var html = '<!DOCTYPE html>' +
 '<div class="frow"><div class="field"><label>Category</label><select id="f-cat"><option value="finance">finance</option><option value="tech">tech</option></select></div>' +
 '<div class="field"><label>Keywords (comma-separated)</label><input type="text" id="f-kw" placeholder="isa, pension, stocks"></div></div>' +
 '<div class="field"><label>Targeting Description <span style="font-size:11px;color:#888;font-weight:400">(helps Haiku match correctly — one sentence, be specific about geography and topic)</span></label><input type="text" id="f-desc" placeholder="e.g. UK pension and ISA investing platform for retail investors"></div>' +
-'<div class="field"><label>Ad Variants <span style="font-size:11px;color:#888;font-weight:400">(5-15 required, each with a distinct angle, max 200 chars — Haiku picks the best one per page)</span></label>' +
+'<div class="field"><label>Ad Variants <span style="font-size:11px;color:#888;font-weight:400">(5-15 required, each with a distinct angle, max 280 chars — Haiku picks the best one per page)</span></label>' +
 '<div id="vcount" class="vcount"></div>' +
 '<div id="f-variants"></div>' +
 '<button type="button" class="btn btnsec" onclick="addVariantRow()">+ Add Variant</button></div>' +
@@ -440,7 +440,7 @@ var html = '<!DOCTYPE html>' +
 '        "<input type=\\"text\\" placeholder=\\"angle, e.g. first-home saver\\" value=\\""+escAttr(v.angle||"")+"\\" oninput=\\"updateVariant("+i+",\'angle\',this.value)\\">"+' +
 '        "<button type=\\"button\\" class=\\"btn btndanger\\" onclick=\\"removeVariantRow("+i+")\\">Remove</button>"+' +
 '      "</div>"+' +
-'      "<textarea placeholder=\\"Ad copy for this angle, max 200 chars\\" maxlength=\\"200\\" oninput=\\"updateVariant("+i+",\'text\',this.value)\\">"+escHtml(v.text||"")+"</textarea>"+' +
+'      "<textarea placeholder=\\"Ad copy for this angle, max 280 chars\\" maxlength=\\"200\\" oninput=\\"updateVariant("+i+",\'text\',this.value)\\">"+escHtml(v.text||"")+"</textarea>"+' +
 '      "<div class=\\"vchar"+(over?" bad":"")+"\\">"+len+" / 200</div>"+' +
 '    "</div>";' +
 '  }).join("");' +
