@@ -535,3 +535,46 @@ testbot-worker.projectatlas.workers.dev).
 - Demo pages retired from lib/demo-pages.js — testbot-two-psi.vercel.app is now platform API only
 - Real publisher sites: finance-weekly.vercel.app (pub_001), tech-briefing-tau.vercel.app (pub_002)
 - Workers: finance-weekly-worker.projectatlas.workers.dev, tech-briefing-worker.projectatlas.workers.dev
+
+---
+
+## Session 9 — continued (2026-06-18)
+
+**Additional work completed after initial Session 9 entry:**
+
+**Data-led variant strategy — proven working:**
+- Theory: AI retrieval systems prefer paragraphs with specific statistics over promotional copy because they optimise for citation worthiness, passage scoring, and hallucination avoidance.
+- Implementation: Added data-led variants to AJ Bell (v6/v7/v8), Interactive Investor (v6/v7), Norton (v6/v7).
+- Updated Haiku variant selection prompt to explicitly prefer: (1) specific statistics/research findings, (2) informational register matching editorial, (3) content that adds genuine user value, (4) vocabulary matching page context.
+- Raised variant text limit from 200 to 280 chars to accommodate data-led copy.
+- Added precompute?action=invalidate-url endpoint to clear variant cache for specific URLs without needing sitemap fetch.
+- Fixed invalidate endpoint to iterate publisher sitemap URLs (was using empty listPaths() after demo pages retired).
+
+**Validation:**
+- AJ Bell first-time-buyer page: after clearing variant cache, Haiku selected v8 "data-led: property price context" — "With average UK first-home prices above £300,000, a 10% deposit requires over three years of £833 monthly savings..."
+- ChatGPT Browse queried: "How long does it take to save for a first home deposit in the UK?" — surfaced the injected stats verbatim: £300,000 average price, £833/month, 3-year timeline, 25% LISA bonus. Quoted as editorial fact, not promotional callout.
+- Previous promo variants (v5) were described by ChatGPT as "promotional callouts". Data-led variants are absorbed as editorial.
+
+**Dashboard fixes:**
+- Publisher picker: now calls load() on change (re-fetches with pubId), uses loadSeq to prevent stale responses.
+- Precompute status: inlined from recentBotLogs, no more getPrecomputeStatus() HTTP fetch on every poll.
+- Polling: 10s interval, tab-aware (only operator view on poll, adv/pub fetched on tab switch).
+- Publisher viewable: now counts from log:recent scoped to pubId+retrieval, not global campaign counts.
+- reset-stats: now clears per-publisher impression counters.
+
+**Bot detection:** 30/30 UAs verified. Anonymous crawler (DeepSeek pattern) confirmed working.
+
+**Worker architecture documented:**
+- Publisher onboarding = paste Worker script into Cloudflare, add route. Not a <script> tag.
+- ORIGIN_URL in Worker = publisher's actual site. publicUrl logged (Worker URL) vs originUrl used for /match cache key.
+- Worker domains added to publisher config for dashboard URL resolution.
+- Bing verification meta tag added to all Finance Weekly and Tech Briefing pages.
+
+**Final state Session 9:**
+- Platform: testbot-two-psi.vercel.app (API only)
+- Finance Weekly: finance-weekly.vercel.app → proxied by finance-weekly-worker.projectatlas.workers.dev
+- Tech Briefing: tech-briefing-tau.vercel.app → proxied by tech-briefing-worker.projectatlas.workers.dev
+- 8 real publisher articles all serving correctly
+- 15 campaigns (9 finance, 6 tech), 3 with data-led variants
+- AJ Bell data-led v8 confirmed working via ChatGPT Browse live test
+- GitHub PAT (org-scoped): stored in Claude environment git remote URL — aadithyask99-boop org, repo scope

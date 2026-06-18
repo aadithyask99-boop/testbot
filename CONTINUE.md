@@ -573,3 +573,51 @@ The demo Vercel sites (`finance-weekly.vercel.app`, `tech-briefing-tau.vercel.ap
 
 **What "the script we send publishers" actually is:**
 Not a `<script>` tag. It's a Cloudflare Worker script (~400 lines) with 4 config constants at the top that the publisher customises. Everything else is platform code they never need to touch.
+
+---
+
+## Session 9 Learnings
+
+### Data-led variants bypass AI "promotional callout" filter
+AI retrieval systems (ChatGPT Browse, Perplexity) evaluate passages for citation worthiness. Promotional copy ("Try Norton risk-free") scores near zero on informational queries. Passages with specific statistics, study findings, or computable data score high and get quoted verbatim.
+
+**Mechanism:** passage scoring (semantic similarity to user query), citation worthiness (AI wants attributable facts), content coherence filtering (AI detects register shift from editorial to promotional), hallucination avoidance (AI preserves specific numbers rather than paraphrasing).
+
+**Evidence:** AJ Bell v5 promo → ChatGPT flagged as "promotional callout". AJ Bell v8 data-led → ChatGPT quoted stats verbatim as editorial fact.
+
+**Haiku prompt updated:** "Prefer variants containing specific statistics, research findings, or concrete data over generic promotional claims. Prefer variants that match the informational register of the page."
+
+### Variant cache is separate from relevance/classification cache
+Three separate cache layers:
+1. `precompute:{sha256(url)}` — category classification
+2. `match-rel:{sha256(url|candidates)}` — Haiku relevance filtering result
+3. `variant:{sha256(url|campaignId)}` — variant selection result
+
+The `/precompute?action=invalidate` endpoint (iterated from listPaths) was deleting nothing after demo pages were retired. Use `/precompute?action=invalidate-url` with explicit URL + campaignId instead.
+
+### publicUrl vs originUrl in Worker
+Worker has two URL concepts:
+- `originUrl = ORIGIN_URL + pathname` — publisher's actual page. Used as /match cache key. Must be consistent across all crawls.
+- `publicUrl = request.url` — Worker's own URL (what Bing indexes, what user sees). Logged in /impression for dashboard display.
+In production with Worker on publisher's domain, these are identical. In our demo, they differ.
+
+### Vercel can't fetch remote HTML (outbound restriction)
+testbot.vercel.app cannot make HTTP requests to finance-weekly.vercel.app or tech-briefing-tau.vercel.app. This blocks:
+- Precompute sweep classifying real publisher pages
+- Any serverless function that needs to fetch page content for classification
+
+**Workaround:** Classification happens lazily on first bot crawl (Worker calls /match with full page text). Result is cached. Subsequent crawls are instant.
+
+**Proper fix:** Cloudflare sweep Worker — runs on a cron, has no outbound restrictions, fetches publisher pages, calls /match to pre-classify before any real bot visits.
+
+### Publisher picker timing: load() is the single source of truth
+Earlier attempts used setPublisher → separate fetch → update pubData. This raced with the polling load(). Solution: load() always includes pubQ, uses loadSeq counter to discard stale responses. One fetch path only.
+
+### reset-stats must clear per-publisher counters
+stats:impressions:pub:{pubId}:total was not in the original reset-stats key list. After reset, the global counter showed 0 but per-publisher showed stale values. Fixed — reset-stats now iterates config.publishers and clears all per-publisher keys.
+
+### Cloudflare Worker deployment = paste into dashboard, not Git integration
+When deploying Workers via Cloudflare Pages Git integration, wrangler tries to bundle the entire repo as static assets and fails on large files. Use: Cloudflare dashboard → Workers & Pages → Create Worker → paste raw script → Deploy. No wrangler, no build process.
+
+### Worker script regeneration after any worker/index.js change
+The platform's worker/index.js is the template. Finance Weekly and Tech Briefing repos have their own copies with ORIGIN_URL/PUB_ID/PUB_TOKEN substituted. Any change to the template must be propagated to both publisher repos using the Python substitution script in HANDOVER.md. Then both Cloudflare Workers must be manually redeployed by pasting the new script.
