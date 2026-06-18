@@ -567,7 +567,7 @@ var html = '<!DOCTYPE html>' +
 '  }).join("")||"<tr><td colspan=\'3\' class=\'empty\'>No visits yet</td></tr>");' +
 '  var rv=pubData.recentVisits||[];' +
 '  if(selectedPublisher){' +
-'    var pubUrls={};board.forEach(function(p){pubUrls[p.url]=true;});' +
+'    var pubUrls={};pages.forEach(function(p){pubUrls[p.url]=true;});' +
 '    rv=rv.filter(function(e){return pubUrls[e.url];});' +
 '  }' +
 '  set("pub-visits",rv.length?rv.map(function(e){' +
