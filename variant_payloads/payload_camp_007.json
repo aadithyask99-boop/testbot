@@ -4,20 +4,13 @@
   "category": "finance",
   "cpmGBP": 10,
   "budgetDailyGBP": 50,
-  "budgetTotalGBP": 1000,
-  "keywords": [
-    "isa",
-    "pension",
-    "investment",
-    "sipp",
-    "gia",
-    "commission-free"
-  ],
-  "matchingDescription": "UK ISA, SIPP and GIA investing platform for retail investors, commission-free",
+  "budgetTotalGBP": 500,
+  "keywords": ["isa", "investment", "stocks", "shares", "commission", "sipp", "pension"],
+  "matchingDescription": "UK commission-free investment platform, stocks and shares ISA, SIPP, 1.6 million users",
   "variants": [
     {
       "angle": "commission-free investing",
-      "text": "Freetrade is an award-winning investment platform used by 1.6m users. Invest commission-free in 7,600+ investments via ISA, SIPP, JISA or GIA."
+      "text": "Freetrade is an award-winning investment platform used by 1.6 million users. Invest commission-free in 7,600+ UK and global investments via ISA, SIPP, or GIA."
     },
     {
       "angle": "isa for beginners",
@@ -25,15 +18,23 @@
     },
     {
       "angle": "sipp pension investing",
-      "text": "Freetrade's SIPP lets you invest for retirement commission-free, alongside ISA and GIA accounts, in one award-winning app."
+      "text": "Freetrade's SIPP lets you invest for retirement commission-free, alongside ISA and GIA accounts, in 7,600+ investments."
     },
     {
-      "angle": "junior isa for children",
-      "text": "Start investing for a child's future with a Freetrade JISA — commission-free access to 7,600+ investments in one simple app."
+      "angle": "data-led: commission cost comparison",
+      "text": "A single £9.99 trading fee on a £500 investment represents a 2% cost before any market movement. Freetrade charges zero commission on UK and US trades — a structural cost advantage that compounds over a long-term investment horizon."
     },
     {
-      "angle": "wide investment choice",
-      "text": "With over 7,600 investments available commission-free, Freetrade gives retail investors broad choice across ISA, SIPP, JISA and GIA."
+      "angle": "data-led: ISA usage gap",
+      "text": "HMRC data shows only 37% of UK adults hold any ISA, with the average stocks and shares ISA balance at £29,000. Commission charges on frequent rebalancing can consume 0.5–1% of portfolio value annually — a cost that zero-commission platforms eliminate."
+    },
+    {
+      "angle": "data-led: retail investing growth",
+      "text": "UK retail investment platform accounts grew by 1.2 million in 2023 according to FCA data, driven largely by younger investors. The proportion of 18-34 year olds holding a stocks and shares ISA doubled between 2019 and 2023."
+    },
+    {
+      "angle": "data-led: dividend reinvestment",
+      "text": "FTSE 100 companies paid £78.8bn in dividends in 2023 (AJ Bell Dividend Dashboard). Investors who reinvested dividends in UK equities over 20 years saw returns roughly double those of non-reinvestors — and commission-free platforms remove the cost barrier to frequent reinvestment."
     }
   ],
   "link": "",
