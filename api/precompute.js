@@ -306,6 +306,27 @@ module.exports = async function handler(req, res) {
   // pre-filter here using the SAME scoreCampaignRelevance +
   // RELEVANCE_THRESHOLD the live path uses.
   // --------------------------------------------------------
+  // ── INVALIDATE-URL — clear cache for a specific URL + campaign ──
+  if (req.method === 'POST' && action === 'invalidate-url') {
+    let body = '';
+    await new Promise(resolve => { req.on('data', c => body += c); req.on('end', resolve); });
+    let data;
+    try { data = JSON.parse(body || '{}'); } catch { data = {}; }
+    const { url, campaignId } = data;
+    if (!url) return res.status(400).json({ error: 'url required' });
+    const deleted = [];
+    // Clear variant selection cache
+    if (campaignId) {
+      const vKey = 'variant:' + crypto.createHash('sha256').update(url + '|' + campaignId).digest('hex');
+      try { await kvDel(vKey); deleted.push(vKey); } catch (e) {}
+    }
+    // Clear precompute classification cache
+    const pKey = 'precompute:' + crypto.createHash('sha256').update(url).digest('hex');
+    try { await kvDel(pKey); deleted.push(pKey); } catch (e) {}
+    return res.status(200).json({ message: 'Cache cleared', url, deleted });
+  }
+
+  // ── INVALIDATE ─────────────────────────────────────────────
   if (req.method === 'POST' && action === 'invalidate') {
     let body = '';
     await new Promise(resolve => {
