@@ -320,40 +320,39 @@ module.exports = async function handler(req, res) {
       return res.status(400).json({ error: 'campaignId is required' });
     }
 
-    const { scoreCampaignRelevance, RELEVANCE_THRESHOLD } = require('../lib/relevance');
-    const paths = listPaths();
+    // Get all known URLs — from publisher sitemaps (real pages) + any
+    // demo pages still in listPaths() (now empty after Session 9)
+    const urlEntries = await fetchAllPublisherUrls();
     const deleted = [];
 
-    for (const path of paths) {
-      const page = getPage(path);
-      const fullUrl = SITE_URL + (page.path || path);
-      const pageCat = page.category;
+    for (const entry of urlEntries) {
+      const fullUrl = entry.url;
+      const pathOnly = entry.path || '/';
 
-      // variant: cache is keyed on url|campaignId — always delete for
-      // this specific campaign, regardless of category (cheap, and the
-      // campaign's category may itself have just changed).
+      // Clear variant selection cache for this campaign on this page
       const variantKey = 'variant:' + crypto.createHash('sha256').update(fullUrl + '|' + campaignId).digest('hex');
-      try {
-        await kvDel(variantKey);
-        deleted.push(variantKey);
-      } catch (e) { /* non-fatal */ }
+      try { await kvDel(variantKey); deleted.push(variantKey); } catch (e) { /* non-fatal */ }
 
-      // match-rel: cache — only relevant if this page's category matches
-      // the campaign's category (or no category filter given). Replicate
-      // the keyword pre-filter to get the SAME candidate-set hash the
-      // live path would compute, so we delete the actual cached entry.
-      if (!category || category === pageCat) {
+      // Clear relevance cache
+      const pageCat = null; // unknown for remote pages — clear regardless
+      if (!category || true) {
         try {
-          const ids = (await kvGet('campaigns:' + pageCat)) || [];
-          const allCampaigns = (await Promise.all(ids.map(id => kvGet('campaign:' + id))))
-            .filter(c => c && c.active);
-          const pageSignals = buildPageSignals(path) || { url: fullUrl };
-          const survivors = allCampaigns
-            .filter(c => scoreCampaignRelevance(c, pageSignals) >= RELEVANCE_THRESHOLD)
-            .map(c => c.id).sort().join(',');
-          const relKey = 'match-rel:' + crypto.createHash('sha256').update(fullUrl + '|' + survivors).digest('hex');
-          await kvDel(relKey);
-          deleted.push(relKey);
+          const precomputeKey = 'precompute:' + crypto.createHash('sha256').update(fullUrl).digest('hex');
+          const cached = await kvGet(precomputeKey);
+          const pageCategoryActual = cached && cached.category;
+          if (!category || category === pageCategoryActual) {
+            const ids = (await kvGet('campaigns:' + (pageCategoryActual || category))) || [];
+            const allCampaigns = (await Promise.all(ids.map(id => kvGet('campaign:' + id))))
+              .filter(c => c && c.active);
+            const { scoreCampaignRelevance, RELEVANCE_THRESHOLD } = require('../lib/relevance');
+            const pageSignals = { url: fullUrl, title: '', metaDescription: '', firstParagraph: '', bodySample: '' };
+            const survivors = allCampaigns
+              .filter(c => scoreCampaignRelevance(c, pageSignals) >= RELEVANCE_THRESHOLD)
+              .map(c => c.id).sort().join(',');
+            const relKey = 'match-rel:' + crypto.createHash('sha256').update(fullUrl + '|' + survivors).digest('hex');
+            await kvDel(relKey);
+            deleted.push(relKey);
+          }
         } catch (e) { /* non-fatal */ }
       }
     }
