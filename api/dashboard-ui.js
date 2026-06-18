@@ -123,7 +123,7 @@ var html = '<!DOCTYPE html>' +
 '<div id="tab-publisher" class="tab">' +
 '<div style="padding:10px 0;margin-bottom:8px;display:flex;align-items:center;gap:10px"><label style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.04em">Publisher Account</label><select id="pub-picker" onchange="setPublisher(this.value)" style="border:1px solid #e5e5e5;border-radius:4px;padding:6px 10px;font-size:13px;font-family:inherit;background:#fff"><option value="">All Publishers</option></select></div>' +
 '<div class="grid" id="pub-cards"></div>' +
-'<section><h2>Winning Creative on Your Pages</h2><div class="cbox" id="pub-winning"><div class="empty">Loading...</div></div></section>' +
+'<section><h2>Ad Serving — by Page</h2>' +
 '<section><h2>Your Pages <span style="font-size:12px;color:#888;font-weight:400">(what\'s serving on each page right now)</span></h2>' +
 '<table><thead><tr><th>Page</th><th>Serving</th><th>Last Crawler</th><th>Last Crawl</th></tr></thead>' +
 '<tbody id="pub-pages"><tr><td colspan="4" class="empty">Loading...</td></tr></tbody></table></section>' +
@@ -179,8 +179,10 @@ var html = '<!DOCTYPE html>' +
 '  set("ov-cards",' +
 '    card("Total Impressions",fmt(s.totalImpressions),fmt(s.todayImpressions)+" today","")+' +
 '    card("Retrieval (Viewable)",fmt(s.retrieval),"training: "+fmt(s.training),"blue")+' +
-'    card("AI Visits",fmt(s.pubClicks),fmt(s.todayPubClicks)+" today","purple")+' +
-'    card("Gross Revenue",money(r.grossGBP),"pub: "+money(r.publisherShare80),"green")' +
+'    card("Gross Revenue",money(r.grossGBP),"advertiser spend","green")+' +
+'    card("Publisher Payouts",money(r.publisherShare80),"80% of gross","green")+' +
+'    card("Platform Revenue",money(r.platformRetainedKV||r.platformShare20),"20% of gross · our cut","blue")+' +
+'    card("AI Visits",fmt(s.pubClicks),fmt(s.todayPubClicks)+" today","purple")' +
 '  );' +
 '  var pt=opData.platformBreakdown||[];' +
 '  set("ov-platforms",pt.filter(function(p){return p.impressions>0;}).map(function(p){' +
@@ -530,34 +532,31 @@ var html = '<!DOCTYPE html>' +
 '}' +
 'function renderPublisher(){' +
 '  if(!pubData)return;' +
-'  var c=pubData.campaign||{},e=pubData.earnings||{},t=pubData.traffic||{},au=pubData.auction||{},cl=pubData.clicks||{};' +
+'  var e=pubData.earnings||{},t=pubData.traffic||{},au=pubData.auction||{},cl=pubData.clicks||{};' +
 '  var headerLabel=selectedPublisher?((pubData.publishers||[]).find(function(p){return p.pubId===selectedPublisher;})||{}).name||selectedPublisher:"All Publishers";' +
 '  set("pub-cards",' +
-'    card("Your Earnings",money(e.estimatedGBP),"80% share · "+headerLabel,"green")+' +
+'    card("Your Earnings",money(e.estimatedGBP),"today: "+money(e.estimatedTodayGBP)+" \u00b7 80% share","green")+' +
+'    card("Gross Ad Spend",money(e.grossGBP),"advertiser paid \u00b7 "+headerLabel,"green")+' +
+'    card("Publisher vCPM",money(e.vcpmGBP),"per 1,000 AI impressions","blue")+' +
 '    card("Impressions",fmt(t.totalImpressions),fmt(t.today)+" today","")+' +
-'    card("Viewable",fmt(t.viewableImpressions),"retrieval crawlers","blue")+' +
-'    card("Fill Rate",(t.fillRatePct===null||t.fillRatePct===undefined)?"—":(t.fillRatePct+"%"),"served / bot visits","purple")+' +
-'    card("AI Visits",fmt(cl.total||0),fmt(cl.today||0)+" today · "+fmt(cl.unique||0)+" unique","purple")' +
+'    card("Fill Rate",(t.fillRatePct===null||t.fillRatePct===undefined)?"\u2014":(t.fillRatePct+"%"),"served / bot visits","purple")+' +
+'    card("AI Visits",fmt(cl.total||0),fmt(cl.today||0)+" today \u00b7 "+fmt(cl.unique||0)+" unique","purple")' +
 '  );' +
-'  set("pub-winning",' +
-'    "<div class=\'cname\'>"+(c.advertiser||"No active campaign")+"</div>"+' +
-'    "<div class=\'cmeta\'>"+(c.cpmGBP!==null&&c.cpmGBP!==undefined?("\\u00a3"+c.cpmGBP+" CPM winning · "):"")+(au.competitorCount||0)+" advertiser"+((au.competitorCount===1)?"":"s")+" competing</div>"+' +
-'    (c.text?"<div class=\'ccopy\'>"+c.text+"</div>":"<div style=\'font-size:12px;color:#ccc\'>Nothing is being injected right now.</div>")+' +
-'    "<div style=\'font-size:11px;color:#aaa;margin-top:8px\'>This is the creative currently served to AI crawlers on your pages.</div>"' +
-'  );' +
-'  var board=pubData.pageBoard||[];' +
-'  if(selectedPublisher){board=board.filter(function(p){return p.pubId===selectedPublisher;});}' +
+'  set("pub-winning","");' +
+'  var pages=pubData.pages||[];' +
 '  var pubPages="";' +
-'  if(board.length){' +
-'    pubPages=board.map(function(p){' +
-'      var urlShort=p.url||"/";' +
-'      var status;' +
-'      if(p.reason==="not_yet_crawled")status="<span style=\'color:#cbd5e1\'>awaiting crawl</span>";' +
-'      else if(p.servingId)status="<b style=\'color:#16a34a\'>"+p.servingAdv+"</b> \\u00a3"+(p.servingCpmGBP||0);' +
-'      else status="<span style=\'color:#ef4444\'>no campaign</span>";' +
-'      var platInfo=p.lastPlatform?p.lastPlatform:"—";' +
-'      var timeInfo=p.lastCrawl?ago(p.lastCrawl):"—";' +
-'      return "<tr><td style=\'font-family:monospace;font-size:12px\'>"+urlShort+"</td><td>"+status+"</td><td>"+platInfo+"</td><td>"+timeInfo+"</td></tr>";' +
+'  if(pages.length){' +
+'    pubPages=pages.map(function(p){' +
+'      var urlShort=(p.url||"/").replace(/https?:\/\/[^/]+/,"");' +
+'      var status,variant="";' +
+'      if(!p.serving)status="<span style=\'color:#ef4444\'>no campaign</span>";' +
+'      else{' +
+'        status="<b style=\'color:#16a34a\'>"+p.advertiser+"</b> \\u00a3"+(p.cpmGBP||0)+" CPM";' +
+'        if(p.variantAngle)variant="<div style=\'font-size:10px;color:#16a34a;margin-top:2px\'>"+p.variantAngle+"</div>";' +
+'      }' +
+'      var platInfo=p.lastPlatform?p.lastPlatform:"\u2014";' +
+'      var timeInfo=p.lastCrawl?ago(p.lastCrawl):"\u2014";' +
+'      return "<tr><td style=\'font-family:monospace;font-size:12px\'>"+urlShort+"</td><td>"+status+variant+"</td><td>"+platInfo+"</td><td>"+timeInfo+"</td></tr>";' +
 '    }).join("");' +
 '  }else{pubPages="<tr><td colspan=\'4\' class=\'empty\'>No pages for this publisher</td></tr>";}' +
 '  set("pub-pages",pubPages);' +
