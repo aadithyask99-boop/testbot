@@ -1,7 +1,10 @@
-const { kvGet, kvSet, kvListGet, kvHashGetAll } = require('../lib/kv');
-const { getCampaignSpend } = require('../lib/auction');
+const { kvGet, kvSet, kvListGet, kvHashGetAll, kvIncrBy } = require('../lib/kv');
+const { getCampaignSpend, TRAINING_BILL_RATIO } = require('../lib/auction');
 const config = require('../lib/config');
 const { listPages } = require('../lib/demo-pages');
+
+const PUBLISHER_SHARE = 0.8;
+const PLATFORM_SHARE  = 0.2;
 
 const PLATFORM_URL = process.env.PLATFORM_URL || 'https://testbot-two-psi.vercel.app';
 
@@ -274,10 +277,9 @@ module.exports = async function handler(req, res) {
     const advClicks    = n(totalAdvClicks);
     const retrieval    = n(retrievalCount);
     const training     = n(trainingCount);
-    // Use actual campaign CPM. Retrieval impressions billed at campaign rate.
-    // Training impressions billed at 30% of campaign rate (lower commercial value).
-    const campaignCPM  = ((currentCreative && currentCreative.cpmGBP) || 18);
-    const revenueGBP   = ((retrieval * campaignCPM) + (training * campaignCPM * 0.3)) / 1000;
+    // revenueGBP is computed AFTER campaignList is built (summed across all campaigns).
+    // campaignCPM kept for legacy publisher view calculations that need a single number.
+    const campaignCPM  = ((currentCreative && currentCreative.cpmGBP) || 10);
 
     // ── SHARED CAMPAIGN LIST (auction order + serving badge) ──────
     // Built once, used by operator AND advertiser views. In the per-page
@@ -338,6 +340,39 @@ module.exports = async function handler(req, res) {
     }
     // Auction order: active first, then CPM descending (the waterfall order)
     campaignList.sort((a, b) => (b.active - a.active) || (b.cpmGBP - a.cpmGBP));
+
+    // ── CORRECT REVENUE COMPUTATION ────────────────────────────
+    // Sum spend across ALL campaigns (each uses its own CPM rate).
+    // This replaces the old single-campaignCPM approximation which was
+    // wrong in a multi-campaign world. Source of truth: impression
+    // counters × CPM, same formula as getCampaignSpend().
+    // Publisher/platform split is applied on top.
+    const grossRevenueGBP    = campaignList.reduce((s, c) => s + (c.totalSpendGBP || 0), 0);
+    const revenueGBP         = grossRevenueGBP; // alias for legacy references below
+    const platformRevenueGBP = grossRevenueGBP * PLATFORM_SHARE;
+    const publisherRevenueGBP= grossRevenueGBP * PUBLISHER_SHARE;
+
+    // Per-publisher revenue from KV (pence stored by recordImpression)
+    // Read revenue:publisher:{pubId}:total for each publisher in config
+    const pubRevenueMap = {};
+    for (const pub of (config.publishers || [])) {
+      const raw = await kvGet(`revenue:publisher:${pub.pubId}:total`);
+      pubRevenueMap[pub.pubId] = (parseInt(raw) || 0) / 100; // pence → pounds
+    }
+
+    // Per-advertiser billing from KV
+    const advRevenueMap = {};
+    for (const c of campaignList) {
+      const advKey = c.advId || c.id;
+      if (!advRevenueMap[advKey]) {
+        const raw = await kvGet(`revenue:advertiser:${advKey}:total`);
+        advRevenueMap[advKey] = (parseInt(raw) || 0) / 100;
+      }
+    }
+
+    // Platform retained from KV
+    const platformRetainedRaw = await kvGet('revenue:platform:total');
+    const platformRetainedKV  = (parseInt(platformRetainedRaw) || 0) / 100;
 
     // Enrich the log-derived currentCreative with full campaign fields
     // (text, link, advSlug) so the publisher "what's injected" sample works.
@@ -552,96 +587,102 @@ module.exports = async function handler(req, res) {
         pubId: p.pubId, name: p.name,
       }));
 
-      // Session 8: scope stats to selected publisher if pubId param provided.
       const pubId = (req.query && req.query.pubId) || null;
 
-      // Per-publisher impression counts from KV counters
+      // Per-publisher impression counts
       let pubImpressions = impressions;
       let pubTodayImpressions = n(todayImpressions);
-      let pubRevenueGBP = revenueGBP;
-      let pubFillRatePct = fillRatePct;
       let pubPageBoard = pageBoard;
+      let pubFillRatePct = fillRatePct;
 
       if (pubId) {
         const [pubTotalRaw, pubTodayRaw] = await Promise.all([
           kvGet('stats:impressions:pub:' + pubId + ':total'),
           kvGet('stats:impressions:pub:' + pubId + ':date:' + today),
         ]);
-        pubImpressions = n(pubTotalRaw);
-        pubTodayImpressions = n(pubTodayRaw);
-        pubRevenueGBP = (pubImpressions * campaignCPM) / 1000;
-        pubPageBoard = pageBoard.filter(p => p.pubId === pubId);
-        const pubServed = pubPageBoard.filter(p => p.servingId).length;
-        pubFillRatePct = pubPageBoard.length > 0
-          ? Math.round((pubServed / pubPageBoard.length) * 100)
-          : null;
+        pubImpressions     = n(pubTotalRaw);
+        pubTodayImpressions= n(pubTodayRaw);
+        pubPageBoard       = pageBoard.filter(p => p.pubId === pubId);
+        const pubServed    = pubPageBoard.filter(p => p.servingId).length;
+        pubFillRatePct     = pubPageBoard.length > 0
+          ? Math.round((pubServed / pubPageBoard.length) * 100) : null;
       }
 
-      // Winning creative: highest-CPM campaign serving on this publisher's pages
-      let pubWinningCampaign = cc;
-      if (pubId && pubPageBoard.length > 0) {
-        const serving = pubPageBoard
-          .filter(p => p.servingId)
-          .sort((a, b) => (b.servingCpmGBP || 0) - (a.servingCpmGBP || 0));
-        if (serving.length > 0) {
-          pubWinningCampaign = campaignList.find(c => c.id === serving[0].servingId) || cc;
-          // Attach the currently-serving variant text so publisher sees what's injected
-          if (pubWinningCampaign && serving[0].variantId) {
-            const winVariant = (pubWinningCampaign.variants || [])
-              .find(v => v.id === serving[0].variantId);
-            pubWinningCampaign = {
-              ...pubWinningCampaign,
-              text: (winVariant && winVariant.text) || pubWinningCampaign.text || '',
-            };
-          }
-        } else {
-          pubWinningCampaign = null;
+      // Correct publisher earnings: from KV pence counters (written by recordImpression)
+      // Falls back to derived estimate if KV key not yet populated (first impression after deploy)
+      const kvEarnedGBP = pubId ? (pubRevenueMap[pubId] || 0) : publisherRevenueGBP;
+      const kvEarnedTodayRaw = pubId
+        ? await kvGet(`revenue:publisher:${pubId}:date:${today}`) : null;
+      const kvEarnedTodayGBP = pubId ? (parseInt(kvEarnedTodayRaw) || 0) / 100 : 0;
+
+      // Per-page breakdown: what's serving on each page, which advertiser, which variant
+      const pubPagesTable = pubPageBoard.map(p => {
+        const servingCampaign = p.servingId
+          ? campaignList.find(c => c.id === p.servingId) : null;
+        // Resolve the served variant text
+        let servedVariantText  = null;
+        let servedVariantAngle = null;
+        if (servingCampaign && p.variantId) {
+          const v = (servingCampaign.variants || []).find(vv => vv.id === p.variantId);
+          servedVariantText  = v ? v.text  : null;
+          servedVariantAngle = v ? v.angle : null;
         }
-      }
+        return {
+          url:              p.url,
+          title:            p.title || null,
+          advertiser:       p.servingId ? (servingCampaign && servingCampaign.advertiser) || 'Unknown' : null,
+          campaignId:       p.servingId || null,
+          cpmGBP:           p.servingCpmGBP || null,
+          variantAngle:     servedVariantAngle,
+          variantText:      servedVariantText,
+          lastCrawl:        p.lastCrawl || null,
+          lastPlatform:     p.lastPlatform || null,
+          matchMethod:      p.matchMethod || null,
+          serving:          !!p.servingId,
+        };
+      });
 
-      // Viewable impressions scoped to publisher — count retrieval-type
-      // entries in recentBotLogs for this publisher's URLs only.
-      // Campaign.viewableImpressions is GLOBAL so cannot be used here.
       const pubViewable = pubId
         ? (recentBotLogs || []).filter(e =>
             e && e.pubId === pubId &&
-            e.crawlerType === 'retrieval' &&
-            e.campaignId
+            e.crawlerType === 'retrieval' && e.campaignId
           ).length
         : totalViewable;
 
-      // Recent visits scoped to publisher pages
       const pubUrls = new Set(pubPageBoard.map(p => p.url));
       const pubRecentVisits = (recentBotLogs || [])
         .filter(e => !pubId || pubUrls.has(e.url || '/'))
         .slice(0, 10);
 
+      // Gross revenue on this publisher's pages (for context — publisher sees their 80% share)
+      const pubGrossGBP = pubId
+        ? (pubRevenueMap[pubId] || 0) / PUBLISHER_SHARE  // back-calculate gross from publisher share
+        : grossRevenueGBP;
+      const pubVcpmGBP = pubViewable > 0
+        ? parseFloat(((kvEarnedGBP / pubViewable) * 1000).toFixed(2)) : 0;
+
       return res.status(200).json({
         _view: 'publisher',
         publishers: publisherList,
         pageBoard: pubPageBoard,
-        campaign: pubWinningCampaign ? {
-          advertiser: pubWinningCampaign.advertiser,
-          category:   pubWinningCampaign.category,
-          cpmGBP:     pubWinningCampaign.cpmGBP,
-          text:       pubWinningCampaign.text,
-          advSlug:    pubWinningCampaign.advSlug,
-        } : {
-          advertiser: 'No active campaign',
-          category:   '',
-          cpmGBP:     null,
-          text:       '',
-          note:       'No campaign is currently winning the auction on your pages.',
+        // Per-page breakdown replaces single "winning creative" — each page
+        // runs its own auction so there is no single winner for the site
+        pages: pubPagesTable,
+        earnings: {
+          // What the publisher actually earns (80% of gross spend on their pages)
+          estimatedGBP:     parseFloat(kvEarnedGBP.toFixed(4)),
+          estimatedTodayGBP:parseFloat(kvEarnedTodayGBP.toFixed(4)),
+          revenueSharePct:  80,
+          // Gross for context (what advertisers paid before split)
+          grossGBP:         parseFloat(pubGrossGBP.toFixed(4)),
+          vcpmGBP:          pubVcpmGBP,
+          note: 'Your 80% share of gross CPM spend on your pages. Payouts processed monthly.',
         },
         auction: {
           competitorCount: eligibleCount,
-          winningCPM:      pubWinningCampaign ? pubWinningCampaign.cpmGBP : null,
-        },
-        earnings: {
-          estimatedGBP:    parseFloat((pubRevenueGBP * 0.8).toFixed(4)),
-          revenueSharePct: 80,
-          grossGBP:        parseFloat(pubRevenueGBP.toFixed(4)),
-          vcpmGBP:         blendedVcpm,
+          activePages:     pubPagesTable.filter(p => p.serving).length,
+          totalPages:      pubPagesTable.length,
+          fillRatePct:     pubFillRatePct,
         },
         traffic: {
           totalImpressions:    pubImpressions,
@@ -691,9 +732,24 @@ module.exports = async function handler(req, res) {
         training,
       },
       revenue: {
-        grossGBP:         parseFloat(revenueGBP.toFixed(4)),
-        publisherShare80: parseFloat((revenueGBP * 0.8).toFixed(4)),
-        platformShare20:  parseFloat((revenueGBP * 0.2).toFixed(4)),
+        grossGBP:          parseFloat(grossRevenueGBP.toFixed(4)),
+        publisherShare80:  parseFloat(publisherRevenueGBP.toFixed(4)),
+        platformShare20:   parseFloat(platformRevenueGBP.toFixed(4)),
+        // KV-tracked retained (from recordImpression pence counters — source of truth for real money)
+        platformRetainedKV: parseFloat(platformRetainedKV.toFixed(4)),
+        // Per-publisher breakdown
+        byPublisher: (config.publishers || []).map(pub => ({
+          pubId:    pub.pubId,
+          name:     pub.name,
+          earnedGBP: parseFloat((pubRevenueMap[pub.pubId] || 0).toFixed(4)),
+        })),
+        // Per-advertiser billing
+        byAdvertiser: campaignList.map(c => ({
+          campaignId:  c.id,
+          advertiser:  c.advertiser,
+          billedGBP:   parseFloat((c.totalSpendGBP || 0).toFixed(4)),
+          billedKVGBP: parseFloat((advRevenueMap[c.advId || c.id] || 0).toFixed(4)),
+        })).filter(x => x.billedGBP > 0 || x.billedKVGBP > 0),
       },
       platformBreakdown:  platformTable,
       recentImpressions:  (recentBotLogs || []).slice(0, 20),

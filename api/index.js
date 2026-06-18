@@ -132,7 +132,7 @@ module.exports = async function handler(req, res) {
     // Log impression — fire and forget, never breaks the page
     try {
       await Promise.all([
-        recordImpression(winner, detection.crawlerType),
+        recordImpression(winner, detection.crawlerType, page.pubId || null),
         kvIncr('stats:bot_visits:total'),   // fill-rate denominator
         kvIncr('stats:bot_served:total'),   // fill-rate numerator
         kvHashIncr('stats:impr_by_camp_plat:' + winner.id, detection.platform || 'unknown'),
