@@ -352,12 +352,12 @@ module.exports = async function handler(req, res) {
     const platformRevenueGBP = grossRevenueGBP * PLATFORM_SHARE;
     const publisherRevenueGBP= grossRevenueGBP * PUBLISHER_SHARE;
 
-    // Per-publisher revenue from KV (pence stored by recordImpression)
+    // Per-publisher revenue from KV (tenths-of-pence stored by recordImpression)
     // Read revenue:publisher:{pubId}:total for each publisher in config
     const pubRevenueMap = {};
     for (const pub of (config.publishers || [])) {
       const raw = await kvGet(`revenue:publisher:${pub.pubId}:total`);
-      pubRevenueMap[pub.pubId] = (parseInt(raw) || 0) / 100; // pence → pounds
+      pubRevenueMap[pub.pubId] = (parseInt(raw) || 0) / 1000; // tenths-of-pence → pounds
     }
 
     // Per-advertiser billing from KV
@@ -366,13 +366,13 @@ module.exports = async function handler(req, res) {
       const advKey = c.advId || c.id;
       if (!advRevenueMap[advKey]) {
         const raw = await kvGet(`revenue:advertiser:${advKey}:total`);
-        advRevenueMap[advKey] = (parseInt(raw) || 0) / 100;
+        advRevenueMap[advKey] = (parseInt(raw) || 0) / 1000;
       }
     }
 
     // Platform retained from KV
     const platformRetainedRaw = await kvGet('revenue:platform:total');
-    const platformRetainedKV  = (parseInt(platformRetainedRaw) || 0) / 100;
+    const platformRetainedKV  = (parseInt(platformRetainedRaw) || 0) / 1000;
 
     // Enrich the log-derived currentCreative with full campaign fields
     // (text, link, advSlug) so the publisher "what's injected" sample works.
@@ -608,12 +608,16 @@ module.exports = async function handler(req, res) {
           ? Math.round((pubServed / pubPageBoard.length) * 100) : null;
       }
 
-      // Correct publisher earnings: from KV pence counters (written by recordImpression)
-      // Falls back to derived estimate if KV key not yet populated (first impression after deploy)
+      // Correct publisher earnings: from KV tenths-of-pence counters
       const kvEarnedGBP = pubId ? (pubRevenueMap[pubId] || 0) : publisherRevenueGBP;
       const kvEarnedTodayRaw = pubId
         ? await kvGet(`revenue:publisher:${pubId}:date:${today}`) : null;
-      const kvEarnedTodayGBP = pubId ? (parseInt(kvEarnedTodayRaw) || 0) / 100 : 0;
+      const kvEarnedTodayGBP = pubId ? (parseInt(kvEarnedTodayRaw) || 0) / 1000 : 0;
+
+      // Publisher vCPM — use KV impression count scoped to this publisher
+      // NOT the global log-derived viewable count (wrong denominator)
+      const pubVcpmGBP = pubImpressions > 0
+        ? parseFloat(((kvEarnedGBP / pubImpressions) * 1000).toFixed(2)) : 0;
 
       // Per-page breakdown: what's serving on each page, which advertiser, which variant
       const pubPagesTable = pubPageBoard.map(p => {
@@ -654,12 +658,10 @@ module.exports = async function handler(req, res) {
         .filter(e => !pubId || pubUrls.has(e.url || '/'))
         .slice(0, 10);
 
-      // Gross revenue on this publisher's pages (for context — publisher sees their 80% share)
+      // Gross revenue on this publisher's pages (back-calc from publisher share)
       const pubGrossGBP = pubId
-        ? (pubRevenueMap[pubId] || 0) / PUBLISHER_SHARE  // back-calculate gross from publisher share
+        ? kvEarnedGBP / PUBLISHER_SHARE
         : grossRevenueGBP;
-      const pubVcpmGBP = pubViewable > 0
-        ? parseFloat(((kvEarnedGBP / pubViewable) * 1000).toFixed(2)) : 0;
 
       return res.status(200).json({
         _view: 'publisher',

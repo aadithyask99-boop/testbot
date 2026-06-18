@@ -112,30 +112,31 @@ module.exports = async function handler(req, res) {
       ] : []),
 
       // ── REVENUE TRACKING (Session 10) ──────────────────────
-      // Store in integer pence (× 100) for atomic Redis INCRBY.
+      // Store in integer TENTHS-OF-PENCE (× 1000) for atomic Redis INCRBY.
+      // Using × 1000 (not × 100) so sub-penny amounts survive Math.round:
+      //   £10 CPM, 1 impression → gross = £0.01 = 10 tenths-of-pence
+      //   platform 20% → 2 tenths-of-pence (would be 0 at × 100 scale)
+      // On read in dashboard.js: divide by 1000 to get pounds.
       // Training impressions billed at 30% of campaign CPM.
-      // grossP / pubP / platformP computed from cpmGBP in body.
       ...(() => {
-        const cpm     = parseFloat(cpmGBP) || 0;
-        const ratio   = type === 'training' ? TRAINING_BILL_RATIO : 1.0;
-        const grossP  = Math.round((cpm * ratio / 1000) * 100); // pence
-        const pubP    = Math.round(grossP * PUBLISHER_SHARE);
-        const platP   = Math.round(grossP * PLATFORM_SHARE);
-        if (grossP === 0) return [];
+        const cpm    = parseFloat(cpmGBP) || 0;
+        const ratio  = type === 'training' ? TRAINING_BILL_RATIO : 1.0;
+        const grossT = Math.round((cpm * ratio / 1000) * 1000); // tenths-of-pence
+        if (grossT === 0) return [];
+        const pubT   = Math.round(grossT * PUBLISHER_SHARE);
+        const platT  = Math.round(grossT * PLATFORM_SHARE);
         const revOps = [
-          kvIncrBy('revenue:gross:total',             grossP),
-          kvIncrBy(`revenue:gross:date:${today}`,     grossP),
-          kvIncrBy('revenue:platform:total',          platP),
-          kvIncrBy(`revenue:platform:date:${today}`,  platP),
+          kvIncrBy('revenue:gross:total',             grossT),
+          kvIncrBy(`revenue:gross:date:${today}`,     grossT),
+          kvIncrBy('revenue:platform:total',          platT),
+          kvIncrBy(`revenue:platform:date:${today}`,  platT),
         ];
-        // Advertiser billing — keyed by advId from body, else campaignId
         const advKey = data.advId || campaignId;
-        revOps.push(kvIncrBy(`revenue:advertiser:${advKey}:total`,         grossP));
-        revOps.push(kvIncrBy(`revenue:advertiser:${advKey}:date:${today}`, grossP));
-        // Publisher earnings — only if pubId resolved
+        revOps.push(kvIncrBy(`revenue:advertiser:${advKey}:total`,         grossT));
+        revOps.push(kvIncrBy(`revenue:advertiser:${advKey}:date:${today}`, grossT));
         if (pubId) {
-          revOps.push(kvIncrBy(`revenue:publisher:${pubId}:total`,         pubP));
-          revOps.push(kvIncrBy(`revenue:publisher:${pubId}:date:${today}`, pubP));
+          revOps.push(kvIncrBy(`revenue:publisher:${pubId}:total`,         pubT));
+          revOps.push(kvIncrBy(`revenue:publisher:${pubId}:date:${today}`, pubT));
         }
         return revOps;
       })(),
