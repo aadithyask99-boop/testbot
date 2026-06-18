@@ -15,6 +15,90 @@ const config = require('../lib/config');
 const { kvGet, kvSet, kvDel } = require('../lib/kv');
 const { runAuction, getCampaignSpend } = require('../lib/auction');
 
+// ============================================================
+// CRAWL INFRASTRUCTURE (Session 10)
+// When variants change, we fire synthetic bot crawls so Haiku
+// re-selects variants with the updated bank before real AI visits.
+// Crawls hit the Cloudflare Worker URLs (not raw publisher URLs)
+// so the full injection + impression + caching pipeline runs.
+//
+// Worker URL convention: the Worker domain is the second entry
+// in publisher.domains[] (index 1). Pages are discovered from
+// config.publisherPages (keyed by pubId → array of paths).
+// ============================================================
+const CRAWL_BOT_UA = 'Mozilla/5.0 (compatible; PerplexityBot/1.0; +https://perplexity.ai/bot)';
+
+// Known article paths per publisher — used for crawl targeting
+const PUBLISHER_PAGES = {
+  pub_001: [
+    '/articles/best-isa-2026.html',
+    '/articles/pension-vs-isa.html',
+    '/articles/dividend-investing.html',
+    '/articles/first-time-buyer.html',
+  ],
+  pub_002: [
+    '/articles/best-vpn-2026.html',
+    '/articles/best-antivirus.html',
+    '/articles/best-broadband.html',
+    '/articles/cloud-storage.html',
+  ],
+};
+
+// Category → which publishers carry it
+const CATEGORY_PUBLISHERS = {
+  finance: ['pub_001'],
+  tech:    ['pub_002'],
+};
+
+// Get Worker base URL for a publisher (second domain entry)
+function getWorkerUrl(pubId) {
+  const pub = (config.publishers || []).find(p => p.pubId === pubId);
+  if (!pub || !pub.domains || pub.domains.length < 2) return null;
+  return 'https://' + pub.domains[1];
+}
+
+// Fire synthetic bot crawls for all pages in a category.
+// Returns immediately — crawls happen in the background.
+// delayMs: wait before firing (lets admin make further edits first).
+function scheduleCrawls(category, delayMs) {
+  const pubIds = CATEGORY_PUBLISHERS[category] || [];
+  setTimeout(async () => {
+    const crawlOps = [];
+    for (const pubId of pubIds) {
+      const workerUrl = getWorkerUrl(pubId);
+      if (!workerUrl) continue;
+      const paths = PUBLISHER_PAGES[pubId] || [];
+      for (const path of paths) {
+        const url = workerUrl + path;
+        crawlOps.push(
+          fetch(url, {
+            headers: { 'User-Agent': CRAWL_BOT_UA },
+            signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined,
+          })
+          .then(() => console.log(`[auto-crawl] ${url}`))
+          .catch(e => console.error(`[auto-crawl] failed ${url}: ${e.message}`))
+        );
+      }
+    }
+    await Promise.all(crawlOps);
+    console.log(`[auto-crawl] ${category} complete — ${crawlOps.length} pages crawled`);
+  }, delayMs);
+}
+
+// Detect if variants changed between old and new campaign.
+// True if: new campaign (no existing), variant count changed,
+// or any variant text/angle differs.
+function variantsChanged(existingCampaign, newVariants) {
+  if (!existingCampaign) return true; // new campaign
+  const old = existingCampaign.variants || [];
+  if (old.length !== newVariants.length) return true;
+  for (let i = 0; i < old.length; i++) {
+    if (old[i].text !== newVariants[i].text) return true;
+    if (old[i].angle !== newVariants[i].angle) return true;
+  }
+  return false;
+}
+
 async function readBody(req) {
   let body = '';
   await new Promise(resolve => { req.on('data', c => body += c); req.on('end', resolve); });
@@ -320,6 +404,28 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({ message: `Campaign deleted: ${data.id}`, id: data.id });
   }
 
+  // ---- MANUAL CRAWL — trigger immediate crawl of all pages ----
+  // POST /admin/crawl { category: 'finance'|'tech'|'all' }
+  // Called by the dashboard "Crawl Now" button. Fires immediately (no delay).
+  if (req.method === 'POST' && url.includes('/admin/crawl')) {
+    const data = await readBody(req);
+    const category = (data && data.category) || 'all';
+    const categories = category === 'all' ? config.categories : [category];
+    let totalPages = 0;
+    for (const cat of categories) {
+      const pubIds = CATEGORY_PUBLISHERS[cat] || [];
+      for (const pubId of pubIds) {
+        totalPages += (PUBLISHER_PAGES[pubId] || []).length;
+      }
+      scheduleCrawls(cat, 0); // immediate
+    }
+    return res.status(200).json({
+      message: `Crawling ${totalPages} pages now`,
+      categories,
+      totalPages,
+    });
+  }
+
   // ---- CREATE / UPDATE campaign ----
   if (req.method === 'POST' && url.includes('/admin/campaign')) {
     const data = await readBody(req);
@@ -332,9 +438,26 @@ module.exports = async function handler(req, res) {
       return res.status(400).json({ error: `category must be one of: ${config.categories.join(', ')}` });
     }
     try {
+      // Check existing campaign before save to detect variant changes
+      const existingCampaign = await kvGet(`campaign:${id}`);
       const { campaign, duplicateAngleWarning } = await saveCampaign(data);
       await invalidatePrecomputeCaches(campaign.id, campaign.category);
-      const response = { message: `Campaign saved: ${campaign.id}`, campaign };
+
+      // Auto-crawl if variants changed (new campaign or variant bank updated)
+      // 60s delay so admin can make follow-up edits without firing multiple waves
+      const changed = variantsChanged(existingCampaign, campaign.variants);
+      if (changed) {
+        console.log(`[auto-crawl] variants changed for ${campaign.id} — scheduling crawl in 60s`);
+        scheduleCrawls(campaign.category, 60000);
+      }
+
+      const response = {
+        message: `Campaign saved: ${campaign.id}`,
+        campaign,
+        autoCrawl: changed
+          ? `Crawl scheduled in 60s — ${(CATEGORY_PUBLISHERS[campaign.category] || []).length > 0 ? PUBLISHER_PAGES[(CATEGORY_PUBLISHERS[campaign.category] || [])[0]]?.length || 0 : 0} pages will be re-crawled`
+          : 'No variant changes — crawl not needed',
+      };
       if (duplicateAngleWarning) {
         response.warning = `Duplicate variant angle detected: "${duplicateAngleWarning}". Distinct angles are recommended for variant selection to work well.`;
       }

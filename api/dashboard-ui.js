@@ -77,7 +77,14 @@ var html = '<!DOCTYPE html>' +
 '<div id="tab-advertiser" class="tab">' +
 '<div style="padding:10px 0;margin-bottom:8px;display:flex;align-items:center;gap:10px"><label style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.04em">Advertiser Account</label><select id="adv-picker" onchange="setAdvertiser(this.value)" style="border:1px solid #e5e5e5;border-radius:4px;padding:6px 10px;font-size:13px;font-family:inherit;background:#fff"><option value="">All Advertisers</option></select></div>' +
 '<div class="grid" id="adv-cards"></div>' +
-'<section><h2>Live Auction Board <span style="font-size:12px;color:#888;font-weight:400">(per-page — each page runs its own auction at crawl time · updates every 5s)</span></h2>' +
+'<section style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0">' +
+'<h2 style="margin:0">Live Auction Board <span style="font-size:12px;color:#888;font-weight:400">(per-page — each page runs its own auction at crawl time · updates every 5s)</span></h2>' +
+'<div style="display:flex;gap:8px;align-items:center">' +
+'<button class="btn btnsec" onclick="manualCrawl(\'finance\')" id="crawl-finance" style="font-size:12px;padding:5px 12px">Crawl Finance</button>' +
+'<button class="btn btnsec" onclick="manualCrawl(\'tech\')" id="crawl-tech" style="font-size:12px;padding:5px 12px">Crawl Tech</button>' +
+'<button class="btn" onclick="manualCrawl(\'all\')" id="crawl-all" style="font-size:12px;padding:5px 12px">Crawl All</button>' +
+'<span id="crawl-status" style="font-size:11px;color:#888"></span>' +
+'</div></section>' +
 '<div id="live-board" style="display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(320px,1fr))"><div class="empty">Loading...</div></div></section>' +
 '<section><h2>Campaigns <span style="font-size:12px;color:#888;font-weight:400">(auction order — top wins · click a row for detail)</span></h2>' +
 '<div style="padding:10px 16px;border-bottom:1px solid #f0f0f0">' +
@@ -605,6 +612,24 @@ var html = '<!DOCTYPE html>' +
 '    if(selectedCampaign){selectCampaign(selectedCampaign);}' +
 '    document.getElementById("ts").textContent="Updated "+new Date().toLocaleTimeString("en-GB");' +
 '  }).catch(function(e){document.getElementById("ts").textContent="Error: "+e.message;});' +
+'}' +
+'function manualCrawl(cat){' +
+'  var btn=document.getElementById("crawl-"+cat);' +
+'  var st=document.getElementById("crawl-status");' +
+'  if(btn){btn.disabled=true;btn.textContent="Crawling...";}' +
+'  if(st)st.textContent="Firing crawls...";' +
+'  fetch("/admin/crawl",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({category:cat})})' +
+'  .then(function(r){return r.json();})' +
+'  .then(function(d){' +
+'    if(st)st.textContent=d.message||"Done";' +
+'    if(btn){btn.disabled=false;btn.textContent=cat==="all"?"Crawl All":cat==="finance"?"Crawl Finance":"Crawl Tech";}' +
+'    setTimeout(function(){if(st)st.textContent="";},8000);' +
+'    setTimeout(load,3000);' +
+'  })' +
+'  .catch(function(e){' +
+'    if(st)st.textContent="Crawl failed: "+e.message;' +
+'    if(btn){btn.disabled=false;btn.textContent=cat==="all"?"Crawl All":cat==="finance"?"Crawl Finance":"Crawl Tech";}' +
+'  });' +
 '}' +
 'load();setInterval(load,10000);' +
 '</script></body></html>';
