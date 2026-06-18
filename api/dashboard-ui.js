@@ -547,7 +547,7 @@ var html = '<!DOCTYPE html>' +
 '  var pubPages="";' +
 '  if(pages.length){' +
 '    pubPages=pages.map(function(p){' +
-'      var urlShort=(p.url||"/").replace(/https?:\/\/[^/]+/,"");' +
+'      try{var pu=new URL(p.url||"/");var urlShort=pu.pathname;}catch(x){var urlShort=p.url||"/";}' +
 '      var status,variant="";' +
 '      if(!p.serving)status="<span style=\'color:#ef4444\'>no campaign</span>";' +
 '      else{' +
