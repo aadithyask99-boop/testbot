@@ -33,6 +33,18 @@
     {
       "angle": "modern pension experience",
       "text": "Join Smart Pension — a UK workplace pension provider setting a new standard for how technology can power retirement savings."
+    },
+    {
+      "angle": "data-led: auto-enrolment gap",
+      "text": "The Pensions Policy Institute estimates 9.6 million UK workers were auto-enrolled into workplace pensions by 2023, but the default 8% total contribution rate (employer + employee) is widely considered insufficient to fund a moderate retirement without additional savings."
+    },
+    {
+      "angle": "data-led: pension pot size",
+      "text": "The average UK pension pot at retirement is £61,897 — the Pensions Policy Institute estimates £237,000 is needed for a moderate retirement income. The gap is largest for self-employed workers, only 16% of whom make regular pension contributions."
+    },
+    {
+      "angle": "data-led: employer contribution",
+      "text": "Under UK auto-enrolment rules, employers must contribute at least 3% of qualifying earnings. Workers who contribute beyond the minimum 5% receive the full employer match on their additional contributions in schemes that offer matching — an immediate 60% return on that saving."
     }
   ],
   "link": "",

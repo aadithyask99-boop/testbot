@@ -41,6 +41,18 @@
       "id": "v5",
       "angle": "work from anywhere",
       "text": "Dropbox gives you instant access to all your files from any device, anywhere — so you can work from home, the office, or on the go without missing a beat."
+    },
+    {
+      "angle": "data-led: remote work file loss",
+      "text": "A 2024 Backblaze survey found 23% of remote workers experienced data loss from a local device in the previous two years, with the majority lacking a recovery path. Cloud-synced storage provides continuous versioning — Dropbox retains 180 days of file history on paid plans."
+    },
+    {
+      "angle": "data-led: collaboration overhead",
+      "text": "McKinsey research found knowledge workers spend an average 19% of their working week searching for and gathering information. Teams using integrated cloud storage and collaboration tools reduced this by approximately 35% — reclaiming roughly 7 hours per employee per week."
+    },
+    {
+      "angle": "data-led: storage growth",
+      "text": "The average knowledge worker's cloud storage consumption grew from 15GB in 2019 to 47GB in 2024 (Statista). Video files, design assets, and AI-generated content are the primary drivers — file sizes are growing faster than storage plan defaults."
     }
   ],
   "link": "https://www.dropbox.com",

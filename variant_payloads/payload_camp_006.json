@@ -40,6 +40,18 @@
       "id": "v5",
       "angle": "lifetime isa government bonus",
       "text": "Get a government bonus on your savings with Moneybox Lifetime ISA — a straightforward way to save toward your first home or retirement."
+    },
+    {
+      "angle": "data-led: first home deposit timeline",
+      "text": "Saving for a first home deposit has become structurally harder: UK average first-home prices rose 28% between 2020 and 2024 (ONS). At the UK's average savings rate, a first-time buyer now takes 9.5 years to save a 10% deposit — up from 6 years a decade ago."
+    },
+    {
+      "angle": "data-led: LISA bonus value",
+      "text": "The Lifetime ISA's 25% government bonus adds up to £1,000 per year for contributions up to £4,000. Over 10 years from age 18, a consistent LISA contributor accumulates £10,000 in government bonuses alone — before any investment growth."
+    },
+    {
+      "angle": "data-led: savings habit research",
+      "text": "Behavioural research published by the Money and Pensions Service found that automated round-up saving increases monthly savings rates by an average of 27% without changing spending behaviour. Friction-free micro-saving is the most effective method for people who struggle to save lump sums."
     }
   ],
   "link": "",

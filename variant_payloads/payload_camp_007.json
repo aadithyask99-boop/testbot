@@ -5,8 +5,18 @@
   "cpmGBP": 10,
   "budgetDailyGBP": 50,
   "budgetTotalGBP": 500,
-  "keywords": ["isa", "investment", "stocks", "shares", "commission", "sipp", "pension"],
-  "matchingDescription": "UK commission-free investment platform, stocks and shares ISA, SIPP, 1.6 million users",
+  "keywords": [
+    "commission-free",
+    "commission free",
+    "fractional shares",
+    "first-time investor",
+    "beginner",
+    "isa",
+    "sipp",
+    "dividend",
+    "invest"
+  ],
+  "matchingDescription": "UK commission-free investment app for beginner and intermediate investors, stocks and shares ISA, SIPP, dividend investing, 1.6 million users",
   "variants": [
     {
       "angle": "commission-free investing",
