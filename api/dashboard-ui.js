@@ -85,7 +85,7 @@ var html = '<!DOCTYPE html>' +
 '<button class="filt" onclick="setFilter(\'finance\',this)">Finance</button>' +
 '<button class="filt" onclick="setFilter(\'tech\',this)">Tech</button>' +
 '<button class="btn" style="float:right" onclick="addCampaign()">+ Add Campaign</button></div>' +
-'<table><thead><tr><th>Advertiser</th><th>CPM</th><th>Daily Budget</th><th>Impr</th><th>Viewable</th><th>Status</th><th></th></tr></thead>' +
+'<table><thead><tr><th>Advertiser</th><th>CPM</th><th>Daily Budget</th><th>Total Budget</th><th>Impr</th><th>Viewable</th><th>Status</th><th></th></tr></thead>' +
 '<tbody id="camp-list"><tr><td colspan="7" class="empty">Loading...</td></tr></tbody></table></section>' +
 '<section><h2>Campaign Detail</h2><div class="cbox" id="camp-detail"><div class="empty">Click a campaign above to see its creative and stats</div></div></section>' +
 '<section><h2>Recent Match Decisions <span style="font-size:12px;color:#888;font-weight:400">(diagnostic — last 15 crawls, served + unserved)</span></h2>' +
@@ -101,6 +101,8 @@ var html = '<!DOCTYPE html>' +
 '<section><h2 id="form-title">Add / Edit Campaign</h2><div class="fbody">' +
 '<div class="frow"><div class="field"><label>Campaign ID</label><input type="text" id="f-id" placeholder="e.g. camp_002"></div>' +
 '<div class="field"><label>Advertiser</label><input type="text" id="f-adv" placeholder="e.g. Hargreaves Lansdown"></div></div>' +
+'<div class="frow"><div class="field"><label>Advertiser ID <span style="font-size:11px;color:#888;font-weight:400">(revenue tracking key, e.g. adv_002)</span></label><input type="text" id="f-advid" placeholder="e.g. adv_002"></div>' +
+'<div class="field"><label>Publisher ID <span style="font-size:11px;color:#888;font-weight:400">(leave blank for all publishers)</span></label><input type="text" id="f-pubid" placeholder="e.g. pub_001"></div></div>' +
 '<div class="frow"><div class="field"><label>Category</label><select id="f-cat"><option value="finance">finance</option><option value="tech">tech</option></select></div>' +
 '<div class="field"><label>Keywords (comma-separated)</label><input type="text" id="f-kw" placeholder="isa, pension, stocks"></div></div>' +
 '<div class="field"><label>Targeting Description <span style="font-size:11px;color:#888;font-weight:400">(helps Haiku match correctly — one sentence, be specific about geography and topic)</span></label><input type="text" id="f-desc" placeholder="e.g. UK pension and ISA investing platform for retail investors"></div>' +
@@ -238,7 +240,7 @@ var html = '<!DOCTYPE html>' +
 '}' +
 'function renderCampaignList(cl){' +
 '  var filtered=cl.filter(function(c){return campFilter==="all"||c.category===campFilter;});' +
-'  if(!filtered.length){set("camp-list","<tr><td colspan=\'7\' class=\'empty\'>No campaigns — click + Add Campaign</td></tr>");return;}' +
+'  if(!filtered.length){set("camp-list","<tr><td colspan=\'8\' class=\'empty\'>No campaigns — click + Add Campaign</td></tr>");return;}' +
 '  set("camp-list",filtered.map(function(c){' +
 '    var badge=c.isWinner?" <span class=\'winbadge\'>WINNING</span>":"";' +
 '    var status=c.active?"<span style=\'color:#16a34a\'>Active</span>":"<span style=\'color:#999\'>Paused</span>";' +
@@ -246,7 +248,8 @@ var html = '<!DOCTYPE html>' +
 '    return "<tr class=\'camp-row\' data-id=\'"+c.id+"\'"+sel+">"+' +
 '      "<td><b>"+c.advertiser+"</b>"+badge+"<br><span style=\'font-size:11px;color:#999\'>"+c.id+" · "+c.category+"</span></td>"+' +
 '      "<td>£"+c.cpmGBP+"</td>"+' +
-'      "<td>"+bar(c.dailyBudgetUsedPct)+" <span style=\'font-size:11px;color:#999\'>"+money(c.dailySpendGBP)+"/£"+c.budgetDailyGBP+"</span></td>"+' +
+'      "<td>"+bar(c.dailyBudgetUsedPct)+" <span style=\'font-size:11px;color:#999\'>"+money(c.dailySpendGBP)+"/\u00a3"+c.budgetDailyGBP+" daily</span></td>"+' +
+'      "<td>"+money(c.totalSpendGBP)+" / \u00a3"+(c.budgetTotalGBP||"no cap")+"</td>"+' +
 '      "<td>"+fmt(c.impressions)+"</td>"+' +
 '      "<td>"+fmt(c.viewableImpressions)+"</td>"+' +
 '      "<td>"+status+"</td>"+' +
@@ -415,7 +418,7 @@ var html = '<!DOCTYPE html>' +
 '    "<div class=\'grid\' style=\'margin-bottom:10px\'>"+' +
 '      card("Impressions",fmt(c.impressions),fmt(c.viewableImpressions)+" viewable","")+' +
 '      card("Viewable %",retPct+"%",fmt(c.trainingImpressions)+" training","blue")+' +
-'      card("Spend",money(c.totalSpendGBP),money(c.dailySpendGBP)+" today","")+' +
+'      card("Daily Spend",money(c.dailySpendGBP),money(c.budgetDailyGBP?c.budgetDailyGBP:0)+" budget","")+card("Total Spend",money(c.totalSpendGBP),"£"+(c.budgetTotalGBP||"\u221e")+" total budget","")+' +
 '      card("vCPM",money(c.vcpmGBP),"vs £"+c.cpmGBP+" CPM","green")+' +
 '    "</div>"+' +
 '    "<div class=\'lbl\' style=\'margin-top:14px\'>Crawlers that saw this ad</div>"+' +
@@ -481,7 +484,7 @@ var html = '<!DOCTYPE html>' +
 '  f("f-id",c.id);f("f-adv",c.advertiser);' +
 '  f("f-kw",(c.keywords||[]).join(", "));f("f-desc",c.matchingDescription||"");' +
 '  f("f-link",c.link);f("f-lt",c.linkText||"Learn more");' +
-'  f("f-slug",c.advSlug);f("f-cpm",c.cpmGBP);' +
+'  f("f-advid",c.advId||"");f("f-pubid",c.pubId||"");f("f-slug",c.advSlug);f("f-cpm",c.cpmGBP);' +
 '  f("f-bd",c.budgetDailyGBP);f("f-bt",c.budgetTotalGBP);' +
 '  var sel=document.getElementById("f-cat");if(sel)sel.value=c.category||"finance";' +
 '  formVariants=(c.variants&&c.variants.length)?c.variants.map(function(v){return {angle:v.angle||"",text:v.text||""};}):[];' +
@@ -523,7 +526,7 @@ var html = '<!DOCTYPE html>' +
 '    if(!variants[i].text){msg.className="msg err";msg.textContent="Variant "+(i+1)+" needs ad copy";return;}' +
 '    if(variants[i].text.length>200){msg.className="msg err";msg.textContent="Variant "+(i+1)+" exceeds 200 characters";return;}' +
 '  }' +
-'  var body={id:g("f-id"),advertiser:g("f-adv"),category:g("f-cat"),variants:variants,link:g("f-link"),linkText:g("f-lt"),advSlug:g("f-slug"),cpmGBP:parseFloat(g("f-cpm")),budgetDailyGBP:parseFloat(g("f-bd")),budgetTotalGBP:parseFloat(g("f-bt")),keywords:kw,matchingDescription:g("f-desc"),active:true};' +
+'  var body={id:g("f-id"),advertiser:g("f-adv"),category:g("f-cat"),variants:variants,link:g("f-link"),linkText:g("f-lt"),advSlug:g("f-slug"),cpmGBP:parseFloat(g("f-cpm")),budgetDailyGBP:parseFloat(g("f-bd")),budgetTotalGBP:parseFloat(g("f-bt")),keywords:kw,matchingDescription:g("f-desc"),advId:g("f-advid")||undefined,pubId:g("f-pubid")||undefined,active:true};' +
 '  fetch("/admin/campaign",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})' +
 '  .then(function(r){return r.json();}).then(function(d){' +
 '    if(d.campaign){msg.className="msg ok";msg.textContent=d.warning?("Saved, but: "+d.warning):"Campaign saved — live in auction immediately";setTimeout(load,1000);}' +
