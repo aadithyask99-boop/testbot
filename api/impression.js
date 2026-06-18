@@ -26,7 +26,11 @@
 //         served }
 // ============================================================
 
-const { kvIncr, kvHashIncr, kvListPush, kvGet } = require('../lib/kv');
+const { kvIncr, kvHashIncr, kvListPush, kvGet, kvIncrBy } = require('../lib/kv');
+
+const TRAINING_BILL_RATIO = 0.3;
+const PUBLISHER_SHARE     = 0.8;
+const PLATFORM_SHARE      = 0.2;
 
 // Resolve pubId from token header (Session 9)
 async function resolvePubId(data, req) {
@@ -106,6 +110,35 @@ module.exports = async function handler(req, res) {
         kvIncr(`stats:impressions:pub:${pubId}:date:${today}`),
         kvHashIncr(`stats:impr_by_pub_plat:${pubId}`, plat),
       ] : []),
+
+      // ── REVENUE TRACKING (Session 10) ──────────────────────
+      // Store in integer pence (× 100) for atomic Redis INCRBY.
+      // Training impressions billed at 30% of campaign CPM.
+      // grossP / pubP / platformP computed from cpmGBP in body.
+      ...(() => {
+        const cpm     = parseFloat(cpmGBP) || 0;
+        const ratio   = type === 'training' ? TRAINING_BILL_RATIO : 1.0;
+        const grossP  = Math.round((cpm * ratio / 1000) * 100); // pence
+        const pubP    = Math.round(grossP * PUBLISHER_SHARE);
+        const platP   = Math.round(grossP * PLATFORM_SHARE);
+        if (grossP === 0) return [];
+        const revOps = [
+          kvIncrBy('revenue:gross:total',             grossP),
+          kvIncrBy(`revenue:gross:date:${today}`,     grossP),
+          kvIncrBy('revenue:platform:total',          platP),
+          kvIncrBy(`revenue:platform:date:${today}`,  platP),
+        ];
+        // Advertiser billing — keyed by advId from body, else campaignId
+        const advKey = data.advId || campaignId;
+        revOps.push(kvIncrBy(`revenue:advertiser:${advKey}:total`,         grossP));
+        revOps.push(kvIncrBy(`revenue:advertiser:${advKey}:date:${today}`, grossP));
+        // Publisher earnings — only if pubId resolved
+        if (pubId) {
+          revOps.push(kvIncrBy(`revenue:publisher:${pubId}:total`,         pubP));
+          revOps.push(kvIncrBy(`revenue:publisher:${pubId}:date:${today}`, pubP));
+        }
+        return revOps;
+      })(),
 
       // Recent activity log — powers the dashboard.
       // Session 8: full match metadata included so Why-box works for
