@@ -267,7 +267,7 @@ function scopedAdvertiserPortalHtml(adv) {
     '    msg.textContent=d.message+(d.droppedForSafety?" ("+d.droppedForSafety+" dropped for containing unverifiable figures)":"");msg.style.color="#16a34a";' +
     '    document.getElementById("csResults").innerHTML=(d.variants||[]).map(function(v,idx){' +
     '      return "<div class=\'rec\'><div class=\'vangle\'>"+v.angle+"</div><div class=\'rtext\'>"+v.text+"</div>" +' +
-    '        "<div class=\'ractions\'><button class=\'btn\' onclick=\'addStudioVariant("+idx+")\'>Add to my variants</button></div></div>";' +
+    '        "<div class=\'ractions\'><button class=\'btn\' onclick=\'addStudioVariant("+idx+",this)\'>Add to my variants</button></div></div>";' +
     '    }).join("");' +
     '    window.__csVariants=d.variants||[];' +
     '  }).catch(function(e){btn.disabled=false;btn.textContent="Generate variants";msg.textContent="Error: "+e.message;msg.style.color="#dc2626";});' +
@@ -276,8 +276,9 @@ function scopedAdvertiserPortalHtml(adv) {
     '  document.getElementById("csIdea1").value="";document.getElementById("csIdea2").value="";document.getElementById("csIdea3").value="";' +
     '  document.getElementById("csMsg").textContent="";document.getElementById("csResults").innerHTML="";window.__csVariants=[];' +
     '}' +
-    'function addStudioVariant(idx){' +
-    '  var v=(window.__csVariants||[])[idx];if(!v||!CAMP_ID)return;' +
+    'function addStudioVariant(idx,btn){' +
+    '  var v=(window.__csVariants||[])[idx];if(!v||!CAMP_ID){if(btn)btn.textContent="Error: no campaign loaded";return;}' +
+    '  if(btn){btn.disabled=true;btn.textContent="Adding...";}' +
     '  fetch("/dashboard?view=advertiser&advId="+encodeURIComponent(ADV_ID)).then(function(r){return r.json();}).then(function(d){' +
     '    var camp=(d.campaigns||[])[0];if(!camp)throw new Error("Campaign not found");' +
     '    var newVariants=(camp.variants||[]).concat([{angle:v.angle,text:v.text}]);' +
@@ -286,7 +287,11 @@ function scopedAdvertiserPortalHtml(adv) {
     '      matchingDescription:camp.matchingDescription,variants:newVariants,link:camp.link,linkText:camp.linkText,' +
     '      advSlug:camp.advSlug,active:camp.active};' +
     '    return fetch("/admin/campaign",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});' +
-    '  }).then(function(r){return r.json();}).then(function(){load();}).catch(function(){});' +
+    '  }).then(function(r){return r.json();}).then(function(res){' +
+    '    if(res.error){if(btn){btn.disabled=false;btn.textContent="Failed: "+res.error;}return;}' +
+    '    if(btn){btn.textContent="\\u2713 Added";btn.style.background="#16a34a";}' +
+    '    load();' +
+    '  }).catch(function(e){if(btn){btn.disabled=false;btn.textContent="Failed: "+e.message;}});' +
     '}' +
     'load();setInterval(load,15000);' +
     '</script></body></html>';
