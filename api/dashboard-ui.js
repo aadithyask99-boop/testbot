@@ -154,9 +154,16 @@ function scopedAdvertiserPortalHtml(adv) {
     '<section><h2>Ad variants</h2><div class="h2sub">Your full variant bank \u2014 top performer marked</div>' +
     '<div id="adv-variants"><div class="empty">Loading...</div></div></section>' +
 
-    '<section><h2>AI recommendations</h2><div class="h2sub">Haiku evaluates your variants against live page content and suggests what is most likely to be cited by AI systems. Nothing goes live until you approve it.</div>' +
-    '<button class="btn btnsec" onclick="generateRecs()" id="genRecsBtn">Generate recommendations</button>' +
-    '<div id="adv-recs" style="margin-top:14px"></div></section>' +
+    '<section><h2>AI Creative Studio</h2><div class="h2sub">Turn rough ideas into polished ad copy. At least 2 of your 3 ideas need a real stat, fee, or figure \u2014 Haiku will not invent data, only phrase what you give it well.</div>' +
+    '<div class="formrow"><textarea id="csIdea1" placeholder="Idea 1, e.g. we have 1.6 million users" maxlength="200"></textarea></div>' +
+    '<div class="formrow"><textarea id="csIdea2" placeholder="Idea 2, e.g. our fee is 0.15% vs industry average 0.45%" maxlength="200"></textarea></div>' +
+    '<div class="formrow"><textarea id="csIdea3" placeholder="Idea 3, e.g. simple and easy to use (can be promotional)" maxlength="200"></textarea></div>' +
+    '<div style="display:flex;gap:8px">' +
+    '<button class="btn" onclick="generateCreativeStudio()" id="csGenBtn">Generate variants</button>' +
+    '<button class="btn btnsec" onclick="clearCreativeStudio()">Clear</button>' +
+    '</div>' +
+    '<div class="formmsg" id="csMsg"></div>' +
+    '<div id="csResults" style="margin-top:14px"></div></section>' +
 
     '<section><h2>Recent activity</h2><div class="h2sub">AI crawlers that have visited pages where you compete</div>' +
     '<div id="adv-activity"><div class="empty">Loading...</div></div></section>' +
@@ -211,7 +218,7 @@ function scopedAdvertiserPortalHtml(adv) {
     '      }).join("");' +
     '    }else{document.getElementById("adv-activity").innerHTML="<div class=\'empty\'>No crawler activity yet</div>";}' +
     '    document.getElementById("ts").textContent="Updated "+new Date().toLocaleTimeString("en-GB");' +
-    '    loadSpark();loadRecs();' +
+    '    loadSpark();' +
     '  }).catch(function(e){document.getElementById("ts").textContent="Error: "+e.message;});' +
     '}' +
     'function loadSpark(){' +
@@ -245,44 +252,41 @@ function scopedAdvertiserPortalHtml(adv) {
     '    btn.disabled=false;btn.textContent="Add creative";' +
     '  }).catch(function(e){msg.textContent="Error: "+e.message;msg.style.color="#dc2626";btn.disabled=false;btn.textContent="Add creative";});' +
     '}' +
-    'function generateRecs(){' +
-    '  if(!CAMP_ID)return;' +
-    '  var btn=document.getElementById("genRecsBtn");btn.disabled=true;btn.textContent="Generating... (takes ~10-20s)";' +
-    '  fetch("/admin/recommendations/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({campaignId:CAMP_ID})})' +
-    '  .then(function(r){return r.json();}).then(function(){btn.disabled=false;btn.textContent="Generate recommendations";loadRecs();})' +
-    '  .catch(function(){btn.disabled=false;btn.textContent="Generate recommendations";});' +
+    'function generateCreativeStudio(){' +
+    '  var i1=document.getElementById("csIdea1").value.trim();' +
+    '  var i2=document.getElementById("csIdea2").value.trim();' +
+    '  var i3=document.getElementById("csIdea3").value.trim();' +
+    '  var msg=document.getElementById("csMsg");msg.textContent="";' +
+    '  if(!i1||!i2||!i3){msg.textContent="All 3 idea fields are required.";msg.style.color="#dc2626";return;}' +
+    '  var btn=document.getElementById("csGenBtn");btn.disabled=true;btn.textContent="Generating... (~10-15s)";' +
+    '  fetch("/admin/creative-studio",{method:"POST",headers:{"Content-Type":"application/json"},' +
+    '    body:JSON.stringify({advertiser:"' + escapeHtml(adv.name) + '",ideas:[i1,i2,i3]})})' +
+    '  .then(function(r){return r.json();}).then(function(d){' +
+    '    btn.disabled=false;btn.textContent="Generate variants";' +
+    '    if(d.error){msg.textContent=d.error;msg.style.color="#dc2626";document.getElementById("csResults").innerHTML="";return;}' +
+    '    msg.textContent=d.message+(d.droppedForSafety?" ("+d.droppedForSafety+" dropped for containing unverifiable figures)":"");msg.style.color="#16a34a";' +
+    '    document.getElementById("csResults").innerHTML=(d.variants||[]).map(function(v,idx){' +
+    '      return "<div class=\'rec\'><div class=\'vangle\'>"+v.angle+"</div><div class=\'rtext\'>"+v.text+"</div>" +' +
+    '        "<div class=\'ractions\'><button class=\'btn\' onclick=\'addStudioVariant("+idx+")\'>Add to my variants</button></div></div>";' +
+    '    }).join("");' +
+    '    window.__csVariants=d.variants||[];' +
+    '  }).catch(function(e){btn.disabled=false;btn.textContent="Generate variants";msg.textContent="Error: "+e.message;msg.style.color="#dc2626";});' +
     '}' +
-    'function loadRecs(){' +
-    '  if(!CAMP_ID)return;' +
-    '  fetch("/admin/recommendations?campaignId="+encodeURIComponent(CAMP_ID)).then(function(r){return r.json();}).then(function(d){' +
-    '    var items=d.items||[],approved=d.approved||[];' +
-    '    if(!items.length){document.getElementById("adv-recs").innerHTML="<div class=\'empty\'>No recommendations yet \u2014 click Generate recommendations</div>";return;}' +
-    '    var html="";' +
-    '    items.forEach(function(item){' +
-    '      var url=urlPath(item.pageUrl);' +
-    '      (item.suggestions||[]).forEach(function(s){' +
-    '        var isApproved=approved.some(function(a){return a.variantId===s.variantId&&a.pageUrl===item.pageUrl;});' +
-    '        html+="<div class=\'rec"+(isApproved?" approved":"")+"\' data-page=\'"+item.pageUrl+"\' data-variant=\'"+s.variantId+"\'>" +' +
-    '          "<div style=\'font-size:11px;color:#888;font-family:monospace\'>"+url+"</div>" +' +
-    '          "<div class=\'rtext\'>"+(s.proposedText||("Variant "+s.variantId))+(isApproved?" <span class=\'tag-approved\'>APPROVED</span>":"")+"</div>" +' +
-    '          "<div class=\'rreason\'>"+(s.reason||"")+"</div>" +' +
-    '          (isApproved?"":"<div class=\'ractions\'><button class=\'btn\' onclick=\'decideRec(this,\\"approve\\")\'>Approve</button>" +' +
-    '          "<button class=\'btn btnsec\' onclick=\'decideRec(this,\\"reject\\")\'>Reject</button></div>") +' +
-    '          "</div>";' +
-    '      });' +
-    '    });' +
-    '    document.getElementById("adv-recs").innerHTML=html||"<div class=\'empty\'>No suggestions returned</div>";' +
-    '  }).catch(function(){document.getElementById("adv-recs").innerHTML="<div class=\'empty\'>Failed to load recommendations</div>";});' +
+    'function clearCreativeStudio(){' +
+    '  document.getElementById("csIdea1").value="";document.getElementById("csIdea2").value="";document.getElementById("csIdea3").value="";' +
+    '  document.getElementById("csMsg").textContent="";document.getElementById("csResults").innerHTML="";window.__csVariants=[];' +
     '}' +
-    'function decideRec(btn,decision){' +
-    '  var rec=btn.closest(".rec");var pageUrl=rec.getAttribute("data-page");var variantId=rec.getAttribute("data-variant");' +
-    '  btn.disabled=true;' +
-    '  fetch("/admin/recommendations/decide",{method:"POST",headers:{"Content-Type":"application/json"},' +
-    '    body:JSON.stringify({campaignId:CAMP_ID,pageUrl:pageUrl,variantId:variantId,decision:decision})})' +
-    '  .then(function(r){return r.json();}).then(function(){' +
-    '    if(decision==="reject"){rec.classList.add("rejected");}' +
-    '    loadRecs();load();' +
-    '  }).catch(function(){btn.disabled=false;});' +
+    'function addStudioVariant(idx){' +
+    '  var v=(window.__csVariants||[])[idx];if(!v||!CAMP_ID)return;' +
+    '  fetch("/dashboard?view=advertiser&advId="+encodeURIComponent(ADV_ID)).then(function(r){return r.json();}).then(function(d){' +
+    '    var camp=(d.campaigns||[])[0];if(!camp)throw new Error("Campaign not found");' +
+    '    var newVariants=(camp.variants||[]).concat([{angle:v.angle,text:v.text}]);' +
+    '    var body={id:camp.id,advId:camp.advId,advertiser:camp.advertiser,category:camp.category,cpmGBP:camp.cpmGBP,' +
+    '      budgetDailyGBP:camp.budgetDailyGBP,budgetTotalGBP:camp.budgetTotalGBP,keywords:camp.keywords,' +
+    '      matchingDescription:camp.matchingDescription,variants:newVariants,link:camp.link,linkText:camp.linkText,' +
+    '      advSlug:camp.advSlug,active:camp.active};' +
+    '    return fetch("/admin/campaign",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});' +
+    '  }).then(function(r){return r.json();}).then(function(){load();}).catch(function(){});' +
     '}' +
     'load();setInterval(load,15000);' +
     '</script></body></html>';
