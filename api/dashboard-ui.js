@@ -144,16 +144,6 @@ function scopedAdvertiserPortalHtml(adv) {
     '<table><thead><tr><th>Page</th><th>Variant served</th><th>Method</th><th>Last crawl</th></tr></thead>' +
     '<tbody id="adv-board"><tr><td colspan="4" class="empty">Loading...</td></tr></tbody></table></section>' +
 
-    '<section><h2>Add a creative</h2><div class="h2sub">New variants are auto-crawled within 60 seconds of saving</div>' +
-    '<div class="formrow"><input type="text" id="newAngle" placeholder="Angle, e.g. data-led: cost comparison" maxlength="60"></div>' +
-    '<div class="formrow"><textarea id="newText" placeholder="Ad copy (max 280 characters)" maxlength="280" oninput="document.getElementById(\'newTextCount\').textContent=this.value.length+\'/280\'"></textarea></div>' +
-    '<div class="charcount" id="newTextCount">0/280</div>' +
-    '<button class="btn" onclick="addCreative()" id="addCreativeBtn">Add creative</button>' +
-    '<div class="formmsg" id="addCreativeMsg"></div></section>' +
-
-    '<section><h2>Ad variants</h2><div class="h2sub">Your full variant bank \u2014 top performer marked</div>' +
-    '<div id="adv-variants"><div class="empty">Loading...</div></div></section>' +
-
     '<section><h2>AI Creative Studio</h2><div class="h2sub">Turn rough ideas into polished ad copy. At least 2 of your 3 ideas need a real stat, fee, or figure \u2014 Haiku will not invent data, only phrase what you give it well.</div>' +
     '<div class="formrow"><textarea id="csIdea1" placeholder="Idea 1, e.g. we have 1.6 million users" maxlength="200"></textarea></div>' +
     '<div class="formrow"><textarea id="csIdea2" placeholder="Idea 2, e.g. our fee is 0.15% vs industry average 0.45%" maxlength="200"></textarea></div>' +
@@ -164,6 +154,16 @@ function scopedAdvertiserPortalHtml(adv) {
     '</div>' +
     '<div class="formmsg" id="csMsg"></div>' +
     '<div id="csResults" style="margin-top:14px"></div></section>' +
+
+    '<section><h2>Add a creative</h2><div class="h2sub">New variants are auto-crawled within 60 seconds of saving</div>' +
+    '<div class="formrow"><input type="text" id="newAngle" placeholder="Angle, e.g. data-led: cost comparison" maxlength="60"></div>' +
+    '<div class="formrow"><textarea id="newText" placeholder="Ad copy (max 280 characters)" maxlength="280" oninput="document.getElementById(\'newTextCount\').textContent=this.value.length+\'/280\'"></textarea></div>' +
+    '<div class="charcount" id="newTextCount">0/280</div>' +
+    '<button class="btn" onclick="addCreative()" id="addCreativeBtn">Add creative</button>' +
+    '<div class="formmsg" id="addCreativeMsg"></div></section>' +
+
+    '<section><h2>Ad variants</h2><div class="h2sub">Your full variant bank \u2014 top performer marked</div>' +
+    '<div id="adv-variants"><div class="empty">Loading...</div></div></section>' +
 
     '<section><h2>Recent activity</h2><div class="h2sub">AI crawlers that have visited pages where you compete</div>' +
     '<div id="adv-activity"><div class="empty">Loading...</div></div></section>' +

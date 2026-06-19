@@ -142,12 +142,19 @@ function extractNumbers(text) {
 // Check every number Haiku's output contains also appears in the
 // combined input text. Prevents fabricated statistics from slipping
 // through even when the input gate passed.
-function outputTraceable(outputText, combinedInput) {
+// advertiser param: numbers that are part of the brand's own NAME
+// (e.g. "Trading 212", "AJ Bell" doesn't have one, but "Trading 212"
+// does) are NOT claims and must be excluded — otherwise the brand
+// name itself trips the fabrication check every time it's mentioned.
+function outputTraceable(outputText, combinedInput, advertiser) {
   const outputNums = extractNumbers(outputText);
   const inputNums = new Set(extractNumbers(combinedInput));
+  const brandNums = new Set(extractNumbers(advertiser || ''));
   // Allow common non-fabricated numbers (years like 2024, 2025, 2026)
   // through even if not explicitly in input, since they're not "stats".
-  return outputNums.every(n => inputNums.has(n) || /^20\d\d$/.test(n));
+  return outputNums.every(n =>
+    inputNums.has(n) || brandNums.has(n) || /^20\d\d$/.test(n)
+  );
 }
 
 async function haikuGenerateCreativeStudioVariants(advertiser, ideas) {
@@ -225,7 +232,7 @@ Produce exactly 3 variants. Each under 280 characters. Respond with ONLY valid J
     const safeVariants = [];
     const droppedCount = { n: 0 };
     for (const v of rawVariants) {
-      if (outputTraceable(v.text || '', combinedInput)) {
+      if (outputTraceable(v.text || '', combinedInput, advertiser)) {
         safeVariants.push(v);
       } else {
         droppedCount.n++;
