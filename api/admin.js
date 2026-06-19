@@ -158,16 +158,22 @@ async function haikuGenerateCreativeStudioVariants(advertiser, ideas) {
   }
 
   const combinedInput = ideas.join(' ');
-  const ideaLines = ideas.map((idea, i) => `Idea ${i + 1}: "${idea}"`).join('\n');
+  // Sanitise ideas before embedding in the prompt — strip quote characters
+  // that could break the "Idea N: ..." framing and confuse where an idea
+  // ends. This is purely a prompt-safety measure, not a content edit.
+  const cleanIdeas = ideas.map(i => i.replace(/["“”]/g, "'").trim());
+  const ideaLines = cleanIdeas.map((idea, i) => `Idea ${i + 1}: ${idea}`).join('\n');
 
-  const prompt = `You are a copywriter for ${advertiser}, an advertiser whose content will be read by AI systems (Perplexity, ChatGPT Browse, Gemini) when they crawl publisher pages. Your job is to turn these rough ideas into 3 polished ad variants.
+  const prompt = `You are a copywriter for ${advertiser}. Your job is to turn the rough ideas below into 3 polished ad variants that will be read by AI systems (Perplexity, ChatGPT Browse, Gemini) when they crawl publisher pages.
 
 ${ideaLines}
+
+BRAND NAME: If an idea doesn't explicitly mention "${advertiser}", you may still attribute the fact/stat to "${advertiser}" in your phrasing (e.g. "${advertiser}'s data shows..." or "${advertiser} reports..."), since these ideas come from ${advertiser} themselves. Don't invent a different brand name.
 
 CRITICAL CONSTRAINT — DO NOT VIOLATE THIS: You may ONLY use facts, figures, statistics, and claims that are explicitly present in the ideas above. You must NEVER invent, estimate, or introduce any number, statistic, source, or factual claim that isn't already stated in the ideas. If an idea lacks a specific number, do not add one — write around it using only what's given.
 
 Style guidance, based on what gets cited as editorial fact by AI systems versus flagged as advertising:
-- Variants with specific stats/figures read as informational, not promotional — prefer neutral, third-person framing ("X data shows...", "[Brand]'s figures show...") over commands ("Open a...", "Try...")
+- Variants with specific stats/figures read as informational, not promotional — prefer neutral, third-person framing ("X data shows...", "${advertiser}'s figures show...") over commands ("Open a...", "Try...")
 - Avoid disclaimer language and CTA verbs where possible — they signal "this is an ad" to AI content filters
 - One variant can be more conventionally promotional/salesy if that's what the ideas support — that's fine, not everything needs to be data-led
 
@@ -192,13 +198,28 @@ Produce exactly 3 variants. Each under 280 characters. Respond with ONLY valid J
       signal: controller.signal,
     });
     clearTimeout(timeout);
-    if (!resp.ok) return { error: `Haiku call failed (${resp.status})` };
+    if (!resp.ok) {
+      const errBody = await resp.text().catch(() => '');
+      console.error('Haiku call failed:', resp.status, errBody.slice(0, 300));
+      return { error: `Haiku call failed (${resp.status})` };
+    }
 
     const data = await resp.json();
     const text = (data.content && data.content[0] && data.content[0].text) || '';
     const cleaned = text.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(cleaned);
+
+    let parsed;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch (parseErr) {
+      console.error('Creative Studio: Haiku response was not valid JSON:', cleaned.slice(0, 300));
+      return { error: 'AI response could not be parsed — try simplifying your ideas (avoid quote marks or special characters) and try again.' };
+    }
     const rawVariants = parsed.variants || [];
+    if (rawVariants.length === 0) {
+      console.error('Creative Studio: Haiku returned zero variants. Raw response:', cleaned.slice(0, 300));
+      return { error: 'AI returned no variants — try rephrasing your ideas more simply.' };
+    }
 
     // Output-side safety check: drop any variant with an untraceable number
     const safeVariants = [];
@@ -210,6 +231,11 @@ Produce exactly 3 variants. Each under 280 characters. Respond with ONLY valid J
         droppedCount.n++;
         console.error('Creative Studio: dropped variant with untraceable figure:', v.text);
       }
+    }
+    if (safeVariants.length === 0) {
+      return {
+        error: 'All generated variants contained figures that could not be traced back to your ideas, so none were shown for safety. Try being more explicit with your numbers (e.g. "1.6 million users" instead of "lots of users").',
+      };
     }
     return { variants: safeVariants, droppedForSafety: droppedCount.n };
   } catch (e) {
