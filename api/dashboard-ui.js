@@ -771,3 +771,5 @@ var html = '<!DOCTYPE html>' +
 'load();setInterval(load,10000);' +
 '</script></body></html>';
 
+
+// session10-batch1-redeploy-trigger
