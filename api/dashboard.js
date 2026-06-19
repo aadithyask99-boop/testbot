@@ -319,7 +319,7 @@ module.exports = async function handler(req, res) {
         };
       });
       campaignList.push({
-        id: c.id, advertiser: c.advertiser, category: c.category,
+        id: c.id, advId: c.advId || null, advertiser: c.advertiser, category: c.category,
         cpmGBP: c.cpmGBP, active: c.active === true,
         budgetDailyGBP: c.budgetDailyGBP, budgetTotalGBP: c.budgetTotalGBP,
         keywords: c.keywords || [],
@@ -330,6 +330,7 @@ module.exports = async function handler(req, res) {
         totalSpendGBP: parseFloat(spend.totalSpendGBP.toFixed(4)),
         dailyBudgetUsedPct: parseFloat(dailyBudgetUsedPct.toFixed(1)),
         impressions: spend.totalImpressions,
+        todayImpressions: spend.dailyImpressions,
         platformBreakdown,
         variantBreakdown,
         viewableImpressions: viewable,
@@ -493,19 +494,46 @@ module.exports = async function handler(req, res) {
       const advertiserList = [...new Set(campaignList.map(c => c.advertiser))].sort()
         .map(name => ({ name, campaigns: campaignList.filter(c => c.advertiser === name).length }));
 
+      // Session 10 Batch 2: scope to a single advertiser if advId param given.
+      // Used by /ui/advertiser/{slug} — the dedicated advertiser portal.
+      const advId = (req.query && req.query.advId) || null;
+      const scopedCampaigns = advId
+        ? campaignList.filter(c => c.advId === advId)
+        : campaignList;
+      const scopedPageBoard = advId
+        ? pageBoard.filter(p => scopedCampaigns.some(c => c.id === p.servingId))
+        : pageBoard;
+
+      // Recompute aggregate spend/viewable for this advertiser only
+      const scopedGrossGBP = scopedCampaigns.reduce((s, c) => s + (c.totalSpendGBP || 0), 0);
+      const scopedViewable = advId
+        ? (recentBotLogs || []).filter(e =>
+            e && e.crawlerType === 'retrieval' && e.campaignId &&
+            scopedCampaigns.some(c => c.id === e.campaignId)
+          ).length
+        : totalViewable;
+      const scopedVcpm = scopedViewable > 0
+        ? parseFloat(((scopedGrossGBP / scopedViewable) * 1000).toFixed(2)) : 0;
+
+      // Recent matches scoped to this advertiser's campaigns only
+      const scopedCampaignIds = new Set(scopedCampaigns.map(c => c.id));
+
       return res.status(200).json({
         _view: 'advertiser',
+        scopedAdvId: advId,
         publishers: publisherList,
         advertisers: advertiserList,
         // Per-page live board: what's actually serving on each page right now,
         // with the full candidate breakdown per resolved auction. Real logs.
-        pageBoard,
-        campaigns: campaignList,
+        pageBoard: scopedPageBoard,
+        campaigns: scopedCampaigns,
         // Session 3 diagnostic: surface match decisions at top level so the
         // dashboard's "Recent Match Decisions" table can read them directly.
         // Includes served AND unserved entries — the diagnostic value is
         // seeing WHY matching rejects things, not just successes.
-        recentMatches: (recentBotLogs || []).slice(0, 15).map(e => {
+        recentMatches: (recentBotLogs || [])
+          .filter(e => !advId || (e.campaignId && scopedCampaignIds.has(e.campaignId)))
+          .slice(0, 15).map(e => {
           // Normalise URL — strip Worker proxy domain so dashboard shows
           // just the path (e.g. /articles/best-isa-2026.html) regardless
           // of whether impression came from demo path or real Worker.
@@ -536,10 +564,20 @@ module.exports = async function handler(req, res) {
         });
         }),
         aggregate: {
-          totalViewable: totalViewable,
-          blendedVcpmGBP: blendedVcpm,
+          totalViewable: scopedViewable,
+          blendedVcpmGBP: scopedVcpm,
         },
-        campaign: {
+        campaign: scopedCampaigns.length > 0 ? {
+          advertiser: scopedCampaigns[0].advertiser || 'Not set',
+          text:       scopedCampaigns[0].variants?.[0]?.text || '',
+          variantAngle: scopedCampaigns[0].variants?.[0]?.angle || null,
+          link:       scopedCampaigns[0].link       || '',
+          linkText:   scopedCampaigns[0].linkText   || '',
+          advSlug:    scopedCampaigns[0].advSlug    || '',
+          category:   scopedCampaigns[0].category   || '',
+          cpmGBP:     scopedCampaigns[0].cpmGBP     || 0,
+          updatedAt:  scopedCampaigns[0].updatedAt  || null,
+        } : {
           advertiser: (cc && cc.advertiser) || 'Not set',
           text:       (cc && cc.text)       || '',
           variantAngle: (cc && cc.variantAngle) || null,
@@ -551,17 +589,19 @@ module.exports = async function handler(req, res) {
           updatedAt:  (cc && cc.updatedAt)  || null,
         },
         impressions: {
-          total:       impressions,
-          today:       n(todayImpressions),
+          total:       scopedCampaigns.reduce((s, c) => s + (c.impressions || 0), 0) || (advId ? 0 : impressions),
+          today:       advId
+            ? scopedCampaigns.reduce((s, c) => s + (c.todayImpressions || 0), 0)
+            : n(todayImpressions),
           description: 'Times your brand message was served to an AI crawler',
-          byPlatform:  platformTable,
+          byPlatform:  advId ? [] : platformTable,
         },
         // NOTE: publisher "visits" intentionally removed from advertiser view.
         // Humans landing on the PUBLISHER page is a publisher/operator metric.
         // Advertisers care about impressions of THEIR creative + spend.
         spend: {
-          estimatedTotalGBP: parseFloat(revenueGBP.toFixed(4)),
-          cpmGBP:            (cc && cc.cpmGBP) || 18,
+          estimatedTotalGBP: parseFloat(scopedGrossGBP.toFixed(4)),
+          cpmGBP:            scopedCampaigns[0]?.cpmGBP || (cc && cc.cpmGBP) || 18,
           model:             'CPM charged on retrieval crawler impressions only',
         },
         verification: {
@@ -569,7 +609,9 @@ module.exports = async function handler(req, res) {
             command: 'curl -H "User-Agent: Mozilla/5.0 (compatible; PerplexityBot/1.0)" https://testbot-two-psi.vercel.app/',
             note: 'Your ad copy should appear as a plain paragraph in the HTML response.',
           },
-          recentImpressions: (recentBotLogs || []).slice(0, 10).map(e => ({
+          recentImpressions: (recentBotLogs || [])
+            .filter(e => !advId || (e.campaignId && scopedCampaignIds.has(e.campaignId)))
+            .slice(0, 10).map(e => ({
             time:        e.time,
             platform:    e.platform,
             crawlerType: e.crawlerType,

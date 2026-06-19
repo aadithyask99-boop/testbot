@@ -80,6 +80,144 @@ function listPageHtml(kind) {
     '</div></body></html>';
 }
 
+// Session 10 Batch 3: scoped advertiser portal.
+// A self-contained, dedicated page for ONE advertiser — fetches
+// /dashboard?view=advertiser&advId=X, no picker, no cross-advertiser data.
+function scopedAdvertiserPortalHtml(adv) {
+  return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>' + escapeHtml(adv.name) + ' — AI Ad Platform</title><style>' +
+    '*{box-sizing:border-box;margin:0;padding:0}' +
+    'body{font-family:system-ui,-apple-system,sans-serif;background:#f9f9f9;color:#111;font-size:14px}' +
+    'header{background:#fff;border-bottom:1px solid #e5e5e5;padding:14px 24px;display:flex;align-items:center;justify-content:space-between}' +
+    'header h1{font-size:14px;font-weight:600}header .sub{font-size:11px;color:#999}' +
+    'header a{font-size:11px;color:#888;text-decoration:none}' +
+    '#ts{font-size:11px;color:#aaa}' +
+    'main{padding:24px;max-width:1100px;margin:0 auto}' +
+    '.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:24px}' +
+    '.card{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:16px}' +
+    '.card .v{font-size:22px;font-weight:600}.card .l{font-size:11px;color:#888;margin-top:2px}.card .s{font-size:11px;color:#aaa;margin-top:4px}' +
+    '.card.green .v{color:#16a34a}.card.blue .v{color:#2563eb}' +
+    'section{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:20px;margin-bottom:20px}' +
+    'section h2{font-size:14px;font-weight:600;margin-bottom:12px}' +
+    'table{width:100%;border-collapse:collapse;font-size:13px}' +
+    'th{text-align:left;font-size:11px;color:#888;font-weight:500;padding:6px 8px;border-bottom:1px solid #eee}' +
+    'td{padding:8px;border-bottom:1px solid #f3f3f3;vertical-align:top}' +
+    '.empty{color:#aaa;font-size:12px;padding:16px;text-align:center}' +
+    '.vrow{padding:10px 0;border-bottom:1px solid #f3f3f3}.vrow:last-child{border-bottom:none}' +
+    '.vangle{font-size:12px;font-weight:600}.vstat{font-size:11px;color:#888}.vtext{font-size:12px;color:#444;margin-top:4px}' +
+    '</style></head><body>' +
+    '<header><div><h1>' + escapeHtml(adv.name) + '</h1><div class="sub">Advertiser portal</div></div>' +
+    '<div><span id="ts"></span> &nbsp; <a href="/ui">switch view</a></div></header>' +
+    '<main>' +
+    '<div class="grid" id="adv-cards"><div class="empty">Loading...</div></div>' +
+    '<section><h2>Campaign performance</h2>' +
+    '<table><thead><tr><th>Page</th><th>Variant served</th><th>Method</th><th>Last crawl</th></tr></thead>' +
+    '<tbody id="adv-board"><tr><td colspan="4" class="empty">Loading...</td></tr></tbody></table></section>' +
+    '<section><h2>Ad variants</h2><div id="adv-variants"><div class="empty">Loading...</div></div></section>' +
+    '</main>' +
+    '<script>' +
+    'var ADV_ID="' + escapeHtml(adv.advId) + '";' +
+    'function fmt(n){return (n||0).toLocaleString("en-GB");}' +
+    'function money(n){return "\\u00a3"+(n||0).toFixed(2);}' +
+    'function ago(t){if(!t)return "\\u2014";var s=Math.floor((Date.now()-new Date(t).getTime())/1000);if(s<60)return s+"s ago";if(s<3600)return Math.floor(s/60)+"m ago";return Math.floor(s/3600)+"h ago";}' +
+    'function card(label,val,sub,cls){return "<div class=\\"card "+(cls||"")+"\\"><div class=\\"v\\">"+val+"</div><div class=\\"l\\">"+label+"</div>"+(sub?"<div class=\\"s\\">"+sub+"</div>":"")+"</div>";}' +
+    'function load(){' +
+    '  fetch("/dashboard?view=advertiser&advId="+encodeURIComponent(ADV_ID)).then(function(r){return r.json();}).then(function(d){' +
+    '    var agg=d.aggregate||{},camps=d.campaigns||[],board=d.pageBoard||[];' +
+    '    var totalSpend=camps.reduce(function(a,c){return a+(c.totalSpendGBP||0);},0);' +
+    '    var totalImpr=camps.reduce(function(a,c){return a+(c.impressions||0);},0);' +
+    '    var activeCamp=camps[0];' +
+    '    document.getElementById("adv-cards").innerHTML=' +
+    '      card("Status",activeCamp&&activeCamp.active?"Active":"Paused","CPM \\u00a3"+(activeCamp?activeCamp.cpmGBP:0),activeCamp&&activeCamp.active?"green":"")+' +
+    '      card("Total impressions",fmt(totalImpr),fmt(agg.totalViewable||0)+" viewable","blue")+' +
+    '      card("Total spend",money(totalSpend),"vCPM "+money(agg.blendedVcpmGBP||0),"green")+' +
+    '      card("Daily budget used",(activeCamp?activeCamp.dailyBudgetUsedPct:0)+"%",money(activeCamp?activeCamp.dailySpendGBP:0)+" / "+money(activeCamp?activeCamp.budgetDailyGBP:0),"");' +
+    '    if(board.length){' +
+    '      document.getElementById("adv-board").innerHTML=board.map(function(p){' +
+    '        var url=(p.url||"/").replace(/^https?:\\/\\/[^/]+/,"");' +
+    '        var variant=p.servingId?(p.variantAngle||"\\u2014"):"<span style=\\"color:#ccc\\">not serving</span>";' +
+    '        return "<tr><td style=\\"font-family:monospace;font-size:12px\\">"+url+"</td><td>"+variant+"</td><td>"+(p.matchMethod||"\\u2014")+"</td><td>"+ago(p.lastCrawl)+"</td></tr>";' +
+    '      }).join("");' +
+    '    }else{document.getElementById("adv-board").innerHTML="<tr><td colspan=\\"4\\" class=\\"empty\\">No pages yet</td></tr>";}' +
+    '    var variants=(activeCamp&&activeCamp.variantBreakdown)||[];' +
+    '    if(variants.length){' +
+    '      document.getElementById("adv-variants").innerHTML=variants.map(function(v){' +
+    '        var src=(activeCamp.variants||[]).find(function(x){return x.id===v.id;});' +
+    '        return "<div class=\\"vrow\\"><div class=\\"vangle\\">"+(v.angle||v.id)+"</div>" +' +
+    '          "<div class=\\"vstat\\">"+fmt(v.impressions)+" impr \\u00b7 "+v.pct+"%</div>" +' +
+    '          "<div class=\\"vtext\\">"+(src?src.text:"")+"</div></div>";' +
+    '      }).join("");' +
+    '    }else{document.getElementById("adv-variants").innerHTML="<div class=\\"empty\\">No variants yet</div>";}' +
+    '    document.getElementById("ts").textContent="Updated "+new Date().toLocaleTimeString("en-GB");' +
+    '  }).catch(function(e){document.getElementById("ts").textContent="Error: "+e.message;});' +
+    '}' +
+    'load();setInterval(load,10000);' +
+    '</script></body></html>';
+}
+
+// Session 10 Batch 3: scoped publisher portal.
+// A self-contained, dedicated page for ONE publisher — fetches
+// /dashboard?view=publisher&pubId=X, no picker, no cross-publisher data.
+function scopedPublisherPortalHtml(pub) {
+  return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>' + escapeHtml(pub.name) + ' — AI Ad Platform</title><style>' +
+    '*{box-sizing:border-box;margin:0;padding:0}' +
+    'body{font-family:system-ui,-apple-system,sans-serif;background:#f9f9f9;color:#111;font-size:14px}' +
+    'header{background:#fff;border-bottom:1px solid #e5e5e5;padding:14px 24px;display:flex;align-items:center;justify-content:space-between}' +
+    'header h1{font-size:14px;font-weight:600}header .sub{font-size:11px;color:#999}' +
+    'header a{font-size:11px;color:#888;text-decoration:none}' +
+    '#ts{font-size:11px;color:#aaa}' +
+    'main{padding:24px;max-width:1100px;margin:0 auto}' +
+    '.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:24px}' +
+    '.card{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:16px}' +
+    '.card .v{font-size:22px;font-weight:600}.card .l{font-size:11px;color:#888;margin-top:2px}.card .s{font-size:11px;color:#aaa;margin-top:4px}' +
+    '.card.green .v{color:#16a34a}.card.blue .v{color:#2563eb}' +
+    'section{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:20px;margin-bottom:20px}' +
+    'section h2{font-size:14px;font-weight:600;margin-bottom:12px}' +
+    'table{width:100%;border-collapse:collapse;font-size:13px}' +
+    'th{text-align:left;font-size:11px;color:#888;font-weight:500;padding:6px 8px;border-bottom:1px solid #eee}' +
+    'td{padding:8px;border-bottom:1px solid #f3f3f3;vertical-align:top}' +
+    '.empty{color:#aaa;font-size:12px;padding:16px;text-align:center}' +
+    '</style></head><body>' +
+    '<header><div><h1>' + escapeHtml(pub.name) + '</h1><div class="sub">Publisher portal</div></div>' +
+    '<div><span id="ts"></span> &nbsp; <a href="/ui">switch view</a></div></header>' +
+    '<main>' +
+    '<div class="grid" id="pub-cards"><div class="empty">Loading...</div></div>' +
+    '<section><h2>Ad serving — by page</h2>' +
+    '<table><thead><tr><th>Page</th><th>Serving</th><th>Platform</th><th>Last crawl</th></tr></thead>' +
+    '<tbody id="pub-pages"><tr><td colspan="4" class="empty">Loading...</td></tr></tbody></table></section>' +
+    '</main>' +
+    '<script>' +
+    'var PUB_ID="' + escapeHtml(pub.pubId) + '";' +
+    'function fmt(n){return (n||0).toLocaleString("en-GB");}' +
+    'function money(n){return "\\u00a3"+(n||0).toFixed(2);}' +
+    'function ago(t){if(!t)return "\\u2014";var s=Math.floor((Date.now()-new Date(t).getTime())/1000);if(s<60)return s+"s ago";if(s<3600)return Math.floor(s/60)+"m ago";return Math.floor(s/3600)+"h ago";}' +
+    'function card(label,val,sub,cls){return "<div class=\\"card "+(cls||"")+"\\"><div class=\\"v\\">"+val+"</div><div class=\\"l\\">"+label+"</div>"+(sub?"<div class=\\"s\\">"+sub+"</div>":"")+"</div>";}' +
+    'function load(){' +
+    '  fetch("/dashboard?view=publisher&pubId="+encodeURIComponent(PUB_ID)).then(function(r){return r.json();}).then(function(d){' +
+    '    var e=d.earnings||{},t=d.traffic||{},pages=d.pages||[];' +
+    '    document.getElementById("pub-cards").innerHTML=' +
+    '      card("Your earnings",money(e.estimatedGBP),"today: "+money(e.estimatedTodayGBP)+" \\u00b7 80% share","green")+' +
+    '      card("Gross ad spend",money(e.grossGBP),"advertiser paid","green")+' +
+    '      card("vCPM",money(e.vcpmGBP),"per 1,000 impressions","blue")+' +
+    '      card("Impressions",fmt(t.totalImpressions),fmt(t.today)+" today","")+' +
+    '      card("Fill rate",(t.fillRatePct==null?"\\u2014":t.fillRatePct+"%"),"served / bot visits","");' +
+    '    if(pages.length){' +
+    '      document.getElementById("pub-pages").innerHTML=pages.map(function(p){' +
+    '        var url=(p.url||"/").replace(/^https?:\\/\\/[^/]+/,"");' +
+    '        var status=p.serving?("<b style=\\"color:#16a34a\\">"+p.advertiser+"</b> \\u00a3"+(p.cpmGBP||0)+" CPM"+(p.variantAngle?"<div style=\\"font-size:10px;color:#16a34a;margin-top:2px\\">"+p.variantAngle+"</div>":"")):"<span style=\\"color:#ef4444\\">no campaign</span>";' +
+    '        return "<tr><td style=\\"font-family:monospace;font-size:12px\\">"+url+"</td><td>"+status+"</td><td>"+(p.lastPlatform||"\\u2014")+"</td><td>"+ago(p.lastCrawl)+"</td></tr>";' +
+    '      }).join("");' +
+    '    }else{document.getElementById("pub-pages").innerHTML="<tr><td colspan=\\"4\\" class=\\"empty\\">No pages yet</td></tr>";}' +
+    '    document.getElementById("ts").textContent="Updated "+new Date().toLocaleTimeString("en-GB");' +
+    '  }).catch(function(e){document.getElementById("ts").textContent="Error: "+e.message;});' +
+    '}' +
+    'load();setInterval(load,10000);' +
+    '</script></body></html>';
+}
+
 function notFoundHtml(kind, slug) {
   return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
@@ -120,8 +258,7 @@ module.exports = function handler(req, res) {
     var advSlug = slug || decodeURIComponent(url.slice('/ui/advertiser/'.length));
     var adv = (config.advertisers || []).find(a => a.slug === advSlug);
     if (!adv) return res.status(404).send(notFoundHtml('advertiser', advSlug));
-    // Batch 3: scoped advertiser portal — placeholder for now
-    return res.status(200).send(html);
+    return res.status(200).send(scopedAdvertiserPortalHtml(adv));
   }
 
   // /ui/publisher or /ui/publisher/{slug}
@@ -132,8 +269,7 @@ module.exports = function handler(req, res) {
     var pubSlug = slug || decodeURIComponent(url.slice('/ui/publisher/'.length));
     var pub = (config.publishers || []).find(p => p.slug === pubSlug);
     if (!pub) return res.status(404).send(notFoundHtml('publisher', pubSlug));
-    // Batch 3: scoped publisher portal — placeholder for now
-    return res.status(200).send(html);
+    return res.status(200).send(scopedPublisherPortalHtml(pub));
   }
 
   // Fallback — unrecognised /ui path, show chooser
