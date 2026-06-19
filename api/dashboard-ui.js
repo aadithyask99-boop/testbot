@@ -1,6 +1,143 @@
+const config = require('../lib/config');
+
+// ============================================================
+// PORTAL ROUTING (Session 10)
+// /ui                       → chooser page (3 links)
+// /ui/admin                 → full dashboard (today's view, unchanged)
+// /ui/advertiser            → directory list of advertisers
+// /ui/advertiser/{slug}     → scoped advertiser portal (Batch 3)
+// /ui/publisher             → directory list of publishers
+// /ui/publisher/{slug}      → scoped publisher portal (Batch 3)
+// ============================================================
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function chooserHtml() {
+  return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>AI Ad Platform</title><style>' +
+    '*{box-sizing:border-box;margin:0;padding:0}' +
+    'body{font-family:system-ui,-apple-system,sans-serif;background:#f9f9f9;color:#111;' +
+    'min-height:100vh;display:flex;align-items:center;justify-content:center}' +
+    '.wrap{max-width:480px;width:100%;padding:24px}' +
+    'h1{font-size:20px;font-weight:600;margin-bottom:8px;text-align:center}' +
+    'p.sub{font-size:13px;color:#888;text-align:center;margin-bottom:32px}' +
+    '.opt{display:block;background:#fff;border:1px solid #e5e5e5;border-radius:10px;' +
+    'padding:20px 24px;margin-bottom:12px;text-decoration:none;color:#111;transition:border-color .15s}' +
+    '.opt:hover{border-color:#999}' +
+    '.opt .t{font-size:15px;font-weight:600;margin-bottom:4px}' +
+    '.opt .d{font-size:12px;color:#888}' +
+    '</style></head><body><div class="wrap">' +
+    '<h1>AI Ad Platform</h1>' +
+    '<p class="sub">Choose your view</p>' +
+    '<a class="opt" href="/ui/advertiser"><div class="t">Advertiser</div>' +
+    '<div class="d">View your campaign performance, spend, and ad variants</div></a>' +
+    '<a class="opt" href="/ui/publisher"><div class="t">Publisher</div>' +
+    '<div class="d">View your earnings, pages, and what\'s serving</div></a>' +
+    '<a class="opt" href="/ui/admin"><div class="t">Admin</div>' +
+    '<div class="d">Full platform view — all advertisers and publishers</div></a>' +
+    '</div></body></html>';
+}
+
+function listPageHtml(kind) {
+  var items, title, base;
+  if (kind === 'advertiser') {
+    items = (config.advertisers || []).filter(a => a.status === 'active');
+    title = 'Advertisers';
+    base = '/ui/advertiser/';
+  } else {
+    items = (config.publishers || []).filter(p => p.active);
+    title = 'Publishers';
+    base = '/ui/publisher/';
+  }
+  var rows = items.map(function (it) {
+    var slug = it.slug || '';
+    var name = it.name || '';
+    return '<a class="opt" href="' + base + encodeURIComponent(slug) + '">' +
+      '<div class="t">' + escapeHtml(name) + '</div></a>';
+  }).join('');
+  return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>' + title + ' — AI Ad Platform</title><style>' +
+    '*{box-sizing:border-box;margin:0;padding:0}' +
+    'body{font-family:system-ui,-apple-system,sans-serif;background:#f9f9f9;color:#111;' +
+    'min-height:100vh;padding:24px}' +
+    '.wrap{max-width:480px;margin:40px auto}' +
+    'h1{font-size:18px;font-weight:600;margin-bottom:4px}' +
+    'p.sub{font-size:12px;color:#888;margin-bottom:24px}' +
+    'p.sub a{color:#888}' +
+    '.opt{display:block;background:#fff;border:1px solid #e5e5e5;border-radius:10px;' +
+    'padding:16px 20px;margin-bottom:10px;text-decoration:none;color:#111;transition:border-color .15s}' +
+    '.opt:hover{border-color:#999}' +
+    '.opt .t{font-size:14px;font-weight:600}' +
+    '.empty{font-size:13px;color:#888;padding:20px 0}' +
+    '</style></head><body><div class="wrap">' +
+    '<h1>' + title + '</h1>' +
+    '<p class="sub"><a href="/ui">&larr; back</a></p>' +
+    (rows || '<div class="empty">None found</div>') +
+    '</div></body></html>';
+}
+
+function notFoundHtml(kind, slug) {
+  return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>Not found</title><style>' +
+    '*{box-sizing:border-box;margin:0;padding:0}' +
+    'body{font-family:system-ui,-apple-system,sans-serif;background:#f9f9f9;color:#111;' +
+    'min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center}' +
+    'h1{font-size:18px;margin-bottom:8px}p{font-size:13px;color:#888;margin-bottom:16px}' +
+    'a{color:#111;font-size:13px}' +
+    '</style></head><body><div>' +
+    '<h1>No ' + escapeHtml(kind) + ' found for &ldquo;' + escapeHtml(slug) + '&rdquo;</h1>' +
+    '<p>Check the URL or browse the directory.</p>' +
+    '<a href="/ui/' + escapeHtml(kind) + '">&larr; back to ' + escapeHtml(kind) + ' list</a>' +
+    '</div></body></html>';
+}
+
 module.exports = function handler(req, res) {
   res.setHeader('Content-Type', 'text/html');
-  res.status(200).send(html);
+
+  var url = (req.url || '/ui').split('?')[0];
+  var slug = (req.query && req.query.slug) || null;
+
+  // /ui — chooser
+  if (url === '/ui' || url === '/ui/') {
+    return res.status(200).send(chooserHtml());
+  }
+
+  // /ui/admin — full dashboard (unchanged)
+  if (url === '/ui/admin') {
+    return res.status(200).send(html);
+  }
+
+  // /ui/advertiser or /ui/advertiser/{slug}
+  if (url === '/ui/advertiser') {
+    return res.status(200).send(listPageHtml('advertiser'));
+  }
+  if (url.indexOf('/ui/advertiser/') === 0) {
+    var advSlug = slug || decodeURIComponent(url.slice('/ui/advertiser/'.length));
+    var adv = (config.advertisers || []).find(a => a.slug === advSlug);
+    if (!adv) return res.status(404).send(notFoundHtml('advertiser', advSlug));
+    // Batch 3: scoped advertiser portal — placeholder for now
+    return res.status(200).send(html);
+  }
+
+  // /ui/publisher or /ui/publisher/{slug}
+  if (url === '/ui/publisher') {
+    return res.status(200).send(listPageHtml('publisher'));
+  }
+  if (url.indexOf('/ui/publisher/') === 0) {
+    var pubSlug = slug || decodeURIComponent(url.slice('/ui/publisher/'.length));
+    var pub = (config.publishers || []).find(p => p.slug === pubSlug);
+    if (!pub) return res.status(404).send(notFoundHtml('publisher', pubSlug));
+    // Batch 3: scoped publisher portal — placeholder for now
+    return res.status(200).send(html);
+  }
+
+  // Fallback — unrecognised /ui path, show chooser
+  return res.status(200).send(chooserHtml());
 };
 
 var html = '<!DOCTYPE html>' +
