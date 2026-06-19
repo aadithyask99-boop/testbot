@@ -21,6 +21,7 @@
     { "src": "/admin/reset-stats",    "dest": "/api/admin.js" },
     { "src": "/admin/reindex",        "dest": "/api/admin.js" },
     { "src": "/admin/seed",           "dest": "/api/admin.js" },
+    { "src": "/admin/crawl",          "dest": "/api/admin.js" },
     { "src": "/admin/campaign/delete", "dest": "/api/admin.js" },
     { "src": "/admin/campaign/pause", "dest": "/api/admin.js" },
     { "src": "/admin/campaign",       "dest": "/api/admin.js" },
