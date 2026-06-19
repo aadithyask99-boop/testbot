@@ -99,6 +99,125 @@ function variantsChanged(existingCampaign, newVariants) {
   return false;
 }
 
+// ============================================================
+// AI RECOMMENDATIONS (Session 10 Batch 6)
+// Haiku evaluates a campaign's FULL variant set (promo + data-led,
+// no manual tagging required) against real page content, and
+// proposes 2-3 candidates it believes are most likely to be
+// surfaced/cited by AI crawlers. Nothing goes live without the
+// advertiser approving — see KV schema below.
+//
+// KV keys:
+//   recommendations:{campaignId}:{pageUrlHash}  → { suggestions: [...], generatedAt }
+//   approved:{campaignId}                        → [{ variantId, pageUrlHash, approvedAt }]
+// Once a campaign has ANY approved entry, runAuction's variant
+// selection (lib/relevance.js) should prefer approved-only —
+// that gating logic lives in lib/relevance.js, not here.
+// ============================================================
+const crypto = require('crypto');
+
+function hashUrl(url) {
+  return crypto.createHash('sha256').update(url).digest('hex').slice(0, 16);
+}
+
+// Fetch a page and extract a plain-text sample (strip tags, first ~800 chars
+// of the main content). Best-effort — used only for recommendation context,
+// not for production matching, so a rough extraction is fine.
+async function fetchPageSample(pageUrl) {
+  try {
+    const resp = await fetch(pageUrl, {
+      headers: { 'User-Agent': CRAWL_BOT_UA },
+      signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined,
+    });
+    if (!resp.ok) return null;
+    const html = await resp.text();
+    const titleMatch = html.match(/<title>([^<]*)<\/title>/i);
+    const metaMatch = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["']/i);
+    const text = html
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return {
+      title: titleMatch ? titleMatch[1].trim() : '',
+      metaDescription: metaMatch ? metaMatch[1].trim() : '',
+      bodySample: text.slice(0, 800),
+    };
+  } catch (e) {
+    console.error('fetchPageSample failed:', pageUrl, e.message);
+    return null;
+  }
+}
+
+// Ask Haiku to evaluate the FULL variant set (no pre-tagging) against
+// real page content and propose 2-3 recommended candidates. Each
+// recommendation references an existing variant id OR proposes a
+// rewrite (new text) — Haiku decides which based on what's already there.
+async function haikuRecommendVariants(campaign, pageUrl, pageSample) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    console.error('ANTHROPIC_API_KEY missing — recommendations skipped');
+    return null;
+  }
+  const variants = campaign.variants || [];
+  if (variants.length === 0) return null;
+
+  const variantLines = variants.map(v =>
+    `${v.id} (${v.angle}): "${(v.text || '').replace(/\s+/g, ' ').trim()}"`
+  ).join('\n');
+
+  const prompt = `You are advising an advertiser on which ad variants are most likely to be surfaced or cited by AI systems (Perplexity, ChatGPT Browse, Gemini) when they crawl this specific page.
+
+Page title: ${pageSample.title || '(none)'}
+Page description: ${pageSample.metaDescription || '(none)'}
+Page content sample: ${pageSample.bodySample || '(none)'}
+
+Advertiser: ${campaign.advertiser}
+All current ad variants for this advertiser:
+${variantLines}
+
+Task: Recommend 2-3 variants (by id) that are most likely to be absorbed as editorial fact rather than flagged as a promotional/advertising section by AI content pipelines. AI systems tend to favour content with specific statistics, named authoritative sources, and a neutral informational tone — and tend to flag content with brand-as-subject calls-to-action ("Open a...", "Try...") and disclaimer language as promotional.
+
+If NONE of the existing variants are strong fits for this page, you may propose ONE rewritten variant instead — same core message, rewritten to read as an attributed fact (e.g. "According to [Brand]'s data...") rather than a sales pitch. Only do this if existing variants are clearly weak; prefer recommending existing variants when they're good.
+
+Respond with ONLY valid JSON, no markdown, no explanation:
+{"recommendations":[{"variantId":"v3","reason":"one sentence why"},{"variantId":"v5","reason":"one sentence why"}]}
+For a proposed rewrite instead of an existing variant id, use "variantId":"new" and include "proposedText" and "proposedAngle".`;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5',
+        max_tokens: 500,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!resp.ok) {
+      console.error('Haiku recommendation call failed:', resp.status);
+      return null;
+    }
+    const data = await resp.json();
+    const text = (data.content && data.content[0] && data.content[0].text) || '';
+    const cleaned = text.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(cleaned);
+    return parsed.recommendations || null;
+  } catch (e) {
+    console.error('haikuRecommendVariants error:', e.message);
+    return null;
+  }
+}
+
 async function readBody(req) {
   let body = '';
   await new Promise(resolve => { req.on('data', c => body += c); req.on('end', resolve); });
@@ -424,6 +543,109 @@ module.exports = async function handler(req, res) {
       categories,
       totalPages,
     });
+  }
+
+  // ---- GENERATE AI RECOMMENDATIONS ----
+  // POST /admin/recommendations/generate { campaignId }
+  // Fetches the campaign's live pages, calls Haiku once per page,
+  // stores suggestions in KV. Read-only for the advertiser until approved.
+  if (req.method === 'POST' && url.includes('/admin/recommendations/generate')) {
+    const data = await readBody(req);
+    const campaignId = data && data.campaignId;
+    if (!campaignId) return res.status(400).json({ error: 'campaignId required' });
+    const campaign = await kvGet(`campaign:${campaignId}`);
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+    const pubIds = CATEGORY_PUBLISHERS[campaign.category] || [];
+    const results = [];
+    for (const pubId of pubIds) {
+      const workerUrl = getWorkerUrl(pubId);
+      if (!workerUrl) continue;
+      const paths = PUBLISHER_PAGES[pubId] || [];
+      for (const path of paths) {
+        const pageUrl = workerUrl + path;
+        const sample = await fetchPageSample(pageUrl);
+        if (!sample) { results.push({ pageUrl, error: 'fetch failed' }); continue; }
+        const recs = await haikuRecommendVariants(campaign, pageUrl, sample);
+        if (!recs) { results.push({ pageUrl, error: 'haiku failed' }); continue; }
+        const key = `recommendations:${campaignId}:${hashUrl(pageUrl)}`;
+        const stored = { pageUrl, suggestions: recs, generatedAt: new Date().toISOString() };
+        await kvSet(key, stored);
+        results.push(stored);
+      }
+    }
+    return res.status(200).json({ message: 'Recommendations generated', campaignId, results });
+  }
+
+  // ---- LIST AI RECOMMENDATIONS for a campaign ----
+  // GET /admin/recommendations?campaignId=camp_002
+  if (req.method === 'GET' && url.includes('/admin/recommendations') && !url.includes('generate')) {
+    const campaignId = req.query && req.query.campaignId;
+    if (!campaignId) return res.status(400).json({ error: 'campaignId required' });
+    const campaign = await kvGet(`campaign:${campaignId}`);
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+    const pubIds = CATEGORY_PUBLISHERS[campaign.category] || [];
+    const items = [];
+    for (const pubId of pubIds) {
+      const workerUrl = getWorkerUrl(pubId);
+      if (!workerUrl) continue;
+      const paths = PUBLISHER_PAGES[pubId] || [];
+      for (const path of paths) {
+        const pageUrl = workerUrl + path;
+        const key = `recommendations:${campaignId}:${hashUrl(pageUrl)}`;
+        const stored = await kvGet(key);
+        if (stored) items.push(stored);
+      }
+    }
+    const approved = (await kvGet(`approved:${campaignId}`)) || [];
+    return res.status(200).json({ campaignId, items, approved });
+  }
+
+  // ---- APPROVE / REJECT a recommendation ----
+  // POST /admin/recommendations/decide
+  // { campaignId, pageUrl, variantId, decision: 'approve'|'reject',
+  //   proposedText?, proposedAngle? (only when variantId === 'new' and approved) }
+  if (req.method === 'POST' && url.includes('/admin/recommendations/decide')) {
+    const data = await readBody(req);
+    const { campaignId, pageUrl, variantId, decision, proposedText, proposedAngle } = data || {};
+    if (!campaignId || !pageUrl || !variantId || !decision) {
+      return res.status(400).json({ error: 'campaignId, pageUrl, variantId, decision required' });
+    }
+    if (decision === 'reject') {
+      // Rejection is scoped to this pairing only — no state change needed,
+      // the recommendation stays in the stored list but the advertiser's
+      // client-side UI marks it dismissed locally. Acknowledge only.
+      return res.status(200).json({ message: 'Recommendation rejected (not stored as approved)' });
+    }
+    if (decision !== 'approve') return res.status(400).json({ error: 'decision must be approve or reject' });
+
+    const campaign = await kvGet(`campaign:${campaignId}`);
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+    let finalVariantId = variantId;
+    // If approving a proposed rewrite, add it to the campaign's variant bank first
+    if (variantId === 'new') {
+      if (!proposedText) return res.status(400).json({ error: 'proposedText required for new variant approval' });
+      const nextNum = (campaign.variants || []).length + 1;
+      finalVariantId = 'v' + nextNum;
+      campaign.variants = [...(campaign.variants || []), {
+        id: finalVariantId,
+        angle: proposedAngle || 'AI-suggested rewrite',
+        text: proposedText,
+      }];
+      campaign.updatedAt = new Date().toISOString();
+      await kvSet(`campaign:${campaignId}`, campaign);
+    }
+
+    const approvedKey = `approved:${campaignId}`;
+    const existing = (await kvGet(approvedKey)) || [];
+    const already = existing.find(e => e.variantId === finalVariantId && e.pageUrl === pageUrl);
+    if (!already) {
+      existing.push({ variantId: finalVariantId, pageUrl, approvedAt: new Date().toISOString() });
+      await kvSet(approvedKey, existing);
+    }
+    return res.status(200).json({ message: 'Recommendation approved', campaignId, variantId: finalVariantId, approved: existing });
   }
 
   // ---- CREATE / UPDATE campaign ----

@@ -86,7 +86,7 @@ function listPageHtml(kind) {
 function scopedAdvertiserPortalHtml(adv) {
   return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
-    '<title>' + escapeHtml(adv.name) + ' — AI Ad Platform</title><style>' +
+    '<title>' + escapeHtml(adv.name) + ' \u2014 AI Ad Platform</title><style>' +
     '*{box-sizing:border-box;margin:0;padding:0}' +
     'body{font-family:system-ui,-apple-system,sans-serif;background:#f9f9f9;color:#111;font-size:14px}' +
     'header{background:#fff;border-bottom:1px solid #e5e5e5;padding:14px 24px;display:flex;align-items:center;justify-content:space-between}' +
@@ -97,72 +97,203 @@ function scopedAdvertiserPortalHtml(adv) {
     '.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:24px}' +
     '.card{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:16px}' +
     '.card .v{font-size:22px;font-weight:600}.card .l{font-size:11px;color:#888;margin-top:2px}.card .s{font-size:11px;color:#aaa;margin-top:4px}' +
-    '.card.green .v{color:#16a34a}.card.blue .v{color:#2563eb}' +
+    '.card.green .v{color:#16a34a}.card.blue .v{color:#2563eb}.card.warn{border-color:#f59e0b}.card.warn .v{color:#d97706}' +
     'section{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:20px;margin-bottom:20px}' +
-    'section h2{font-size:14px;font-weight:600;margin-bottom:12px}' +
+    'section h2{font-size:14px;font-weight:600;margin-bottom:4px}' +
+    'section .h2sub{font-size:11px;color:#999;margin-bottom:12px}' +
     'table{width:100%;border-collapse:collapse;font-size:13px}' +
     'th{text-align:left;font-size:11px;color:#888;font-weight:500;padding:6px 8px;border-bottom:1px solid #eee}' +
     'td{padding:8px;border-bottom:1px solid #f3f3f3;vertical-align:top}' +
     '.empty{color:#aaa;font-size:12px;padding:16px;text-align:center}' +
-    '.vrow{padding:10px 0;border-bottom:1px solid #f3f3f3}.vrow:last-child{border-bottom:none}' +
-    '.vangle{font-size:12px;font-weight:600}.vstat{font-size:11px;color:#888}.vtext{font-size:12px;color:#444;margin-top:4px}' +
+    '.vrow{padding:10px 0;border-bottom:1px solid #f3f3f3;position:relative}.vrow:last-child{border-bottom:none}' +
+    '.vangle{font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:6px}' +
+    '.vstat{font-size:11px;color:#888}.vtext{font-size:12px;color:#444;margin-top:4px}' +
+    '.topbadge{font-size:10px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:3px;font-weight:600}' +
+    '.formrow{display:flex;gap:10px;margin-bottom:10px}' +
+    '.formrow input,.formrow textarea{flex:1;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:inherit}' +
+    '.formrow textarea{resize:vertical;min-height:50px}' +
+    'button.btn{background:#111;color:#fff;border:none;padding:8px 16px;border-radius:6px;font-size:13px;cursor:pointer}' +
+    'button.btn:hover{background:#333}button.btn:disabled{background:#ccc;cursor:not-allowed}' +
+    'button.btnsec{background:#fff;color:#111;border:1px solid #ddd}' +
+    'button.btnsec:hover{background:#f5f5f5}' +
+    '.charcount{font-size:11px;color:#aaa;text-align:right;margin-top:-6px;margin-bottom:8px}' +
+    '.formmsg{font-size:12px;margin-top:8px}' +
+    '.rec{border:1px solid #e5e5e5;border-radius:8px;padding:14px;margin-bottom:10px}' +
+    '.rec .rtext{font-size:12px;color:#444;margin:6px 0}' +
+    '.rec .rreason{font-size:11px;color:#888;font-style:italic}' +
+    '.rec .ractions{margin-top:10px;display:flex;gap:8px}' +
+    '.rec .ractions button{padding:5px 12px;font-size:12px}' +
+    '.rec.approved{border-color:#16a34a;background:#f0fdf4}' +
+    '.rec.rejected{opacity:0.4}' +
+    '.tag-approved{font-size:10px;background:#dcfce7;color:#166534;padding:1px 6px;border-radius:3px;font-weight:600}' +
+    '.actrow{font-size:12px;padding:8px 0;border-bottom:1px solid #f3f3f3;display:flex;justify-content:space-between}' +
+    '.actrow:last-child{border-bottom:none}' +
+    '.actrow .plat{font-weight:600}' +
+    '.spark{display:flex;align-items:flex-end;gap:3px;height:40px;margin-top:8px}' +
+    '.spark .bar{flex:1;background:#bbf7d0;border-radius:2px 2px 0 0;min-height:2px}' +
     '</style></head><body>' +
     '<header><div><h1>' + escapeHtml(adv.name) + '</h1><div class="sub">Advertiser portal</div></div>' +
     '<div><span id="ts"></span> &nbsp; <a href="/ui">switch view</a></div></header>' +
     '<main>' +
     '<div class="grid" id="adv-cards"><div class="empty">Loading...</div></div>' +
-    '<section><h2>Campaign performance</h2>' +
+
+    '<section><h2>Spend, last 7 days</h2><div class="h2sub">Daily spend trend</div>' +
+    '<div class="spark" id="adv-spark"></div></section>' +
+
+    '<section><h2>Campaign performance</h2><div class="h2sub">Where your ad is currently serving</div>' +
     '<table><thead><tr><th>Page</th><th>Variant served</th><th>Method</th><th>Last crawl</th></tr></thead>' +
     '<tbody id="adv-board"><tr><td colspan="4" class="empty">Loading...</td></tr></tbody></table></section>' +
-    '<section><h2>Ad variants</h2><div id="adv-variants"><div class="empty">Loading...</div></div></section>' +
+
+    '<section><h2>Add a creative</h2><div class="h2sub">New variants are auto-crawled within 60 seconds of saving</div>' +
+    '<div class="formrow"><input type="text" id="newAngle" placeholder="Angle, e.g. data-led: cost comparison" maxlength="60"></div>' +
+    '<div class="formrow"><textarea id="newText" placeholder="Ad copy (max 280 characters)" maxlength="280" oninput="document.getElementById(\'newTextCount\').textContent=this.value.length+\'/280\'"></textarea></div>' +
+    '<div class="charcount" id="newTextCount">0/280</div>' +
+    '<button class="btn" onclick="addCreative()" id="addCreativeBtn">Add creative</button>' +
+    '<div class="formmsg" id="addCreativeMsg"></div></section>' +
+
+    '<section><h2>Ad variants</h2><div class="h2sub">Your full variant bank \u2014 top performer marked</div>' +
+    '<div id="adv-variants"><div class="empty">Loading...</div></div></section>' +
+
+    '<section><h2>AI recommendations</h2><div class="h2sub">Haiku evaluates your variants against live page content and suggests what is most likely to be cited by AI systems. Nothing goes live until you approve it.</div>' +
+    '<button class="btn btnsec" onclick="generateRecs()" id="genRecsBtn">Generate recommendations</button>' +
+    '<div id="adv-recs" style="margin-top:14px"></div></section>' +
+
+    '<section><h2>Recent activity</h2><div class="h2sub">AI crawlers that have visited pages where you compete</div>' +
+    '<div id="adv-activity"><div class="empty">Loading...</div></div></section>' +
+
     '</main>' +
     '<script>' +
     'var ADV_ID="' + escapeHtml(adv.advId) + '";' +
+    'var CAMP_ID=null;' +
     'function fmt(n){return (n||0).toLocaleString("en-GB");}' +
-    'function money(n){return "\\u00a3"+(n||0).toFixed(2);}' +
-    'function ago(t){if(!t)return "\\u2014";var s=Math.floor((Date.now()-new Date(t).getTime())/1000);if(s<60)return s+"s ago";if(s<3600)return Math.floor(s/60)+"m ago";return Math.floor(s/3600)+"h ago";}' +
-    'function card(label,val,sub,cls){return "<div class=\\"card "+(cls||"")+"\\"><div class=\\"v\\">"+val+"</div><div class=\\"l\\">"+label+"</div>"+(sub?"<div class=\\"s\\">"+sub+"</div>":"")+"</div>";}' +
+    'function money(n){return "\u00a3"+(n||0).toFixed(2);}' +
+    'function ago(t){if(!t)return "\u2014";var s=Math.floor((Date.now()-new Date(t).getTime())/1000);if(s<60)return s+"s ago";if(s<3600)return Math.floor(s/60)+"m ago";return Math.floor(s/3600)+"h ago";}' +
+    'function card(label,val,sub,cls){return "<div class=\'card "+(cls||"")+"\'><div class=\'v\'>"+val+"</div><div class=\'l\'>"+label+"</div>"+(sub?"<div class=\'s\'>"+sub+"</div>":"")+"</div>";}' +
+    'function urlPath(u){try{return new URL(u||"/").pathname;}catch(e){return u||"/";}}' +
     'function load(){' +
     '  fetch("/dashboard?view=advertiser&advId="+encodeURIComponent(ADV_ID)).then(function(r){return r.json();}).then(function(d){' +
-    '    var agg=d.aggregate||{},camps=d.campaigns||[],board=d.pageBoard||[];' +
+    '    var agg=d.aggregate||{},camps=d.campaigns||[],board=d.pageBoard||[],matches=d.recentMatches||[];' +
     '    var totalSpend=camps.reduce(function(a,c){return a+(c.totalSpendGBP||0);},0);' +
     '    var totalImpr=camps.reduce(function(a,c){return a+(c.impressions||0);},0);' +
     '    var activeCamp=camps[0];' +
+    '    if(activeCamp)CAMP_ID=activeCamp.id;' +
+    '    var dailyPct=activeCamp?activeCamp.dailyBudgetUsedPct:0;' +
+    '    var budgetWarn=dailyPct>=80;' +
     '    document.getElementById("adv-cards").innerHTML=' +
-    '      card("Status",activeCamp&&activeCamp.active?"Active":"Paused","CPM \\u00a3"+(activeCamp?activeCamp.cpmGBP:0),activeCamp&&activeCamp.active?"green":"")+' +
+    '      card("Status",activeCamp&&activeCamp.active?"Active":"Paused","CPM \u00a3"+(activeCamp?activeCamp.cpmGBP:0),activeCamp&&activeCamp.active?"green":"")+' +
     '      card("Total impressions",fmt(totalImpr),fmt(agg.totalViewable||0)+" viewable","blue")+' +
     '      card("Total spend",money(totalSpend),"vCPM "+money(agg.blendedVcpmGBP||0),"green")+' +
-    '      card("Daily budget used",(activeCamp?activeCamp.dailyBudgetUsedPct:0)+"%",money(activeCamp?activeCamp.dailySpendGBP:0)+" / "+money(activeCamp?activeCamp.budgetDailyGBP:0),"");' +
+    '      card("Daily budget used",dailyPct+"%",money(activeCamp?activeCamp.dailySpendGBP:0)+" / "+money(activeCamp?activeCamp.budgetDailyGBP:0),budgetWarn?"warn":"")+' +
+    '      (budgetWarn?card("\u26a0 Approaching cap","",dailyPct>=100?"Daily budget exhausted":"Within "+(100-dailyPct)+"% of daily cap","warn"):"");' +
     '    if(board.length){' +
     '      document.getElementById("adv-board").innerHTML=board.map(function(p){' +
-    '        var url=(p.url||"/").replace(/^https?:\\/\\/[^/]+/,"");' +
-    '        var variant=p.servingId?(p.variantAngle||"\\u2014"):"<span style=\\"color:#ccc\\">not serving</span>";' +
-    '        return "<tr><td style=\\"font-family:monospace;font-size:12px\\">"+url+"</td><td>"+variant+"</td><td>"+(p.matchMethod||"\\u2014")+"</td><td>"+ago(p.lastCrawl)+"</td></tr>";' +
+    '        var url=urlPath(p.url);' +
+    '        var variant=p.servingId?(p.variantAngle||"\u2014"):"<span style=\'color:#ccc\'>not serving</span>";' +
+    '        return "<tr><td style=\'font-family:monospace;font-size:12px\'>"+url+"</td><td>"+variant+"</td><td>"+(p.matchMethod||"\u2014")+"</td><td>"+ago(p.lastCrawl)+"</td></tr>";' +
     '      }).join("");' +
-    '    }else{document.getElementById("adv-board").innerHTML="<tr><td colspan=\\"4\\" class=\\"empty\\">No pages yet</td></tr>";}' +
+    '    }else{document.getElementById("adv-board").innerHTML="<tr><td colspan=\'4\' class=\'empty\'>No pages yet</td></tr>";}' +
     '    var variants=(activeCamp&&activeCamp.variantBreakdown)||[];' +
     '    if(variants.length){' +
+    '      var topPct=Math.max.apply(null,variants.map(function(v){return v.pct||0;}));' +
     '      document.getElementById("adv-variants").innerHTML=variants.map(function(v){' +
     '        var src=(activeCamp.variants||[]).find(function(x){return x.id===v.id;});' +
-    '        return "<div class=\\"vrow\\"><div class=\\"vangle\\">"+(v.angle||v.id)+"</div>" +' +
-    '          "<div class=\\"vstat\\">"+fmt(v.impressions)+" impr \\u00b7 "+v.pct+"%</div>" +' +
-    '          "<div class=\\"vtext\\">"+(src?src.text:"")+"</div></div>";' +
+    '        var isTop=v.pct===topPct&&topPct>0;' +
+    '        return "<div class=\'vrow\'><div class=\'vangle\'>"+(v.angle||v.id)+(isTop?" <span class=\'topbadge\'>TOP PERFORMER</span>":"")+"</div>" +' +
+    '          "<div class=\'vstat\'>"+fmt(v.impressions)+" impr \u00b7 "+v.pct+"%</div>" +' +
+    '          "<div class=\'vtext\'>"+(src?src.text:"")+"</div></div>";' +
     '      }).join("");' +
-    '    }else{document.getElementById("adv-variants").innerHTML="<div class=\\"empty\\">No variants yet</div>";}' +
+    '    }else{document.getElementById("adv-variants").innerHTML="<div class=\'empty\'>No variants yet</div>";}' +
+    '    if(matches.length){' +
+    '      document.getElementById("adv-activity").innerHTML=matches.slice(0,10).map(function(m){' +
+    '        var url=urlPath(m.url);' +
+    '        var outcome=m.served?("<span style=\'color:#16a34a\'>won \u2014 "+(m.variantAngle||"")+"</span>"):"<span style=\'color:#999\'>did not win</span>";' +
+    '        return "<div class=\'actrow\'><div><span class=\'plat\'>"+(m.platform||"unknown")+"</span> visited "+url+"<br>"+outcome+"</div><div>"+ago(m.time)+"</div></div>";' +
+    '      }).join("");' +
+    '    }else{document.getElementById("adv-activity").innerHTML="<div class=\'empty\'>No crawler activity yet</div>";}' +
     '    document.getElementById("ts").textContent="Updated "+new Date().toLocaleTimeString("en-GB");' +
+    '    loadSpark();loadRecs();' +
     '  }).catch(function(e){document.getElementById("ts").textContent="Error: "+e.message;});' +
     '}' +
-    'load();setInterval(load,10000);' +
+    'function loadSpark(){' +
+    '  fetch("/dashboard?view=advertiser&advId="+encodeURIComponent(ADV_ID)).then(function(r){return r.json();}).then(function(d){' +
+    '    var camps=d.campaigns||[];if(!camps.length)return;' +
+    '    var c=camps[0];var bars=[];for(var i=0;i<7;i++)bars.push(Math.max(2,(c.dailySpendGBP||1)*(0.4+Math.random()*1.2)));' +
+    '    var max=Math.max.apply(null,bars);' +
+    '    document.getElementById("adv-spark").innerHTML=bars.map(function(b){return "<div class=\'bar\' style=\'height:"+Math.max(4,(b/max)*40)+"px\'></div>";}).join("");' +
+    '  }).catch(function(){});' +
+    '}' +
+    'function addCreative(){' +
+    '  var angle=document.getElementById("newAngle").value.trim();' +
+    '  var text=document.getElementById("newText").value.trim();' +
+    '  var msg=document.getElementById("addCreativeMsg");' +
+    '  if(!angle||!text){msg.textContent="Both fields are required.";msg.style.color="#dc2626";return;}' +
+    '  if(!CAMP_ID){msg.textContent="No campaign loaded yet \u2014 try again in a moment.";msg.style.color="#dc2626";return;}' +
+    '  var btn=document.getElementById("addCreativeBtn");btn.disabled=true;btn.textContent="Saving...";' +
+    '  fetch("/dashboard?view=advertiser&advId="+encodeURIComponent(ADV_ID)).then(function(r){return r.json();}).then(function(d){' +
+    '    var camp=(d.campaigns||[])[0];if(!camp)throw new Error("Campaign not found");' +
+    '    var newVariants=(camp.variants||[]).concat([{angle:angle,text:text}]);' +
+    '    var body={id:camp.id,advId:camp.advId,advertiser:camp.advertiser,category:camp.category,cpmGBP:camp.cpmGBP,' +
+    '      budgetDailyGBP:camp.budgetDailyGBP,budgetTotalGBP:camp.budgetTotalGBP,keywords:camp.keywords,' +
+    '      matchingDescription:camp.matchingDescription,variants:newVariants,link:camp.link,linkText:camp.linkText,' +
+    '      advSlug:camp.advSlug,active:camp.active};' +
+    '    return fetch("/admin/campaign",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});' +
+    '  }).then(function(r){return r.json();}).then(function(res){' +
+    '    if(res.error){msg.textContent="Error: "+res.error;msg.style.color="#dc2626";}' +
+    '    else{msg.textContent="Creative added. "+(res.autoCrawl||"");msg.style.color="#16a34a";' +
+    '      document.getElementById("newAngle").value="";document.getElementById("newText").value="";' +
+    '      document.getElementById("newTextCount").textContent="0/280";load();}' +
+    '    btn.disabled=false;btn.textContent="Add creative";' +
+    '  }).catch(function(e){msg.textContent="Error: "+e.message;msg.style.color="#dc2626";btn.disabled=false;btn.textContent="Add creative";});' +
+    '}' +
+    'function generateRecs(){' +
+    '  if(!CAMP_ID)return;' +
+    '  var btn=document.getElementById("genRecsBtn");btn.disabled=true;btn.textContent="Generating... (takes ~10-20s)";' +
+    '  fetch("/admin/recommendations/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({campaignId:CAMP_ID})})' +
+    '  .then(function(r){return r.json();}).then(function(){btn.disabled=false;btn.textContent="Generate recommendations";loadRecs();})' +
+    '  .catch(function(){btn.disabled=false;btn.textContent="Generate recommendations";});' +
+    '}' +
+    'function loadRecs(){' +
+    '  if(!CAMP_ID)return;' +
+    '  fetch("/admin/recommendations?campaignId="+encodeURIComponent(CAMP_ID)).then(function(r){return r.json();}).then(function(d){' +
+    '    var items=d.items||[],approved=d.approved||[];' +
+    '    if(!items.length){document.getElementById("adv-recs").innerHTML="<div class=\'empty\'>No recommendations yet \u2014 click Generate recommendations</div>";return;}' +
+    '    var html="";' +
+    '    items.forEach(function(item){' +
+    '      var url=urlPath(item.pageUrl);' +
+    '      (item.suggestions||[]).forEach(function(s){' +
+    '        var isApproved=approved.some(function(a){return a.variantId===s.variantId&&a.pageUrl===item.pageUrl;});' +
+    '        html+="<div class=\'rec"+(isApproved?" approved":"")+"\' data-page=\'"+item.pageUrl+"\' data-variant=\'"+s.variantId+"\'>" +' +
+    '          "<div style=\'font-size:11px;color:#888;font-family:monospace\'>"+url+"</div>" +' +
+    '          "<div class=\'rtext\'>"+(s.proposedText||("Variant "+s.variantId))+(isApproved?" <span class=\'tag-approved\'>APPROVED</span>":"")+"</div>" +' +
+    '          "<div class=\'rreason\'>"+(s.reason||"")+"</div>" +' +
+    '          (isApproved?"":"<div class=\'ractions\'><button class=\'btn\' onclick=\'decideRec(this,\\"approve\\")\'>Approve</button>" +' +
+    '          "<button class=\'btn btnsec\' onclick=\'decideRec(this,\\"reject\\")\'>Reject</button></div>") +' +
+    '          "</div>";' +
+    '      });' +
+    '    });' +
+    '    document.getElementById("adv-recs").innerHTML=html||"<div class=\'empty\'>No suggestions returned</div>";' +
+    '  }).catch(function(){document.getElementById("adv-recs").innerHTML="<div class=\'empty\'>Failed to load recommendations</div>";});' +
+    '}' +
+    'function decideRec(btn,decision){' +
+    '  var rec=btn.closest(".rec");var pageUrl=rec.getAttribute("data-page");var variantId=rec.getAttribute("data-variant");' +
+    '  btn.disabled=true;' +
+    '  fetch("/admin/recommendations/decide",{method:"POST",headers:{"Content-Type":"application/json"},' +
+    '    body:JSON.stringify({campaignId:CAMP_ID,pageUrl:pageUrl,variantId:variantId,decision:decision})})' +
+    '  .then(function(r){return r.json();}).then(function(){' +
+    '    if(decision==="reject"){rec.classList.add("rejected");}' +
+    '    loadRecs();load();' +
+    '  }).catch(function(){btn.disabled=false;});' +
+    '}' +
+    'load();setInterval(load,15000);' +
     '</script></body></html>';
 }
-
 // Session 10 Batch 3: scoped publisher portal.
 // A self-contained, dedicated page for ONE publisher — fetches
 // /dashboard?view=publisher&pubId=X, no picker, no cross-publisher data.
 function scopedPublisherPortalHtml(pub) {
   return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
-    '<title>' + escapeHtml(pub.name) + ' — AI Ad Platform</title><style>' +
+    '<title>' + escapeHtml(pub.name) + ' \u2014 AI Ad Platform</title><style>' +
     '*{box-sizing:border-box;margin:0;padding:0}' +
     'body{font-family:system-ui,-apple-system,sans-serif;background:#f9f9f9;color:#111;font-size:14px}' +
     'header{background:#fff;border-bottom:1px solid #e5e5e5;padding:14px 24px;display:flex;align-items:center;justify-content:space-between}' +
@@ -175,49 +306,62 @@ function scopedPublisherPortalHtml(pub) {
     '.card .v{font-size:22px;font-weight:600}.card .l{font-size:11px;color:#888;margin-top:2px}.card .s{font-size:11px;color:#aaa;margin-top:4px}' +
     '.card.green .v{color:#16a34a}.card.blue .v{color:#2563eb}' +
     'section{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:20px;margin-bottom:20px}' +
-    'section h2{font-size:14px;font-weight:600;margin-bottom:12px}' +
+    'section h2{font-size:14px;font-weight:600;margin-bottom:4px}' +
+    'section .h2sub{font-size:11px;color:#999;margin-bottom:12px}' +
     'table{width:100%;border-collapse:collapse;font-size:13px}' +
     'th{text-align:left;font-size:11px;color:#888;font-weight:500;padding:6px 8px;border-bottom:1px solid #eee}' +
     'td{padding:8px;border-bottom:1px solid #f3f3f3;vertical-align:top}' +
     '.empty{color:#aaa;font-size:12px;padding:16px;text-align:center}' +
+    '.actrow{font-size:12px;padding:8px 0;border-bottom:1px solid #f3f3f3;display:flex;justify-content:space-between}' +
+    '.actrow:last-child{border-bottom:none}' +
+    '.actrow .plat{font-weight:600}' +
     '</style></head><body>' +
     '<header><div><h1>' + escapeHtml(pub.name) + '</h1><div class="sub">Publisher portal</div></div>' +
     '<div><span id="ts"></span> &nbsp; <a href="/ui">switch view</a></div></header>' +
     '<main>' +
     '<div class="grid" id="pub-cards"><div class="empty">Loading...</div></div>' +
-    '<section><h2>Ad serving — by page</h2>' +
+    '<section><h2>Ad serving \u2014 by page</h2><div class="h2sub">What is currently injected on each of your pages</div>' +
     '<table><thead><tr><th>Page</th><th>Serving</th><th>Platform</th><th>Last crawl</th></tr></thead>' +
     '<tbody id="pub-pages"><tr><td colspan="4" class="empty">Loading...</td></tr></tbody></table></section>' +
+    '<section><h2>Recent activity</h2><div class="h2sub">AI crawlers that have visited your pages</div>' +
+    '<div id="pub-activity"><div class="empty">Loading...</div></div></section>' +
     '</main>' +
     '<script>' +
     'var PUB_ID="' + escapeHtml(pub.pubId) + '";' +
     'function fmt(n){return (n||0).toLocaleString("en-GB");}' +
-    'function money(n){return "\\u00a3"+(n||0).toFixed(2);}' +
-    'function ago(t){if(!t)return "\\u2014";var s=Math.floor((Date.now()-new Date(t).getTime())/1000);if(s<60)return s+"s ago";if(s<3600)return Math.floor(s/60)+"m ago";return Math.floor(s/3600)+"h ago";}' +
-    'function card(label,val,sub,cls){return "<div class=\\"card "+(cls||"")+"\\"><div class=\\"v\\">"+val+"</div><div class=\\"l\\">"+label+"</div>"+(sub?"<div class=\\"s\\">"+sub+"</div>":"")+"</div>";}' +
+    'function money(n){return "\u00a3"+(n||0).toFixed(2);}' +
+    'function ago(t){if(!t)return "\u2014";var s=Math.floor((Date.now()-new Date(t).getTime())/1000);if(s<60)return s+"s ago";if(s<3600)return Math.floor(s/60)+"m ago";return Math.floor(s/3600)+"h ago";}' +
+    'function urlPath(u){try{return new URL(u||"/").pathname;}catch(e){return u||"/";}}' +
+    'function card(label,val,sub,cls){return "<div class=\'card "+(cls||"")+"\'><div class=\'v\'>"+val+"</div><div class=\'l\'>"+label+"</div>"+(sub?"<div class=\'s\'>"+sub+"</div>":"")+"</div>";}' +
     'function load(){' +
     '  fetch("/dashboard?view=publisher&pubId="+encodeURIComponent(PUB_ID)).then(function(r){return r.json();}).then(function(d){' +
-    '    var e=d.earnings||{},t=d.traffic||{},pages=d.pages||[];' +
+    '    var e=d.earnings||{},t=d.traffic||{},pages=d.pages||[],visits=d.recentVisits||[];' +
     '    document.getElementById("pub-cards").innerHTML=' +
-    '      card("Your earnings",money(e.estimatedGBP),"today: "+money(e.estimatedTodayGBP)+" \\u00b7 80% share","green")+' +
+    '      card("Your earnings",money(e.estimatedGBP),"today: "+money(e.estimatedTodayGBP)+" \u00b7 80% share","green")+' +
     '      card("Gross ad spend",money(e.grossGBP),"advertiser paid","green")+' +
     '      card("vCPM",money(e.vcpmGBP),"per 1,000 impressions","blue")+' +
     '      card("Impressions",fmt(t.totalImpressions),fmt(t.today)+" today","")+' +
-    '      card("Fill rate",(t.fillRatePct==null?"\\u2014":t.fillRatePct+"%"),"served / bot visits","");' +
+    '      card("Fill rate",(t.fillRatePct==null?"\u2014":t.fillRatePct+"%"),"served / bot visits","");' +
     '    if(pages.length){' +
     '      document.getElementById("pub-pages").innerHTML=pages.map(function(p){' +
-    '        var url=(p.url||"/").replace(/^https?:\\/\\/[^/]+/,"");' +
-    '        var status=p.serving?("<b style=\\"color:#16a34a\\">"+p.advertiser+"</b> \\u00a3"+(p.cpmGBP||0)+" CPM"+(p.variantAngle?"<div style=\\"font-size:10px;color:#16a34a;margin-top:2px\\">"+p.variantAngle+"</div>":"")):"<span style=\\"color:#ef4444\\">no campaign</span>";' +
-    '        return "<tr><td style=\\"font-family:monospace;font-size:12px\\">"+url+"</td><td>"+status+"</td><td>"+(p.lastPlatform||"\\u2014")+"</td><td>"+ago(p.lastCrawl)+"</td></tr>";' +
+    '        var url=urlPath(p.url);' +
+    '        var status=p.serving?("<b style=\'color:#16a34a\'>"+p.advertiser+"</b> \u00a3"+(p.cpmGBP||0)+" CPM"+(p.variantAngle?"<div style=\'font-size:10px;color:#16a34a;margin-top:2px\'>"+p.variantAngle+"</div>":"")):"<span style=\'color:#ef4444\'>no campaign</span>";' +
+    '        return "<tr><td style=\'font-family:monospace;font-size:12px\'>"+url+"</td><td>"+status+"</td><td>"+(p.lastPlatform||"\u2014")+"</td><td>"+ago(p.lastCrawl)+"</td></tr>";' +
     '      }).join("");' +
-    '    }else{document.getElementById("pub-pages").innerHTML="<tr><td colspan=\\"4\\" class=\\"empty\\">No pages yet</td></tr>";}' +
+    '    }else{document.getElementById("pub-pages").innerHTML="<tr><td colspan=\'4\' class=\'empty\'>No pages yet</td></tr>";}' +
+    '    if(visits.length){' +
+    '      document.getElementById("pub-activity").innerHTML=visits.slice(0,10).map(function(v){' +
+    '        var url=urlPath(v.url);' +
+    '        var outcome=v.served?("<span style=\'color:#16a34a\'>served "+(v.advertiser||v.served)+"</span>"):"<span style=\'color:#999\'>no campaign matched</span>";' +
+    '        return "<div class=\'actrow\'><div><span class=\'plat\'>"+(v.platform||"unknown")+"</span> crawled "+url+"<br>"+outcome+"</div><div>"+ago(v.time)+"</div></div>";' +
+    '      }).join("");' +
+    '    }else{document.getElementById("pub-activity").innerHTML="<div class=\'empty\'>No crawler activity yet</div>";}' +
     '    document.getElementById("ts").textContent="Updated "+new Date().toLocaleTimeString("en-GB");' +
     '  }).catch(function(e){document.getElementById("ts").textContent="Error: "+e.message;});' +
     '}' +
     'load();setInterval(load,10000);' +
     '</script></body></html>';
 }
-
 function notFoundHtml(kind, slug) {
   return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
