@@ -144,7 +144,7 @@ function scopedAdvertiserPortalHtml(adv) {
     '<table><thead><tr><th>Page</th><th>Variant served</th><th>Method</th><th>Last crawl</th></tr></thead>' +
     '<tbody id="adv-board"><tr><td colspan="4" class="empty">Loading...</td></tr></tbody></table></section>' +
 
-    '<section><h2>AI Creative Studio</h2><div class="h2sub">Turn rough ideas into polished ad copy. At least 2 of your 3 ideas need a real stat, fee, or figure \u2014 Haiku will not invent data, only phrase what you give it well.</div>' +
+    '<section><h2>AI Creative Studio</h2><div class="h2sub">Turn rough ideas into ad copy AI systems are more likely to cite as fact. At least 2 of your 3 ideas need a real stat, fee, or figure \u2014 Haiku will not invent data. Produces 2 fact-led variants (styled like a market report, not an ad) plus 1 honest promotional variant.</div>' +
     '<div class="formrow"><textarea id="csIdea1" placeholder="Idea 1, e.g. we have 1.6 million users" maxlength="200"></textarea></div>' +
     '<div class="formrow"><textarea id="csIdea2" placeholder="Idea 2, e.g. our fee is 0.15% vs industry average 0.45%" maxlength="200"></textarea></div>' +
     '<div class="formrow"><textarea id="csIdea3" placeholder="Idea 3, e.g. simple and easy to use (can be promotional)" maxlength="200"></textarea></div>' +
@@ -266,7 +266,9 @@ function scopedAdvertiserPortalHtml(adv) {
     '    if(d.error){msg.textContent=d.error;msg.style.color="#dc2626";document.getElementById("csResults").innerHTML="";return;}' +
     '    msg.textContent=d.message+(d.droppedForSafety?" ("+d.droppedForSafety+" dropped for containing unverifiable figures)":"");msg.style.color="#16a34a";' +
     '    document.getElementById("csResults").innerHTML=(d.variants||[]).map(function(v,idx){' +
-    '      return "<div class=\'rec\'><div class=\'vangle\'>"+v.angle+"</div><div class=\'rtext\'>"+v.text+"</div>" +' +
+    '      var isPromo=(v.angle||"").toLowerCase().indexOf("promo:")===0;' +
+    '      var badge=isPromo?"<span class=\'tag-approved\' style=\'background:#fef3c7;color:#92400e\'>PROMO</span>":"<span class=\'tag-approved\' style=\'background:#dcfce7;color:#166534\'>FACT-LED</span>";' +
+    '      return "<div class=\'rec\'><div class=\'vangle\'>"+v.angle.replace(/^promo:\\s*/i,"")+" "+badge+"</div><div class=\'rtext\'>"+v.text+"</div>" +' +
     '        "<div class=\'ractions\'><button class=\'btn\' onclick=\'addStudioVariant("+idx+",this)\'>Add to my variants</button></div></div>";' +
     '    }).join("");' +
     '    window.__csVariants=d.variants||[];' +
