@@ -21,6 +21,9 @@ Fill in the rest of the entry at the end of the session.
 ### Step 2: Read all project files
 You already have CLAUDE.md, HANDOVER.md, CONTINUE.md injected by the session hook.
 Also read these files explicitly before touching any code:
+- `PLATFORM_STRUCTURE_SPEC.md` — REQUIRED if touching the advertiser portal, publisher
+  portal, or matching pipeline. Canonical naming (The Matcher, Variant Bank, Ad Unit,
+  Placement, etc.) — read this before using any of these terms in code or conversation.
 - `vercel.json` — confirm function count before creating any new files
 - `lib/config.js` — understand current defaults
 - `lib/relevance.js` — understand the matching cascade (added Session 3)

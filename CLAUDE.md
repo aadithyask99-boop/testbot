@@ -3,6 +3,12 @@
 > This file is the authoritative knowledge base for this project.
 > Read this before touching any code. Update it when you make significant decisions.
 > It lives alongside CONTINUE.md (learnings/mistakes), HANDOVER.md (current state/next tasks), and SESSION_LOG.md (historical).
+>
+> **Naming and hierarchy:** for canonical terminology (The Matcher, Variant Bank,
+> Ad Unit, Placement, etc.) and where each concept lives in the advertiser/publisher
+> portals, read PLATFORM_STRUCTURE_SPEC.md FIRST if you're touching anything in
+> those portals or the matching pipeline. That file is the source of truth for
+> naming — if anything below conflicts with it, PLATFORM_STRUCTURE_SPEC.md wins.
 
 ---
 
