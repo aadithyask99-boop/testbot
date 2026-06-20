@@ -144,15 +144,6 @@ function scopedAdvertiserPortalHtml(adv) {
     '<table><thead><tr><th>Page</th><th>Variant served</th><th>Method</th><th>Last crawl</th></tr></thead>' +
     '<tbody id="adv-board"><tr><td colspan="4" class="empty">Loading...</td></tr></tbody></table></section>' +
 
-    '<section><h2>Campaign settings</h2><div class="h2sub">Campaign ID: <span id="campIdLabel">\u2014</span></div>' +
-    '<div class="formrow"><div style="flex:1"><label style="font-size:11px;color:#888">CPM (\u00a3)</label><input type="number" id="setCpm" step="0.01" min="1" onfocus="settingsDirty=true"></div>' +
-    '<div style="flex:1"><label style="font-size:11px;color:#888">Daily budget (\u00a3)</label><input type="number" id="setDailyBudget" step="1" min="1" onfocus="settingsDirty=true"></div>' +
-    '<div style="flex:1"><label style="font-size:11px;color:#888">Total budget (\u00a3)</label><input type="number" id="setTotalBudget" step="1" min="1" onfocus="settingsDirty=true"></div></div>' +
-    '<div class="formrow"><div style="flex:1"><label style="font-size:11px;color:#888">Keywords (comma-separated)</label><input type="text" id="setKeywords" onfocus="settingsDirty=true"></div></div>' +
-    '<div class="formrow"><div style="flex:1"><label style="font-size:11px;color:#888">Matching description</label><textarea id="setMatchDesc" maxlength="300" onfocus="settingsDirty=true"></textarea></div></div>' +
-    '<button class="btn" onclick="saveSettings()" id="saveSettingsBtn">Save settings</button>' +
-    '<div class="formmsg" id="setMsg"></div></section>' +
-
     '<section><h2>AI Creative Studio</h2><div class="h2sub">Turn rough ideas into ad copy AI systems are more likely to cite as fact. At least 2 of your 3 ideas need a real stat, fee, or figure \u2014 Haiku will not invent data. Produces 2 fact-led variants (styled like a market report, not an ad) plus 1 honest promotional variant.</div>' +
     '<div class="formrow"><textarea id="csIdea1" placeholder="Idea 1, e.g. we have 1.6 million users" maxlength="200"></textarea></div>' +
     '<div class="formrow"><textarea id="csIdea2" placeholder="Idea 2, e.g. our fee is 0.15% vs industry average 0.45%" maxlength="200"></textarea></div>' +
@@ -164,14 +155,25 @@ function scopedAdvertiserPortalHtml(adv) {
     '<div class="formmsg" id="csMsg"></div>' +
     '<div id="csResults" style="margin-top:14px"></div></section>' +
 
-    '<section><h2>Add a creative</h2><div class="h2sub">New variants are auto-crawled within 60 seconds of saving</div>' +
+    '<section><h2>Campaign</h2><div class="h2sub">Campaign ID: <span id="campIdLabel">\u2014</span> \u00b7 settings, ad variants, and adding new creatives all live here</div>' +
+    '<div style="font-size:12px;font-weight:600;color:#666;margin:14px 0 8px;text-transform:uppercase;letter-spacing:0.03em">Settings</div>' +
+    '<div class="formrow"><div style="flex:1"><label style="font-size:11px;color:#888">CPM (\u00a3)</label><input type="number" id="setCpm" step="0.01" min="1" onfocus="settingsDirty=true"></div>' +
+    '<div style="flex:1"><label style="font-size:11px;color:#888">Daily budget (\u00a3)</label><input type="number" id="setDailyBudget" step="1" min="1" onfocus="settingsDirty=true"></div>' +
+    '<div style="flex:1"><label style="font-size:11px;color:#888">Total budget (\u00a3)</label><input type="number" id="setTotalBudget" step="1" min="1" onfocus="settingsDirty=true"></div>' +
+    '<div style="flex:1"><label style="font-size:11px;color:#888">Status</label><select id="setActive" onfocus="settingsDirty=true" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px"><option value="true">Active</option><option value="false">Paused</option></select></div></div>' +
+    '<div class="formrow"><div style="flex:1"><label style="font-size:11px;color:#888">Keywords (comma-separated)</label><input type="text" id="setKeywords" onfocus="settingsDirty=true"></div></div>' +
+    '<div class="formrow"><div style="flex:1"><label style="font-size:11px;color:#888">Matching description</label><textarea id="setMatchDesc" maxlength="300" onfocus="settingsDirty=true"></textarea></div></div>' +
+    '<button class="btn" onclick="saveSettings()" id="saveSettingsBtn">Save settings</button>' +
+    '<div class="formmsg" id="setMsg"></div>' +
+    '<div style="font-size:12px;font-weight:600;color:#666;margin:20px 0 8px;text-transform:uppercase;letter-spacing:0.03em">Add a creative</div>' +
+    '<div class="h2sub" style="margin-bottom:8px">New variants are auto-crawled within 60 seconds of saving</div>' +
     '<div class="formrow"><input type="text" id="newAngle" placeholder="Angle, e.g. data-led: cost comparison" maxlength="60"></div>' +
     '<div class="formrow"><textarea id="newText" placeholder="Ad copy (max 280 characters)" maxlength="280" oninput="document.getElementById(\'newTextCount\').textContent=this.value.length+\'/280\'"></textarea></div>' +
     '<div class="charcount" id="newTextCount">0/280</div>' +
     '<button class="btn" onclick="addCreative()" id="addCreativeBtn">Add creative</button>' +
-    '<div class="formmsg" id="addCreativeMsg"></div></section>' +
-
-    '<section><h2>Ad variants</h2><div class="h2sub">Your full variant bank \u2014 top performer marked</div>' +
+    '<div class="formmsg" id="addCreativeMsg"></div>' +
+    '<div style="font-size:12px;font-weight:600;color:#666;margin:20px 0 8px;text-transform:uppercase;letter-spacing:0.03em">Ad variants</div>' +
+    '<div class="h2sub" style="margin-bottom:8px">Top performer marked \u00b7 minimum 5 variants required</div>' +
     '<div id="adv-variants"><div class="empty">Loading...</div></div></section>' +
 
     '<section><h2>Recent activity</h2><div class="h2sub">AI crawlers that have visited pages where you compete</div>' +
@@ -201,6 +203,7 @@ function scopedAdvertiserPortalHtml(adv) {
     '      document.getElementById("setTotalBudget").value=activeCamp.budgetTotalGBP;' +
     '      document.getElementById("setKeywords").value=(activeCamp.keywords||[]).join(", ");' +
     '      document.getElementById("setMatchDesc").value=activeCamp.matchingDescription||"";' +
+    '      document.getElementById("setActive").value=activeCamp.active?"true":"false";' +
     '    }' +
     '    var dailyPct=activeCamp?activeCamp.dailyBudgetUsedPct:0;' +
     '    var budgetWarn=dailyPct>=80;' +
@@ -224,10 +227,16 @@ function scopedAdvertiserPortalHtml(adv) {
     '      document.getElementById("adv-variants").innerHTML=variants.map(function(v){' +
     '        var src=(activeCamp.variants||[]).find(function(x){return x.id===v.id;});' +
     '        var isTop=v.pct===topPct&&topPct>0;' +
-    '        var delBtn=canDelete?("<button class=\'btnsec\' style=\'font-size:11px;padding:3px 8px;float:right\' onclick=\'deleteVariant(\\""+v.id+"\\",this)\'>Remove</button>"):("<span style=\'font-size:10px;color:#bbb;float:right\'>min 5 variants required</span>");' +
-    '        return "<div class=\'vrow\'>"+delBtn+"<div class=\'vangle\'>"+(v.angle||v.id)+(isTop?" <span class=\'topbadge\'>TOP PERFORMER</span>":"")+"</div>" +' +
+    '        var delBtn=canDelete?("<button class=\'btnsec\' style=\'font-size:11px;padding:3px 8px;float:right;margin-left:6px\' onclick=\'deleteVariant(\\""+v.id+"\\",this)\'>Remove</button>"):("<span style=\'font-size:10px;color:#bbb;float:right\'>min 5 required</span>");' +
+    '        var editBtn="<button class=\'btnsec\' style=\'font-size:11px;padding:3px 8px;float:right\' onclick=\'editVariant(\\""+v.id+"\\")\'>Edit</button>";' +
+    '        var editForm="<div id=\'edit-"+v.id+"\' style=\'display:none;margin-top:8px\'>"+' +
+    '          "<input type=\'text\' id=\'editAngle-"+v.id+"\' value=\'"+(src?src.angle.replace(/\'/g,"&#39;"):"")+"\' maxlength=\'60\' style=\'width:100%;margin-bottom:6px;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:12px\'>"+' +
+    '          "<textarea id=\'editText-"+v.id+"\' maxlength=\'280\' style=\'width:100%;min-height:50px;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:12px\'>"+(src?src.text:"")+"</textarea>"+' +
+    '          "<div style=\'margin-top:6px\'><button class=\'btn\' style=\'font-size:11px;padding:4px 10px\' onclick=\'saveVariantEdit(\\""+v.id+"\\",this)\'>Save</button> "+' +
+    '          "<button class=\'btnsec\' style=\'font-size:11px;padding:4px 10px\' onclick=\'cancelEditVariant(\\""+v.id+"\\")\'>Cancel</button></div></div>";' +
+    '        return "<div class=\'vrow\' id=\'row-"+v.id+"\'>"+delBtn+editBtn+"<div class=\'vangle\'>"+(v.angle||v.id)+(isTop?" <span class=\'topbadge\'>TOP PERFORMER</span>":"")+"</div>" +' +
     '          "<div class=\'vstat\'>"+fmt(v.impressions)+" impr \u00b7 "+v.pct+"%</div>" +' +
-    '          "<div class=\'vtext\'>"+(src?src.text:"")+"</div></div>";' +
+    '          "<div class=\'vtext\' id=\'text-"+v.id+"\'>"+(src?src.text:"")+"</div>"+editForm+"</div>";' +
     '      }).join("");' +
     '    }else{document.getElementById("adv-variants").innerHTML="<div class=\'empty\'>No variants yet</div>";}' +
     '    if(matches.length){' +
@@ -305,6 +314,7 @@ function scopedAdvertiserPortalHtml(adv) {
     '  var total=parseFloat(document.getElementById("setTotalBudget").value);' +
     '  var kw=document.getElementById("setKeywords").value.split(",").map(function(s){return s.trim();}).filter(Boolean);' +
     '  var desc=document.getElementById("setMatchDesc").value.trim();' +
+    '  var isActive=document.getElementById("setActive").value==="true";' +
     '  var msg=document.getElementById("setMsg");' +
     '  if(!cpm||cpm<1){msg.textContent="CPM must be at least \u00a31.";msg.style.color="#dc2626";return;}' +
     '  if(!daily||!total){msg.textContent="Daily and total budget are required.";msg.style.color="#dc2626";return;}' +
@@ -314,13 +324,40 @@ function scopedAdvertiserPortalHtml(adv) {
     '    var camp=(d.campaigns||[])[0];if(!camp)throw new Error("Campaign not found");' +
     '    var body={id:camp.id,advId:camp.advId,advertiser:camp.advertiser,category:camp.category,' +
     '      cpmGBP:cpm,budgetDailyGBP:daily,budgetTotalGBP:total,keywords:kw,matchingDescription:desc,' +
-    '      variants:camp.variants,link:camp.link,linkText:camp.linkText,advSlug:camp.advSlug,active:camp.active};' +
+    '      variants:camp.variants,link:camp.link,linkText:camp.linkText,advSlug:camp.advSlug,active:isActive};' +
     '    return fetch("/admin/campaign",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});' +
     '  }).then(function(r){return r.json();}).then(function(res){' +
     '    btn.disabled=false;btn.textContent="Save settings";' +
     '    if(res.error){msg.textContent=res.error;msg.style.color="#dc2626";return;}' +
     '    msg.textContent="Settings saved.";msg.style.color="#16a34a";settingsDirty=false;load();' +
     '  }).catch(function(e){btn.disabled=false;btn.textContent="Save settings";msg.textContent="Error: "+e.message;msg.style.color="#dc2626";});' +
+    '}' +
+    'function editVariant(id){' +
+    '  var f=document.getElementById("edit-"+id);if(f)f.style.display="block";' +
+    '  var t=document.getElementById("text-"+id);if(t)t.style.display="none";' +
+    '}' +
+    'function cancelEditVariant(id){' +
+    '  var f=document.getElementById("edit-"+id);if(f)f.style.display="none";' +
+    '  var t=document.getElementById("text-"+id);if(t)t.style.display="block";' +
+    '}' +
+    'function saveVariantEdit(id,btn){' +
+    '  var angle=document.getElementById("editAngle-"+id).value.trim();' +
+    '  var text=document.getElementById("editText-"+id).value.trim();' +
+    '  if(!angle||!text){alert("Both angle and text are required.");return;}' +
+    '  if(!CAMP_ID)return;' +
+    '  btn.disabled=true;btn.textContent="Saving...";' +
+    '  fetch("/dashboard?view=advertiser&advId="+encodeURIComponent(ADV_ID)).then(function(r){return r.json();}).then(function(d){' +
+    '    var camp=(d.campaigns||[])[0];if(!camp)throw new Error("Campaign not found");' +
+    '    var newVariants=(camp.variants||[]).map(function(v){return v.id===id?{id:v.id,angle:angle,text:text}:v;});' +
+    '    var body={id:camp.id,advId:camp.advId,advertiser:camp.advertiser,category:camp.category,cpmGBP:camp.cpmGBP,' +
+    '      budgetDailyGBP:camp.budgetDailyGBP,budgetTotalGBP:camp.budgetTotalGBP,keywords:camp.keywords,' +
+    '      matchingDescription:camp.matchingDescription,variants:newVariants,link:camp.link,linkText:camp.linkText,' +
+    '      advSlug:camp.advSlug,active:camp.active};' +
+    '    return fetch("/admin/campaign",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});' +
+    '  }).then(function(r){return r.json();}).then(function(res){' +
+    '    if(res.error){btn.disabled=false;btn.textContent="Save";alert(res.error);return;}' +
+    '    load();' +
+    '  }).catch(function(e){btn.disabled=false;btn.textContent="Save";alert("Error: "+e.message);});' +
     '}' +
     'function deleteVariant(variantId,btn){' +
     '  if(!CAMP_ID||!confirm("Remove this variant? This cannot be undone."))return;' +
