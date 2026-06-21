@@ -109,49 +109,38 @@ Each campaign gets 5-15 approved variants with distinct angles ("first-home" / "
 
 ---
 
-## File Map (current as of end of Session 4)
+## File Map (current as of end of Session 10)
+
+> For full architecture, KV schema, and naming: see PLATFORM_STRUCTURE_SPEC.md
 
 ```
 api/
-  index.js         Main handler. Bot detection → runMatch (full cascade) → injection → impression logging
-                   with full candidate breakdown. Human path: clean page, optional referrer click tracking.
-  admin.js         Campaign CRUD (/admin/campaign create-update, /admin/campaign/pause, /admin/campaign/delete,
-                   /admin/seed) + /ad creative fetch + /admin/reset-stats. One file for all campaign management.
-  dashboard.js     Analytics API. Three views: ?view=operator (default), ?view=advertiser, ?view=publisher.
-                   17 KV keys fetched in one Promise.all. Per-page board derived from log:recent. NO phantom auction.
-  dashboard-ui.js  Visual dashboard HTML served as a serverless function.
-                   STRING CONCATENATION (NOT template literals) — see "the parse gate" rule below.
-                   5-second polling. Three tabs. Live Auction Board + Recent Match Decisions diagnostic.
-                   Campaign form with Targeting Description field. Edit + Delete buttons in detail panel.
-  click.js         /click?adv=SLUG&dest=URL — logs ad click, redirects to advertiser destination.
-  sdk.js           Client-side publisher snippet — PLACEHOLDER. Real AI crawlers never execute JS.
-                   Real publisher SDK = Cloudflare Worker (Session 7 work).
-  utils.js         /health (with env-var presence flags) + /robots.txt + /sitemap.xml + /ping (IndexNow).
-                   Routes by req.url internally.
-  match.js         POST /match — direct matching endpoint. Useful for testing matching logic without
-                   triggering the full bot-detection path.
+  index.js         Main handler: bot detection → runMatch → injection → impression logging.
+  admin.js         Campaign CRUD, AI Creative Studio, manual crawl, auto-crawl, seed, reindex.
+  dashboard.js     Analytics API: 3 views (operator/advertiser/publisher) with advId/pubId scoping.
+  dashboard-ui.js  Visual UI: chooser, admin, scoped advertiser/publisher portals. STRING CONCAT ONLY.
+  click.js         /click redirect + ad click tracking.
+  sdk.js           Client-side publisher snippet (placeholder — real SDK = Cloudflare Worker).
+  utils.js         /health + /robots.txt + /sitemap.xml + /ping.
+  match.js         POST /match for Worker contextual matching calls.
+  precompute.js    Category classification sweep (Stages 0-3 of The Matcher).
+  impression.js    Revenue tracking with 80/20 split, atomic tenths-of-pence.
 
 lib/
-  detector.js      AI crawler UA database. 40+ crawlers. Returns: platform name, crawlerType (retrieval/training),
-                   commercialValue, cloakingRisk.
-  combined-detector.js  Three-layer detection: UA (95% conf) → behavioural scoring → anonymous_crawler.
-                   Anonymous path catches DeepSeek-like crawlers: Chrome UA + missing browser proof headers = 75%.
-                   Reads detectionThreshold from config.js (default 70).
-  behavioural.js   Header signal scoring. Note: rate signal (+30pts) removed from production; UA + anonymous_crawler
-                   handle the cases that matter.
-  injector.js      HTML injection. Finds 2nd </p> after 200 chars, inserts plain <p>. Absolute click URLs.
-  kv.js            Upstash Redis wrapper. kvGet/kvSet/kvSetWithTTL/kvIncr/kvListPush/kvListGet/kvJsonUpdate/
-                   kvHashIncr/kvHashGetAll/kvDel. Silent error fallback throughout.
-  referrer.js      AI platform referrer detection for click tracking. 14 platforms. Perplexity slug parsing.
-  config.js        Default campaign, detectionThreshold: 70, publisher info, taxonomies.
-  auction.js       runAuction(category) loads from KV. runAuctionFromList(campaigns) operates on a passed list.
-                   Both available. Relevance.js calls the latter directly with Haiku-approved survivors.
-  relevance.js     The five-layer matching cascade. Returns winner + full candidate breakdown for every result
-                   (winner, no-winner, all paths). Single source of truth for "what should serve here."
-  demo-pages.js    4 article fixtures. Routed by /articles/:slug in vercel.json.
-```
+  detector.js      40+ AI crawler UA patterns.
+  combined-detector.js  Three-layer: UA → behavioural → anonymous crawler (DeepSeek).
+  behavioural.js   Header signal scoring.
+  injector.js      HTML injection: plain <p>, no fingerprints, absolute click URLs.
+  kv.js            Upstash Redis wrapper (kvGet/kvSet/kvIncr/kvIncrBy/kvHashIncr/kvDel + more).
+  referrer.js      AI platform referrer detection, 14 platforms.
+  config.js        Categories, publishers (with slugs), advertisers (with slugs), variantLimits.
+  auction.js       effectiveCPM = cpmGBP × relevanceScore, budget checks, spend tracking.
+  relevance.js     The Matcher — 8-stage pipeline. See PLATFORM_STRUCTURE_SPEC.md §3.
+  demo-pages.js    Empty stubs (real pages on publisher sites).
 
----
+worker/index.js    Cloudflare Worker proxy for publisher sites.
+variant_payloads/  Campaign JSON files for batch upload (camp_002 through camp_015).
+```
 
 ## KV Data Schema
 

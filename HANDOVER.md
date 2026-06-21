@@ -3,313 +3,165 @@
 > This file is the task board and current-state snapshot.
 > Update it at the end of every session. It's the first thing to read when picking up work.
 > For WHY decisions were made, see CLAUDE.md. For lessons learned, see CONTINUE.md.
+> For canonical naming and architecture, see PLATFORM_STRUCTURE_SPEC.md.
 
 ---
 
-## Current State (end of Session 9 — 2026-06-18)
+## Current State (end of Session 10, 2026-06-21)
 
-**Platform URL:** https://testbot-two-psi.vercel.app (API only — no demo pages)
+**Live URL:** https://testbot-two-psi.vercel.app
 **Dashboard:** https://testbot-two-psi.vercel.app/ui
 **GitHub:** https://github.com/aadithyask99-boop/testbot (main branch)
 **Vercel:** Hobby plan — 10/12 serverless functions used, 2 free
 
-### Live Publisher Sites
-| Publisher | Site | Worker | pubId | Token |
-|-----------|------|--------|-------|-------|
-| Finance Weekly | finance-weekly.vercel.app | finance-weekly-worker.projectatlas.workers.dev | pub_001 | pk_pub_001_financeweekly |
-| Tech Briefing | tech-briefing-tau.vercel.app | tech-briefing-worker.projectatlas.workers.dev | pub_002 | pk_pub_002_techbriefing |
-
-### GitHub Repos
-- Platform: github.com/aadithyask99-boop/testbot
-- Finance Weekly: github.com/aadithyask99-boop/finance-weekly
-- Tech Briefing: github.com/aadithyask99-boop/tech-briefing
-
 ### What's deployed and working
-- **Bot detection** — 30/30 UAs correct. Named bots, anonymous crawler (DeepSeek), Googlebot excluded.
-- **Injection** — Bots get 8 `<p>` tags (7 editorial + 1 injected). Humans get 7 (clean page).
-- **Cloudflare Workers** — Readability-lite content extraction, full article text + headings to /match, X-Pub-Token auth, origin URL logging (not Worker proxy URL), anonymous crawler detection.
-- **Auction** — CPM waterfall, 15 campaigns (camp_001–camp_015), Haiku relevance filtering, variant selection.
-- **Data-led variants** — AJ Bell (v6/v7/v8), Interactive Investor (v6/v7), Norton (v6/v7) have data-led variants. Haiku prompt updated to prefer stat-based content over promotional copy.
-- **Haiku variant selection** — Updated prompt: prefers specific statistics, research findings, concrete data over generic promotional claims.
-- **Dashboard** — Tab-aware polling (operator view only on 10s poll, adv/pub on demand). Publisher picker re-fetches with pubId. Advertiser view shows competed pages not just won.
-- **Per-publisher tracking** — stats:impressions:pub:{pubId}:total/date in KV. reset-stats now clears these.
-- **Publisher tokens** — X-Pub-Token header auth on /match and /impression. pub_token:{token} → pubId reverse lookup.
-- **Advertiser entities** — advertiser:{advId} records in KV, advertisers:all index.
-- **Sitemap-driven precompute** — Sweep reads publisher sitemapUrls, fetches sitemap XML. Status reads from log:recent (no outbound HTTP restriction).
-- **precompute?action=invalidate-url** — Clears variant + precompute cache for a specific URL directly.
-- **LIVE badge** — Pulsing green badge on pages crawled < 30s ago.
+- Bot detection + HTML injection — confirmed across ChatGPT Browse, Perplexity, Grok, Gemini, Meta AI, Claude
+- The Matcher: 8-stage pipeline (see PLATFORM_STRUCTURE_SPEC.md §3 for full detail)
+  - Stages 0-3 (category classification): precomputed by sweep
+  - Stages 4-5 (per-campaign relevance + auction): live, benefits from cached classification
+  - Stages 6-8 (variant selection): separately cached, NOT precomputed
+- 14 active campaigns across finance and tech categories, all with data-led variants
+- Revenue tracking: 80/20 publisher/platform split, atomic tenths-of-pence in KV
+- Portal architecture:
+  - `/ui` — chooser page (Advertiser / Publisher / Admin)
+  - `/ui/admin` — full operator dashboard (unchanged)
+  - `/ui/advertiser/{slug}` — scoped advertiser portal with: cards, sparkline, performance table, AI Creative Studio, Campaign (settings + add creative + variant bank with edit/remove), recent activity
+  - `/ui/publisher/{slug}` — scoped publisher portal with: earnings cards, per-page serving table, recent activity
+- AI Creative Studio: 3-idea input, 2 fact-led + 1 promo output, input gate, output traceability, em dash backstop
+- Auto-crawl on variant save (60s delay) + manual Crawl buttons
+- Variant ID stability across saves (normalizeVariants fix)
 
-### What's a demo placeholder / not yet built
-- No real publisher auth — pickers are cosmetic, no login gating
-- Publisher floor prices — floorCPM field exists in schema, NOT enforced in auction
-- Precompute for real publisher pages — Vercel can't fetch remote HTML, pages classified live on first bot crawl
-- Precompute sweep can't classify new publisher pages (Vercel outbound restriction) — pages get classified on first real bot crawl (lazy, works correctly)
-- Cloudflare sweep Worker (for scheduled pre-classification) — planned but not built
-- Rate signal in behavioural.js — requestsPerMinute always 1, +30pt signal never fires
-- No billing/payments
-- Single-page dashboard tabs — publisher/advertiser data isolated by picker, not by real auth
-
-### Validated with real AI systems (Session 9)
-- **ChatGPT Browse** crawled Finance Weekly first-time-buyer page. Surfaced injected AJ Bell data-led stat verbatim: "£300,000 average price, £833/month, 3 years". Described old promo variants as "promotional callouts". Data-led v8 bypassed this filter entirely.
-- **ChatGPT Browse** detected Norton on VPN page but flagged as promotional callout (old promo variant at the time).
-- Finance Weekly and Tech Briefing Workers correctly injecting on all 8 articles.
+### What's a demo placeholder right now
+- Publisher pages are hardcoded demo articles (Finance Weekly ISA/pension/dividend/first-time-buyer, Tech Briefing VPN/antivirus/broadband/cloud-storage)
+- No real auth — portal access is URL-based only (anyone with the link sees the data)
+- No Add Campaign or Remove Campaign UI in the advertiser portal (done via raw API only)
+- Spend sparkline uses simulated variance, not real daily historical data
+- Creative Studio output quality is inconsistent — safety filter sometimes too aggressive, prompt sometimes produces vague filler instead of honest "skipped" on weak ideas
+- `api/sdk.js` is client-side only (headless browser detection) — secondary layer
+- `requestsPerMinute` always 1 — behavioural rate signal (+30 pts) never fires
 
 ---
 
-## Serverless Function Slots
+## Serverless Function Slots (10/12 used)
 
 ```
 USED (10/12):
-1. api/index.js         Bot detection entry point (legacy — now API-only, serves 404 for demo paths)
-2. api/admin.js         Campaign CRUD, seed, reindex, reset-stats
-3. api/dashboard.js     Analytics API (operator/advertiser/publisher views)
-4. api/dashboard-ui.js  Visual dashboard HTML
-5. api/click.js         Click redirect + tracking
-6. api/sdk.js           Publisher client-side snippet (legacy, not used in production)
-7. api/utils.js         /health + /robots.txt + /sitemap.xml + /ping
-8. api/match.js         Contextual matching + auction + variant selection
-9. api/impression.js    Worker-side impression logging
-10. api/precompute.js   Sitemap sweep + status + invalidate + invalidate-url
+ 1. api/index.js         Main detection/injection/logging
+ 2. api/admin.js         Campaign CRUD, Creative Studio, crawl, seed, reindex
+ 3. api/dashboard.js     Analytics API (3 views: operator/advertiser/publisher)
+ 4. api/dashboard-ui.js  Visual UI (chooser, admin, scoped portals)
+ 5. api/click.js         Click redirect + tracking
+ 6. api/sdk.js           Publisher client-side snippet
+ 7. api/utils.js         /health + /robots.txt + /sitemap.xml + /ping
+ 8. api/match.js         /match for Worker contextual matching calls
+ 9. api/precompute.js    Category classification sweep
+10. api/impression.js    Revenue tracking with 80/20 split
 
 FREE (2/12):
-11. → spare
+11. → api/publishers.js  (publisher management + Ad Unit formalization)
 12. → spare
 ```
 
 ---
 
-## Campaign Reference (15 campaigns)
+## Planned Work — Next Session(s)
 
+### Priority 1: URL routing redesign
+Drop the `/ui` prefix entirely. Proposed scheme:
 ```
-Finance (9 campaigns):
-  camp_001  Vanguard UK (Demo)     £18   — seeded via /admin/seed
-  camp_002  Trading 212            £120  ← wins ISA pages
-  camp_003  Interactive Investor   £100  ← wins pension/dividend/SIPP pages. HAS DATA-LED v6/v7
-  camp_004  E*TRADE                £70
-  camp_005  Smart Pension          £70
-  camp_006  Moneybox               £40
-  camp_007  Freetrade              £10
-  camp_012  Hargreaves Lansdown    £80
-  camp_013  AJ Bell                £60   ← wins first-time-buyer. HAS DATA-LED v6/v7/v8
+/advertiser/{slug}/dashboard   — operational (settings, variants, Creative Studio)
+/advertiser/{slug}/analytics   — deeper performance data
+/publisher/{slug}/dashboard    — operational (earnings, serving status)
+/publisher/{slug}/analytics    — traffic trends, crawl activity
+/admin                         — full operator view
+```
+Requires: vercel.json route changes, dashboard-ui.js handler updates,
+splitting the current single-page portal into dashboard + analytics pages.
 
-Tech (6 campaigns):
-  camp_008  Oppo                   £100
-  camp_009  Xiaomi                 £64
-  camp_010  ExpressVPN             £19   ← wins broadband page
-  camp_011  NordVPN                £18
-  camp_014  Norton                 £25   ← wins VPN/antivirus. HAS DATA-LED v6/v7
-  camp_015  Dropbox                £15   ← wins cloud storage
+### Priority 2: Publisher-side Ad Unit / Placement formalization
+Turn hardcoded `PUBLISHER_PAGES` and `CATEGORY_PUBLISHERS` in admin.js into
+real `adUnits[]` and `placements[]` structures per publisher in config/KV.
+See PLATFORM_STRUCTURE_SPEC.md §5 for schema design.
+
+### Priority 3: Add Campaign / Remove Campaign UI
+Currently campaigns are only created/deleted via raw API calls or payload files.
+The advertiser portal needs:
+- "Add Campaign" button/form (creates a new campaign with this advId)
+- "Delete Campaign" option (with confirmation)
+This requires deciding: does Creative Studio sit inside each Campaign (so
+generated variants target a specific campaign), or stay above all campaigns
+as a general drafting tool?
+
+### Priority 4: Creative Studio prompt quality
+Current issues:
+- Safety filter drops valid variants when numbers are reformatted by Haiku
+  (e.g. "0.15%" → "15 basis points" → traceability fails)
+- Fact-led variants sometimes produce vague filler ("comparable to several
+  established platforms") instead of honestly skipping when no comparison exists
+- Brand mention on fact-led variants is inconsistent
+
+### Priority 5: Variant `focus` tag
+Optional free-text tag on each variant for organizational grouping.
+Agreed in Session 10, not yet implemented. See PLATFORM_STRUCTURE_SPEC.md §4.
+
+---
+
+## Open Decisions for Aadi
+
+1. **Routing scheme confirmation:** `/advertiser/{slug}/dashboard` and `/analytics`
+   as proposed, or different naming? What about `/admin`?
+2. **Creative Studio per-campaign:** If an advertiser eventually has multiple campaigns,
+   does Creative Studio sit inside each campaign (variants target that campaign) or
+   stay above as a general tool (user manually picks which campaign to add to)?
+3. **Campaign tiebreaker at identical effective CPM:** Round-robin, first-created, or random?
+4. **Publisher floor price:** per-publisher configurable, stored in publisher schema.
+   Not yet built. When built: floor applies to gross CPM before split.
+
+---
+
+## How to Verify the Live System
+
+```bash
+# Check chooser page
+curl https://testbot-two-psi.vercel.app/ui
+
+# Check scoped advertiser portal
+curl https://testbot-two-psi.vercel.app/ui/advertiser/trading-212
+
+# Check scoped publisher portal
+curl https://testbot-two-psi.vercel.app/ui/publisher/financeweekly
+
+# Simulate bot impression
+curl -H "User-Agent: Mozilla/5.0 (compatible; PerplexityBot/1.0)" \
+  https://finance-weekly-worker.projectatlas.workers.dev/articles/best-isa-2026.html
+
+# Check dashboard API
+curl https://testbot-two-psi.vercel.app/dashboard
+curl "https://testbot-two-psi.vercel.app/dashboard?view=advertiser&advId=adv_002"
+curl "https://testbot-two-psi.vercel.app/dashboard?view=publisher&pubId=pub_001"
+
+# Manual crawl
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"category":"all"}' \
+  https://testbot-two-psi.vercel.app/admin/crawl
+
+# Test Creative Studio
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"advertiser":"Trading 212","ideas":["we have 1.6 million users","our fee is 0.15% vs industry average 0.45%","simple to use"]}' \
+  https://testbot-two-psi.vercel.app/admin/creative-studio
 ```
 
 ---
 
-## Publisher Pages (8 real pages)
+## Key Files Changed in Session 10
 
-```
-Finance Weekly (pub_001) — finance-weekly-worker.projectatlas.workers.dev:
-  /articles/best-isa-2026.html       → Trading 212 £120
-  /articles/pension-vs-isa.html      → Interactive Investor £100
-  /articles/dividend-investing.html  → Interactive Investor £100
-  /articles/first-time-buyer.html    → AJ Bell £60 (data-led v8 selected by Haiku)
-
-Tech Briefing (pub_002) — tech-briefing-worker.projectatlas.workers.dev:
-  /articles/best-vpn-2026.html       → Norton £25
-  /articles/best-broadband.html      → ExpressVPN £19
-  /articles/best-antivirus.html      → Norton £25
-  /articles/cloud-storage.html       → Dropbox £15
-```
-
----
-
-## Immediate Next Tasks (priority order)
-
-### Task 1: Clear Interactive Investor variant caches + validate data-led selection
-**What:** AJ Bell v8 (data-led) is now proven working. Do the same for Interactive Investor — clear caches, re-crawl pension/dividend pages, verify Haiku picks v6 or v7 (flat-fee cost data) over v1 (award-winning ISA promo).
-**How:**
-```powershell
-# Clear II variant caches
-$pages = @("https://finance-weekly.vercel.app/articles/pension-vs-isa.html","https://finance-weekly.vercel.app/articles/dividend-investing.html","https://finance-weekly.vercel.app/articles/best-isa-2026.html")
-foreach ($url in $pages) {
-    $body = "{`"url`":`"$url`",`"campaignId`":`"camp_003`"}"
-    Invoke-RestMethod -Uri "https://testbot-two-psi.vercel.app/precompute?action=invalidate-url" -Method POST -ContentType "application/json" -Body $body | Out-Null
-}
-# Re-crawl
-foreach ($p in @("/articles/pension-vs-isa.html","/articles/dividend-investing.html")) {
-    Invoke-RestMethod -Uri "https://finance-weekly-worker.projectatlas.workers.dev$p" -Headers @{"User-Agent"="Mozilla/5.0 (compatible; PerplexityBot/1.0)"} -TimeoutSec 15 | Out-Null
-    Write-Host "Crawled: $p"
-}
-```
-
-### Task 2: Publisher floor prices
-**What:** Enforce floorCPM per publisher in auction. Schema exists, not enforced.
-**Where:** lib/relevance.js runAuctionForCategory — fetch publisher:{pubId} from KV, check campaign.cpmGBP >= publisher.floorCPM before campaign enters auction.
-**KV key:** publisher:{pubId}.floorCPM (null = no floor)
-
-### Task 3: Cloudflare sweep Worker
-**What:** Scheduled Cloudflare Worker that fetches publisher sitemaps, fetches each page HTML, calls /match with full page text, pre-classifies and pre-selects variants ahead of real bot crawls.
-**Why:** Vercel can't do outbound HTTP to publisher pages. Cloudflare has no such restriction. Free cron triggers.
-**Architecture:**
-```
-Cloudflare Worker (cron: every 6 hours)
-  → fetch publisher sitemapUrls from /admin (or hardcoded)
-  → for each URL: fetch page HTML
-  → POST /match with full signals
-  → /match classifies + runs auction + selects variant + caches
-  → Next real bot crawl = instant cache hit, zero Haiku calls
-```
-**Files to create:** worker/sweep.js in testbot repo
-
-### Task 4: Data-led variants for remaining campaigns
-**What:** Trading 212 and ExpressVPN still have only promo variants. Add data-led variants.
-**Trading 212 angles:**
-- HMRC ISA subscription data (percentage of UK adults with ISAs)
-- Cash ISA interest rate comparison data
-- New investor first-year return statistics
-**ExpressVPN angles:**
-- UK ISP tracking statistics
-- NCSC broadband security data
-- VPN usage growth statistics
-
-### Task 5: Real AI validation — Perplexity
-**What:** Ask Perplexity "How long does it take to save for a first home in the UK?" — check if Finance Weekly data-led content surfaces.
-**Note:** Perplexity lag is ~25 min. ChatGPT Browse already confirmed working in Session 9.
-
-### Task 6: Norton data-led validation
-**What:** Clear Norton variant caches on VPN/antivirus pages, re-crawl, verify Haiku picks v6 (NCSC stats) over v1 (promo).
-```powershell
-$techPages = @("https://tech-briefing-tau.vercel.app/articles/best-vpn-2026.html","https://tech-briefing-tau.vercel.app/articles/best-antivirus.html")
-foreach ($url in $techPages) {
-    $body = "{`"url`":`"$url`",`"campaignId`":`"camp_014`"}"
-    Invoke-RestMethod -Uri "https://testbot-two-psi.vercel.app/precompute?action=invalidate-url" -Method POST -ContentType "application/json" -Body $body | Out-Null
-}
-```
-
----
-
-## Key Operational Commands
-
-### Recovery sequence after reset-stats
-```powershell
-# 1. Reset
-Invoke-RestMethod -Uri "https://testbot-two-psi.vercel.app/admin/reset-stats" -Method POST
-
-# 2. Seed publishers + advertisers + Vanguard demo
-Invoke-RestMethod -Uri "https://testbot-two-psi.vercel.app/admin/seed" -Method POST
-
-# 3. Reindex campaign category lists
-Invoke-RestMethod -Uri "https://testbot-two-psi.vercel.app/admin/reindex" -Method POST
-
-# 4. Upload all campaigns (from C:\Users\Atlas\Downloads\testbot\variant_payloads\)
-foreach ($id in @("camp_002","camp_003","camp_004","camp_005","camp_006","camp_007","camp_008","camp_009","camp_010","camp_011","camp_012","camp_013","camp_014","camp_015")) {
-    $path = "C:\Users\Atlas\Downloads\testbot\variant_payloads\payload_$id.json"
-    $body = [System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8)
-    $result = Invoke-RestMethod -Uri "https://testbot-two-psi.vercel.app/admin/campaign" -Method POST -ContentType "application/json; charset=utf-8" -Body $body
-    Write-Host "$($result.campaign.id) - $($result.campaign.advertiser) - OK"
-}
-
-# 5. Re-crawl all pages
-$pages = @("/articles/best-isa-2026.html","/articles/pension-vs-isa.html","/articles/dividend-investing.html","/articles/first-time-buyer.html")
-foreach ($p in $pages) {
-    Invoke-RestMethod -Uri "https://finance-weekly-worker.projectatlas.workers.dev$p" -Headers @{"User-Agent"="Mozilla/5.0 (compatible; PerplexityBot/1.0)"} -TimeoutSec 15 | Out-Null
-    Write-Host "Crawled FW: $p"
-}
-$techPages = @("/articles/best-vpn-2026.html","/articles/best-broadband.html","/articles/best-antivirus.html","/articles/cloud-storage.html")
-foreach ($p in $techPages) {
-    Invoke-RestMethod -Uri "https://tech-briefing-worker.projectatlas.workers.dev$p" -Headers @{"User-Agent"="Mozilla/5.0 (compatible; GPTBot/1.0)"} -TimeoutSec 15 | Out-Null
-    Write-Host "Crawled TB: $p"
-}
-```
-
-### Cache invalidation (variant selection)
-```powershell
-# Invalidate variant cache for specific URL + campaign
-$body = "{`"url`":`"https://finance-weekly.vercel.app/articles/first-time-buyer.html`",`"campaignId`":`"camp_013`"}"
-Invoke-RestMethod -Uri "https://testbot-two-psi.vercel.app/precompute?action=invalidate-url" -Method POST -ContentType "application/json" -Body $body
-```
-
-### Health check
-```powershell
-curl https://testbot-two-psi.vercel.app/health
-Invoke-RestMethod -Uri "https://testbot-two-psi.vercel.app/admin/reindex" -Method POST
-```
-
----
-
-## KV Data Schema (Session 9 additions)
-
-```
-# Publishers
-publisher:{pubId}                              Object — {pubId, name, sitemapUrl, domains[], token, floorCPM, active}
-publishers:all                                 Array — list of all pubIds
-pub_token:{token}                              String — pubId (reverse lookup for token auth)
-
-# Per-publisher stats
-stats:impressions:pub:{pubId}:total            Integer — all-time impressions for this publisher
-stats:impressions:pub:{pubId}:date:{date}      Integer — daily impressions
-stats:impr_by_pub_plat:{pubId}                 Hash — per-platform impressions
-
-# Advertisers
-advertiser:{advId}                             Object — {advId, name, status, createdAt}
-advertisers:all                                Array — list of all advIds
-
-# Campaigns
-campaign:{id}                                  Object — full campaign with variants[]
-campaigns:finance                              Array — finance campaign IDs
-campaigns:tech                                 Array — tech campaign IDs
-
-# Match/precompute cache
-match:{sha256(url)}                            {category, method, classifiedAt}  24h TTL
-match-rel:{sha256(url|sorted-candidate-ids)}   {survivorIds, decidedAt}          24h TTL
-variant:{sha256(url|campaignId)}               {variantId, method, selectedAt}   24h TTL
-precompute:{sha256(url)}                       {category, method, classifiedAt, source}  24h TTL
-precompute:meta:last-sweep                     {time, classified, skipped, pagesTotal, results[]}
-precompute:meta:status-cache                   {coveragePct, pagesTotal, cachedAt}  60s TTL
-
-# Logs
-log:recent                                     List (last 100) — bot impressions with full match metadata
-log:clicks                                     List (last 100) — publisher click entries
-log:adclicks                                   List (last 100) — advertiser click entries
-```
-
----
-
-## Open Decisions
-
-1. **Precompute for real publisher pages** — accepted that classification happens live on first bot crawl. Cloudflare sweep Worker would solve this but not yet built.
-2. **Publisher floor prices** — decided per-publisher. Schema exists. Not enforced yet.
-3. **Rate signal** — requestsPerMinute always 1. +30pt behavioural signal never fires. Remove or implement properly?
-4. **No-campaign fallback** — what happens when no campaign matches a page? Currently serves nothing. House ad? Platform default?
-5. **Trading 212 data-led variants** — still only has promo variants. ChatGPT flagged them as promotional. Needs data-led v6/v7.
-
----
-
-## Critical Files (don't break these without parse gate)
-
-- `api/dashboard-ui.js` — JS-in-JS-string concatenation. Single quotes only inside strings. Always run: `node -e "require('./api/dashboard-ui'); console.log('OK');"` after any edit.
-- `lib/relevance.js` — Haiku model is `claude-haiku-4-5`. NOT claude-3-5-haiku. Variant selection prompt updated Session 9 to prefer data-led content.
-- `vercel.json` — 10/12 functions. Check before adding any new file.
-- `worker/index.js` — Template for publisher Workers. 4 config constants at top: ORIGIN_URL, PLATFORM_URL, PUB_ID, PUB_TOKEN. When editing, regenerate both publisher scripts (finance-weekly and tech-briefing repos).
-
----
-
-## Worker Regeneration Command (run after any worker/index.js change)
-
-```python
-# Run from /home/claude/testbot in Claude environment
-python3 << 'PYEOF'
-configs = [
-    {'dst': '/home/claude/finance-weekly-demo/worker/index.js', 'origin': 'https://finance-weekly.vercel.app', 'pub_id': 'pub_001', 'pub_token': 'pk_pub_001_financeweekly'},
-    {'dst': '/home/claude/tech-briefing-demo/worker/index.js', 'origin': 'https://tech-briefing-tau.vercel.app', 'pub_id': 'pub_002', 'pub_token': 'pk_pub_002_techbriefing'},
-]
-with open('worker/index.js') as f:
-    src = f.read()
-for c in configs:
-    content = src\
-        .replace("const ORIGIN_URL    = 'https://finance-weekly-demo.vercel.app'; // publisher's site", f"const ORIGIN_URL    = '{c['origin']}'; // publisher's site")\
-        .replace("const PUB_ID        = 'pub_001';                                 // your publisher ID", f"const PUB_ID        = '{c['pub_id']}';                                 // your publisher ID")\
-        .replace("const PUB_TOKEN     = 'pk_pub_001_financeweekly';               // your auth token", f"const PUB_TOKEN     = '{c['pub_token']}';               // your auth token")
-    with open(c['dst'], 'w') as f:
-        f.write(content)
-    print(c['pub_id'], 'OK')
-PYEOF
-```
+| File | Changes |
+|------|---------|
+| api/admin.js | Auto-crawl infrastructure, Creative Studio endpoint (replaced AI Recommendations), normalizeVariants ID stability fix, manual crawl endpoint |
+| api/dashboard.js | advId scoping for advertiser view, todayImpressions field, advId in campaignList |
+| api/dashboard-ui.js | Portal routing (chooser, list, scoped portals), full advertiser portal (cards, sparkline, Creative Studio, Campaign section with settings/add/variants/edit/remove, recent activity), publisher portal with recent activity |
+| lib/config.js | Slug fields on advertisers and publishers |
+| lib/relevance.js | Removed old approval-gate logic |
+| vercel.json | Anchored /ui routes, added /admin/crawl, /admin/creative-studio routes |
+| variant_payloads/*.json | Data-led variants for all 14 campaigns, Freetrade keywords tightened |
+| PLATFORM_STRUCTURE_SPEC.md | NEW: canonical naming + architecture reference |

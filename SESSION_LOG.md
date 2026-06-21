@@ -578,3 +578,52 @@ testbot-worker.projectatlas.workers.dev).
 - 15 campaigns (9 finance, 6 tech), 3 with data-led variants
 - AJ Bell data-led v8 confirmed working via ChatGPT Browse live test
 - GitHub PAT (org-scoped): stored in Claude environment git remote URL — aadithyask99-boop org, repo scope
+
+## Session 10 — Portal Architecture + AI Creative Studio + Platform Structure
+**Date:** 2026-06-21
+**Chat:** Claude.ai (claude.ai chat)
+**Goal:** Build advertiser/publisher portal architecture, AI Creative Studio, fix structural gaps, document the full platform properly.
+
+**What was built:**
+- Portal routing: `/ui` chooser, `/ui/admin`, `/ui/advertiser/{slug}`, `/ui/publisher/{slug}` with 404 handling
+- Scoped advertiser portal: summary cards, spend sparkline, campaign performance table, AI Creative Studio, Campaign section (settings + add creative + variant bank with edit/remove), recent activity
+- Scoped publisher portal: earnings/traffic cards, per-page serving table, recent activity
+- AI Creative Studio: 3-idea input → 2 fact-led + 1 promo output, with input gate (2+ must have figures), output traceability check (drops fabricated numbers), em dash backstop, brand-name-in-numbers exclusion (Trading 212 bug fix)
+- Auto-crawl on variant save (60s delay) + manual Crawl Finance/Tech/All buttons
+- Variant ID stability fix (normalizeVariants preserves existing IDs)
+- Campaign Settings in advertiser portal (CPM, budgets, active toggle, keywords, matching description)
+- Data-led variants added to all 14 campaigns (E*TRADE, Smart Pension, Moneybox, Oppo, Xiaomi, Dropbox)
+- Freetrade keywords tightened
+- advId/pubId fields added to campaign form
+- Total budget column in campaign list
+- PLATFORM_STRUCTURE_SPEC.md created — canonical naming + architecture reference
+
+**Key decisions made:**
+- No Ad Group hierarchy on advertiser side (researched: native ad platforms don't use it, AdWords' own 2026 best practice moved away from it)
+- Yes to Ad Unit/Placement hierarchy on publisher side (Google Ad Manager precedent)
+- Named the auction: "Relevance-Weighted Auction with Dynamic Creative Resolution" / "The Matcher"
+- Revenue stored as integer tenths-of-pence (×1000) for atomicity
+- Variant IDs are stable across saves (only new variants get fresh IDs)
+- AI Creative Studio replaces the old AI Recommendations feature entirely (simpler, safer, no approval-gate complexity)
+- Creative Studio sits ABOVE Campaign section (drafting tool → feeds into live bank)
+- Proposed URL scheme change: drop /ui prefix, split dashboard/analytics pages (NOT YET BUILT)
+
+**Bugs fixed this session:**
+- Revenue share fix from pence to tenths-of-pence (rounding killed platform's 20% cut)
+- Revenue tracking added to api/impression.js (was only in lib/auction.js which wasn't the live path)
+- Variant ID stability: normalizeVariants was reassigning v1..vN on every save
+- Creative Studio: Trading 212 brand name ("212") tripping fabrication safety check
+- Creative Studio: stray quote chars in ideas breaking Haiku prompt parsing
+- Creative Studio: em dash in output (prompt instruction + server-side backstop)
+- /admin/crawl route missing from vercel.json (same pattern as /admin/recommendations)
+- /admin/recommendations routes missing from vercel.json
+- /ui sub-routes not matching (unanchored regex, added ^...$)
+- Add to my variants button silently swallowing errors (empty catch block)
+
+**Where we stopped:**
+- Portal routing works, both portals functional with scoped data
+- Creative Studio works but output quality inconsistent (safety filter sometimes drops good variants)
+- 3 bugs fixed (ID stability, em dash, section restructure)
+- PLATFORM_STRUCTURE_SPEC.md created as canonical reference
+- Migration plan for routing redesign + publisher-side Ad Unit/Placement formalization needed
+- Session docs being updated (this entry)

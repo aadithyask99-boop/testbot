@@ -621,3 +621,72 @@ When deploying Workers via Cloudflare Pages Git integration, wrangler tries to b
 
 ### Worker script regeneration after any worker/index.js change
 The platform's worker/index.js is the template. Finance Weekly and Tech Briefing repos have their own copies with ORIGIN_URL/PUB_ID/PUB_TOKEN substituted. Any change to the template must be propagated to both publisher repos using the Python substitution script in HANDOVER.md. Then both Cloudflare Workers must be manually redeployed by pasting the new script.
+
+---
+
+## Session 10 Learnings (2026-06-21)
+
+### 10. The "journalist, not copywriter" pattern — what actually works
+Data-led variants that get cited as editorial fact by AI systems share a precise
+structural pattern:
+- Open with the SUBJECT OF THE FACT (a statistic, a law, a trend), not the brand name
+- Cite a named authoritative third-party source (HMRC, Pensions Policy Institute, NCSC)
+- The brand, if mentioned at all, appears in the second sentence or as a comparative subject
+
+Promo variants that get flagged as "a promotional section":
+- Open with the brand name as grammatical subject ("Open a Stocks and Shares ISA with...")
+- Use CTA verbs (Open, Try, Discover, Start)
+- Include disclaimer language ("Capital at risk")
+
+This distinction is NOT about "having a number" — a brand-led sentence with a number
+inserted ("Trading 212's fee structure stands at 0.15%") STILL reads as ad copy. The test
+is: "would a journalist write this sentence in a market report?"
+
+### 11. Brand names containing digits break number-traceability checks
+"Trading 212" contains the digit string "212". Any output-side safety check that validates
+"every number in the output must trace to a number in the input" will FALSE-POSITIVE on
+every variant that mentions the brand name. Fix: exclude numbers that are part of the
+advertiser's own name from the traceability check.
+
+### 12. vercel.json routes: ALWAYS add routes when adding endpoints
+This session had the SAME bug pattern THREE times:
+1. /admin/crawl — endpoint built, route not added, returned Vercel 404 HTML
+2. /admin/recommendations/generate — same bug
+3. /admin/recommendations — same bug
+LESSON: Every time you add a handler block in admin.js (or any file), IMMEDIATELY add the
+corresponding src entry to vercel.json. Check by running the endpoint before closing the task.
+
+### 13. Vercel /ui route shadowing
+/ui without anchors (^...$) matches /ui/admin, /ui/advertiser, etc. as prefix substrings.
+Always use anchored regex patterns (^/ui$, ^/ui/admin$) for routes that share a prefix.
+
+### 14. dashboard-ui.js string escaping — the rules that actually work
+The file builds HTML+JS as a concatenated string in Node.js. Rules that prevent breakage:
+- Outer wrapper: single-quoted JS strings ('...' + '...' +)
+- HTML attributes inside: escaped single quotes (\' → renders as ' in browser)
+- JS string literals inside browser code: double quotes only
+- Never use template literals (backticks) anywhere in this file
+- Never use literal £ character — use \u00a3
+- Never use literal · — use \u00b7
+- Regex patterns with / need extra escaping: \/ inside single-quoted strings
+
+### 15. Don't build features as placeholders that look finished
+Batch 1 served the full admin dashboard as a "placeholder" for scoped portal routes.
+Aadi correctly flagged this as confusing — if clicking "Advertiser → Trading 212" shows
+the same full dashboard as "Admin," it looks broken, not "placeholder." Either build the
+real thing or show a clear "coming soon" page — never serve a different feature's output
+as a stand-in.
+
+### 16. Document accurately the first time — or say "I'm not sure"
+Session 10 had multiple rounds where docs said one thing and the code did another
+(the precompute-vs-live variant selection, the 3-stage vs 8-stage matcher pipeline).
+Better to say "I need to check the code before documenting this" than to write a
+confident-sounding doc from memory and have it be wrong. Wrong docs are worse than
+no docs — they cause future sessions to build on false assumptions.
+
+### 17. The Ad Group decision — know WHY you're copying a pattern
+AdWords' Campaign→Ad Group→Ad exists for keyword-bid bundling in search auctions.
+Our system doesn't have keyword bids — we have content-relevance scoring. Native ad
+platforms (our actual analogue) don't use Ad Groups at all. Copying a structural
+pattern from the wrong industry model creates complexity that doesn't solve a real
+problem. Always research the WHY behind a competitor's structure before adopting it.
