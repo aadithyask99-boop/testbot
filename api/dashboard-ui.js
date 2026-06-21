@@ -101,6 +101,11 @@ function navTabsHtml(base, active) {
 // Session 11: scoped advertiser DASHBOARD page — operational view.
 // Cards, AI Creative Studio, Campaign (settings + add creative + variants).
 // Fetches /dashboard?view=advertiser&advId=X, no picker, no cross-advertiser data.
+// Session 11: scoped advertiser DASHBOARD page — operational view.
+// Cards, Campaign (dropdown switcher + per-campaign settings, Creative
+// Studio, and variant bank). Supports multiple campaigns per advertiser —
+// previously every render path hardcoded campaigns[0], which silently
+// hid any campaign beyond the first. Fetches /dashboard?view=advertiser&advId=X.
 function scopedAdvertiserDashboardHtml(adv) {
   var base = '/advertiser/' + encodeURIComponent(adv.slug || '');
   return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">' +
@@ -130,7 +135,7 @@ function scopedAdvertiserDashboardHtml(adv) {
     '.vstat{font-size:11px;color:#888}.vtext{font-size:12px;color:#444;margin-top:4px}' +
     '.topbadge{font-size:10px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:3px;font-weight:600}' +
     '.formrow{display:flex;gap:10px;margin-bottom:10px}' +
-    '.formrow input,.formrow textarea{flex:1;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:inherit}' +
+    '.formrow input,.formrow textarea,.formrow select{flex:1;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:inherit}' +
     '.formrow textarea{resize:vertical;min-height:50px}' +
     'button.btn{background:#111;color:#fff;border:none;padding:8px 16px;border-radius:6px;font-size:13px;cursor:pointer}' +
     'button.btn:hover{background:#333}button.btn:disabled{background:#ccc;cursor:not-allowed}' +
@@ -146,6 +151,11 @@ function scopedAdvertiserDashboardHtml(adv) {
     '.rec.approved{border-color:#16a34a;background:#f0fdf4}' +
     '.rec.rejected{opacity:0.4}' +
     '.tag-approved{font-size:10px;background:#dcfce7;color:#166534;padding:1px 6px;border-radius:3px;font-weight:600}' +
+    '.campsel{padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;font-family:inherit;width:100%;max-width:360px;background:#fff}' +
+    '.actrow{font-size:12px;padding:8px 0;border-bottom:1px solid #f3f3f3;display:flex;justify-content:space-between}' +
+    '.actrow:last-child{border-bottom:none}' +
+    '.actrow .plat{font-weight:600}' +
+    '.newbadge{font-size:10px;background:#e0e7ff;color:#3730a3;padding:1px 6px;border-radius:3px;font-weight:600;margin-left:6px}' +
     '</style></head><body>' +
     '<header><div><h1>' + escapeHtml(adv.name) + '</h1><div class="sub">Advertiser portal</div></div>' +
     '<div><span id="ts"></span> &nbsp; <a href="/ui">switch view</a></div></header>' +
@@ -153,114 +163,232 @@ function scopedAdvertiserDashboardHtml(adv) {
     navTabsHtml(base, 'dashboard') +
     '<div class="grid" id="adv-cards"><div class="empty">Loading...</div></div>' +
 
-    '<section><h2>AI Creative Studio</h2><div class="h2sub">Turn rough ideas into ad copy AI systems are more likely to cite as fact. At least 2 of your 3 ideas need a real stat, fee, or figure \u2014 Haiku will not invent data. Produces 2 fact-led variants (styled like a market report, not an ad) plus 1 honest promotional variant.</div>' +
-    '<div class="formrow"><textarea id="csIdea1" placeholder="Idea 1, e.g. we have 1.6 million users" maxlength="200"></textarea></div>' +
-    '<div class="formrow"><textarea id="csIdea2" placeholder="Idea 2, e.g. our fee is 0.15% vs industry average 0.45%" maxlength="200"></textarea></div>' +
-    '<div class="formrow"><textarea id="csIdea3" placeholder="Idea 3, e.g. simple and easy to use (can be promotional)" maxlength="200"></textarea></div>' +
-    '<div style="display:flex;gap:8px">' +
-    '<button class="btn" onclick="generateCreativeStudio()" id="csGenBtn">Generate variants</button>' +
-    '<button class="btn btnsec" onclick="clearCreativeStudio()">Clear</button>' +
-    '</div>' +
-    '<div class="formmsg" id="csMsg"></div>' +
-    '<div id="csResults" style="margin-top:14px"></div></section>' +
-
-    '<section><h2>Campaign</h2><div class="h2sub">Campaign ID: <span id="campIdLabel">\u2014</span> \u00b7 settings, ad variants, and adding new creatives all live here</div>' +
-    '<div style="font-size:12px;font-weight:600;color:#666;margin:14px 0 8px;text-transform:uppercase;letter-spacing:0.03em">Settings</div>' +
-    '<div class="formrow"><div style="flex:1"><label style="font-size:11px;color:#888">CPM (\u00a3)</label><input type="number" id="setCpm" step="0.01" min="1" onfocus="settingsDirty=true"></div>' +
-    '<div style="flex:1"><label style="font-size:11px;color:#888">Daily budget (\u00a3)</label><input type="number" id="setDailyBudget" step="1" min="1" onfocus="settingsDirty=true"></div>' +
-    '<div style="flex:1"><label style="font-size:11px;color:#888">Total budget (\u00a3)</label><input type="number" id="setTotalBudget" step="1" min="1" onfocus="settingsDirty=true"></div>' +
-    '<div style="flex:1"><label style="font-size:11px;color:#888">Status</label><select id="setActive" onfocus="settingsDirty=true" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px"><option value="true">Active</option><option value="false">Paused</option></select></div></div>' +
-    '<div class="formrow"><div style="flex:1"><label style="font-size:11px;color:#888">Keywords (comma-separated)</label><input type="text" id="setKeywords" onfocus="settingsDirty=true"></div></div>' +
-    '<div class="formrow"><div style="flex:1"><label style="font-size:11px;color:#888">Matching description</label><textarea id="setMatchDesc" maxlength="300" onfocus="settingsDirty=true"></textarea></div></div>' +
-    '<button class="btn" onclick="saveSettings()" id="saveSettingsBtn">Save settings</button>' +
-    '<div class="formmsg" id="setMsg"></div>' +
-    '<div style="font-size:12px;font-weight:600;color:#666;margin:20px 0 8px;text-transform:uppercase;letter-spacing:0.03em">Add a creative</div>' +
-    '<div class="h2sub" style="margin-bottom:8px">New variants are auto-crawled within 60 seconds of saving</div>' +
-    '<div class="formrow"><input type="text" id="newAngle" placeholder="Angle, e.g. data-led: cost comparison" maxlength="60"></div>' +
-    '<div class="formrow"><textarea id="newText" placeholder="Ad copy (max 280 characters)" maxlength="280" oninput="document.getElementById(\'newTextCount\').textContent=this.value.length+\'/280\'"></textarea></div>' +
-    '<div class="charcount" id="newTextCount">0/280</div>' +
-    '<button class="btn" onclick="addCreative()" id="addCreativeBtn">Add creative</button>' +
-    '<div class="formmsg" id="addCreativeMsg"></div>' +
-    '<div style="font-size:12px;font-weight:600;color:#666;margin:20px 0 8px;text-transform:uppercase;letter-spacing:0.03em">Ad variants</div>' +
-    '<div class="h2sub" style="margin-bottom:8px">Top performer marked \u00b7 minimum 5 variants required</div>' +
-    '<div id="adv-variants"><div class="empty">Loading...</div></div></section>' +
+    '<section><h2>Campaign</h2><div class="h2sub">Pick a campaign, or add a new one. Creative Studio, settings, and the variant bank are all scoped to the selected campaign.</div>' +
+    '<div class="formrow" style="margin-bottom:16px"><div style="flex:1;max-width:360px">' +
+    '<select id="campSelect" class="campsel" onchange="selectCampaign(this.value)"><option value="">Loading campaigns...</option></select>' +
+    '</div></div>' +
+    '<div id="campBody"><div class="empty">Loading...</div></div>' +
+    '</section>' +
 
     '</main>' +
     '<script>' +
     'var ADV_ID="' + escapeHtml(adv.advId) + '";' +
-    'var CAMP_ID=null;' +
+    'var ADV_NAME="' + escapeHtml(adv.name) + '";' +
+    'var ADV_SLUG="' + escapeHtml(adv.advSlug || adv.slug || '') + '";' +
+    'var CAMPAIGNS=[];' +
+    'var SELECTED_CAMP_ID=null;' +
+    'var IS_NEW_CAMPAIGN=false;' +
     'var settingsDirty=false;' +
+    'var stagedVariants=[];' +
     'function fmt(n){return (n||0).toLocaleString("en-GB");}' +
     'function money(n){return "\u00a3"+(n||0).toFixed(2);}' +
     'function card(label,val,sub,cls){return "<div class=\'card "+(cls||"")+"\'><div class=\'v\'>"+val+"</div><div class=\'l\'>"+label+"</div>"+(sub?"<div class=\'s\'>"+sub+"</div>":"")+"</div>";}' +
+    'function nextCampaignId(){' +
+    '  var nums=CAMPAIGNS.map(function(c){var m=/camp_(\\d+)/.exec(c.id);return m?parseInt(m[1],10):0;});' +
+    '  var max=nums.length?Math.max.apply(null,nums):0;' +
+    '  var n=max+1;' +
+    '  return "camp_"+String(n).padStart(3,"0");' +
+    '}' +
     'function load(){' +
     '  fetch("/dashboard?view=advertiser&advId="+encodeURIComponent(ADV_ID)).then(function(r){return r.json();}).then(function(d){' +
-    '    var agg=d.aggregate||{},camps=d.campaigns||[];' +
-    '    var totalSpend=camps.reduce(function(a,c){return a+(c.totalSpendGBP||0);},0);' +
-    '    var totalImpr=camps.reduce(function(a,c){return a+(c.impressions||0);},0);' +
-    '    var activeCamp=camps[0];' +
-    '    if(activeCamp)CAMP_ID=activeCamp.id;' +
-    '    if(activeCamp&&!settingsDirty){' +
-    '      document.getElementById("campIdLabel").textContent=activeCamp.id;' +
-    '      document.getElementById("setCpm").value=activeCamp.cpmGBP;' +
-    '      document.getElementById("setDailyBudget").value=activeCamp.budgetDailyGBP;' +
-    '      document.getElementById("setTotalBudget").value=activeCamp.budgetTotalGBP;' +
-    '      document.getElementById("setKeywords").value=(activeCamp.keywords||[]).join(", ");' +
-    '      document.getElementById("setMatchDesc").value=activeCamp.matchingDescription||"";' +
-    '      document.getElementById("setActive").value=activeCamp.active?"true":"false";' +
-    '    }' +
-    '    var dailyPct=activeCamp?activeCamp.dailyBudgetUsedPct:0;' +
-    '    var budgetWarn=dailyPct>=80;' +
+    '    var agg=d.aggregate||{};' +
+    '    CAMPAIGNS=d.campaigns||[];' +
+    '    var totalSpend=CAMPAIGNS.reduce(function(a,c){return a+(c.totalSpendGBP||0);},0);' +
+    '    var totalImpr=CAMPAIGNS.reduce(function(a,c){return a+(c.impressions||0);},0);' +
+    '    var anyActive=CAMPAIGNS.some(function(c){return c.active;});' +
     '    document.getElementById("adv-cards").innerHTML=' +
-    '      card("Status",activeCamp&&activeCamp.active?"Active":"Paused","CPM \u00a3"+(activeCamp?activeCamp.cpmGBP:0),activeCamp&&activeCamp.active?"green":"")+' +
+    '      card("Status",anyActive?"Active":"Paused",CAMPAIGNS.length+" campaign"+(CAMPAIGNS.length===1?"":"s"),anyActive?"green":"")+' +
     '      card("Total impressions",fmt(totalImpr),fmt(agg.totalViewable||0)+" viewable","blue")+' +
-    '      card("Total spend",money(totalSpend),"vCPM "+money(agg.blendedVcpmGBP||0),"green")+' +
-    '      card("Daily budget used",dailyPct+"%",money(activeCamp?activeCamp.dailySpendGBP:0)+" / "+money(activeCamp?activeCamp.budgetDailyGBP:0),budgetWarn?"warn":"")+' +
-    '      (budgetWarn?card("\u26a0 Approaching cap","",dailyPct>=100?"Daily budget exhausted":"Within "+(100-dailyPct)+"% of daily cap","warn"):"");' +
-    '    var variants=(activeCamp&&activeCamp.variantBreakdown)||[];' +
-    '    if(variants.length){' +
-    '      var topPct=Math.max.apply(null,variants.map(function(v){return v.pct||0;}));' +
-    '      var canDelete=(activeCamp.variants||[]).length>5;' +
-    '      document.getElementById("adv-variants").innerHTML=variants.map(function(v){' +
-    '        var src=(activeCamp.variants||[]).find(function(x){return x.id===v.id;});' +
-    '        var isTop=v.pct===topPct&&topPct>0;' +
-    '        var delBtn=canDelete?("<button class=\'btnsec\' style=\'font-size:11px;padding:3px 8px;float:right;margin-left:6px\' onclick=\'deleteVariant(\\""+v.id+"\\",this)\'>Remove</button>"):("<span style=\'font-size:10px;color:#bbb;float:right\'>min 5 required</span>");' +
-    '        var editBtn="<button class=\'btnsec\' style=\'font-size:11px;padding:3px 8px;float:right\' onclick=\'editVariant(\\""+v.id+"\\")\'>Edit</button>";' +
-    '        var editForm="<div id=\'edit-"+v.id+"\' style=\'display:none;margin-top:8px\'>"+' +
-    '          "<input type=\'text\' id=\'editAngle-"+v.id+"\' value=\'"+(src?src.angle.replace(/\'/g,"&#39;"):"")+"\' maxlength=\'60\' style=\'width:100%;margin-bottom:6px;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:12px\'>"+' +
-    '          "<textarea id=\'editText-"+v.id+"\' maxlength=\'280\' style=\'width:100%;min-height:50px;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:12px\'>"+(src?src.text:"")+"</textarea>"+' +
-    '          "<div style=\'margin-top:6px\'><button class=\'btn\' style=\'font-size:11px;padding:4px 10px\' onclick=\'saveVariantEdit(\\""+v.id+"\\",this)\'>Save</button> "+' +
-    '          "<button class=\'btnsec\' style=\'font-size:11px;padding:4px 10px\' onclick=\'cancelEditVariant(\\""+v.id+"\\")\'>Cancel</button></div></div>";' +
-    '        return "<div class=\'vrow\' id=\'row-"+v.id+"\'>"+delBtn+editBtn+"<div class=\'vangle\'>"+(v.angle||v.id)+(isTop?" <span class=\'topbadge\'>TOP PERFORMER</span>":"")+"</div>" +' +
-    '          "<div class=\'vstat\'>"+fmt(v.impressions)+" impr \u00b7 "+v.pct+"%</div>" +' +
-    '          "<div class=\'vtext\' id=\'text-"+v.id+"\'>"+(src?src.text:"")+"</div>"+editForm+"</div>";' +
-    '      }).join("");' +
-    '    }else{document.getElementById("adv-variants").innerHTML="<div class=\'empty\'>No variants yet</div>";}' +
+    '      card("Total spend",money(totalSpend),"vCPM "+money(agg.blendedVcpmGBP||0),"green");' +
+    '    renderCampaignPicker();' +
     '    document.getElementById("ts").textContent="Updated "+new Date().toLocaleTimeString("en-GB");' +
     '  }).catch(function(e){document.getElementById("ts").textContent="Error: "+e.message;});' +
     '}' +
-    'function addCreative(){' +
+    'function renderCampaignPicker(){' +
+    '  var sel=document.getElementById("campSelect");' +
+    '  var prevValue=sel.value;' +
+    '  var html=CAMPAIGNS.map(function(c){return "<option value=\'"+c.id+"\'>"+(c.id)+" \u2014 "+(c.category||"")+" \u00b7 \u00a3"+c.cpmGBP+" CPM"+(c.active?"":" (paused)")+"</option>";}).join("");' +
+    '  html+="<option value=\'__new__\'>+ Add new campaign</option>";' +
+    '  sel.innerHTML=html;' +
+    '  if(IS_NEW_CAMPAIGN){sel.value="__new__";return;}' +
+    '  if(SELECTED_CAMP_ID&&CAMPAIGNS.some(function(c){return c.id===SELECTED_CAMP_ID;})){' +
+    '    sel.value=SELECTED_CAMP_ID;renderCampaignBody();return;' +
+    '  }' +
+    '  if(CAMPAIGNS.length>0){' +
+    '    sel.value=CAMPAIGNS[0].id;selectCampaign(CAMPAIGNS[0].id);' +
+    '  }else{' +
+    '    sel.value="__new__";selectCampaign("__new__");' +
+    '  }' +
+    '}' +
+    'function selectCampaign(val){' +
+    '  settingsDirty=false;' +
+    '  if(val==="__new__"){' +
+    '    IS_NEW_CAMPAIGN=true;SELECTED_CAMP_ID=null;stagedVariants=[];' +
+    '  }else{' +
+    '    IS_NEW_CAMPAIGN=false;SELECTED_CAMP_ID=val;' +
+    '  }' +
+    '  renderCampaignBody();' +
+    '}' +
+    'function getSelectedCampaign(){' +
+    '  return CAMPAIGNS.find(function(c){return c.id===SELECTED_CAMP_ID;})||null;' +
+    '}' +
+    'function renderCampaignBody(){' +
+    '  var body=document.getElementById("campBody");' +
+    '  if(IS_NEW_CAMPAIGN){body.innerHTML=newCampaignHtml();attachNewCampaignCharCounters();return;}' +
+    '  var camp=getSelectedCampaign();' +
+    '  if(!camp){body.innerHTML="<div class=\'empty\'>Campaign not found.</div>";return;}' +
+    '  body.innerHTML=existingCampaignHtml(camp);' +
+    '  loadCampaignActivity(camp.id);' +
+    '}' +
+    'function existingCampaignHtml(camp){' +
+    '  var kw=(camp.keywords||[]).join(", ");' +
+    '  var html="";' +
+    '  html+="<div style=\'font-size:12px;font-weight:600;color:#666;margin:14px 0 8px;text-transform:uppercase;letter-spacing:0.03em\'>Settings</div>";' +
+    '  html+="<div class=\'formrow\'><div style=\'flex:1\'><label style=\'font-size:11px;color:#888\'>CPM (\u00a3)</label><input type=\'number\' id=\'setCpm\' step=\'0.01\' min=\'1\' value=\'"+camp.cpmGBP+"\' onfocus=\'settingsDirty=true\'></div>" +' +
+    '    "<div style=\'flex:1\'><label style=\'font-size:11px;color:#888\'>Daily budget (\u00a3)</label><input type=\'number\' id=\'setDailyBudget\' step=\'1\' min=\'1\' value=\'"+camp.budgetDailyGBP+"\' onfocus=\'settingsDirty=true\'></div>" +' +
+    '    "<div style=\'flex:1\'><label style=\'font-size:11px;color:#888\'>Total budget (\u00a3)</label><input type=\'number\' id=\'setTotalBudget\' step=\'1\' min=\'1\' value=\'"+camp.budgetTotalGBP+"\' onfocus=\'settingsDirty=true\'></div>" +' +
+    '    "<div style=\'flex:1\'><label style=\'font-size:11px;color:#888\'>Status</label><select id=\'setActive\' onfocus=\'settingsDirty=true\' style=\'width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px\'><option value=\'true\'"+(camp.active?" selected":"")+">Active</option><option value=\'false\'"+(camp.active?"":" selected")+">Paused</option></select></div></div>";' +
+    '  html+="<div class=\'formrow\'><div style=\'flex:1\'><label style=\'font-size:11px;color:#888\'>Keywords (comma-separated)</label><input type=\'text\' id=\'setKeywords\' value=\'"+kw.replace(/\'/g,"&#39;")+"\' onfocus=\'settingsDirty=true\'></div></div>";' +
+    '  html+="<div class=\'formrow\'><div style=\'flex:1\'><label style=\'font-size:11px;color:#888\'>Matching description</label><textarea id=\'setMatchDesc\' maxlength=\'300\' onfocus=\'settingsDirty=true\'>"+(camp.matchingDescription||"")+"</textarea></div></div>";' +
+    '  html+="<button class=\'btn\' onclick=\'saveSettings()\' id=\'saveSettingsBtn\'>Save settings</button> <button class=\'btn btnsec\' style=\'color:#dc2626;border-color:#fecaca\' onclick=\'deleteCampaign()\'>Delete campaign</button>";' +
+    '  html+="<div class=\'formmsg\' id=\'setMsg\'></div>";' +
+    '  html+="<div style=\'font-size:12px;font-weight:600;color:#666;margin:24px 0 8px;text-transform:uppercase;letter-spacing:0.03em\'>AI Creative Studio</div>";' +
+    '  html+="<div class=\'h2sub\' style=\'margin-bottom:8px\'>Turn rough ideas into ad copy AI systems are more likely to cite as fact. At least 2 of your 3 ideas need a real stat, fee, or figure \u2014 Haiku will not invent data. Generated variants are added directly to this campaign\'s bank below.</div>";' +
+    '  html+="<div class=\'formrow\'><textarea id=\'csIdea1\' placeholder=\'Idea 1, e.g. we have 1.6 million users\' maxlength=\'200\'></textarea></div>";' +
+    '  html+="<div class=\'formrow\'><textarea id=\'csIdea2\' placeholder=\'Idea 2, e.g. our fee is 0.15% vs industry average 0.45%\' maxlength=\'200\'></textarea></div>";' +
+    '  html+="<div class=\'formrow\'><textarea id=\'csIdea3\' placeholder=\'Idea 3, e.g. simple and easy to use (can be promotional)\' maxlength=\'200\'></textarea></div>";' +
+    '  html+="<div style=\'display:flex;gap:8px\'><button class=\'btn\' onclick=\'generateCreativeStudio()\' id=\'csGenBtn\'>Generate variants</button><button class=\'btn btnsec\' onclick=\'clearCreativeStudio()\'>Clear</button></div>";' +
+    '  html+="<div class=\'formmsg\' id=\'csMsg\'></div><div id=\'csResults\' style=\'margin-top:14px\'></div>";' +
+    '  html+="<div style=\'font-size:12px;font-weight:600;color:#666;margin:24px 0 8px;text-transform:uppercase;letter-spacing:0.03em\'>Add a creative</div>";' +
+    '  html+="<div class=\'h2sub\' style=\'margin-bottom:8px\'>New variants are auto-crawled within 60 seconds of saving</div>";' +
+    '  html+="<div class=\'formrow\'><input type=\'text\' id=\'newAngle\' placeholder=\'Angle, e.g. data-led: cost comparison\' maxlength=\'60\'></div>";' +
+    '  html+="<div class=\'formrow\'><textarea id=\'newText\' placeholder=\'Ad copy (max 280 characters)\' maxlength=\'280\' oninput=\'document.getElementById(\\"newTextCount\\").textContent=this.value.length+\\"/280\\"\'></textarea></div>";' +
+    '  html+="<div class=\'charcount\' id=\'newTextCount\'>0/280</div>";' +
+    '  html+="<button class=\'btn\' onclick=\'addCreative()\' id=\'addCreativeBtn\'>Add creative</button>";' +
+    '  html+="<div class=\'formmsg\' id=\'addCreativeMsg\'></div>";' +
+    '  html+="<div style=\'font-size:12px;font-weight:600;color:#666;margin:24px 0 8px;text-transform:uppercase;letter-spacing:0.03em\'>Ad variants</div>";' +
+    '  html+="<div class=\'h2sub\' style=\'margin-bottom:8px\'>Top performer marked \u00b7 minimum 5 variants required</div>";' +
+    '  html+="<div id=\'adv-variants\'>"+renderVariantRows(camp)+"</div>";' +
+    '  html+="<div style=\'font-size:12px;font-weight:600;color:#666;margin:24px 0 8px;text-transform:uppercase;letter-spacing:0.03em\'>Recent activity</div>";' +
+    '  html+="<div class=\'h2sub\' style=\'margin-bottom:8px\'>AI crawlers that have visited pages where this campaign competes</div>";' +
+    '  html+="<div id=\'camp-activity\'><div class=\'empty\'>Loading...</div></div>";' +
+    '  return html;' +
+    '}' +
+    'function renderVariantRows(camp){' +
+    '  var variants=camp.variantBreakdown||[];' +
+    '  if(!variants.length)return "<div class=\'empty\'>No variants yet</div>";' +
+    '  var topPct=Math.max.apply(null,variants.map(function(v){return v.pct||0;}));' +
+    '  var canDelete=(camp.variants||[]).length>5;' +
+    '  return variants.map(function(v){' +
+    '    var src=(camp.variants||[]).find(function(x){return x.id===v.id;});' +
+    '    var isTop=v.pct===topPct&&topPct>0;' +
+    '    var delBtn=canDelete?("<button class=\'btnsec\' style=\'font-size:11px;padding:3px 8px;float:right;margin-left:6px\' onclick=\'deleteVariant(\\""+v.id+"\\",this)\'>Remove</button>"):("<span style=\'font-size:10px;color:#bbb;float:right\'>min 5 required</span>");' +
+    '    var editBtn="<button class=\'btnsec\' style=\'font-size:11px;padding:3px 8px;float:right\' onclick=\'editVariant(\\""+v.id+"\\")\'>Edit</button>";' +
+    '    var editForm="<div id=\'edit-"+v.id+"\' style=\'display:none;margin-top:8px\'>"+' +
+    '      "<input type=\'text\' id=\'editAngle-"+v.id+"\' value=\'"+(src?src.angle.replace(/\'/g,"&#39;"):"")+"\' maxlength=\'60\' style=\'width:100%;margin-bottom:6px;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:12px\'>"+' +
+    '      "<textarea id=\'editText-"+v.id+"\' maxlength=\'280\' style=\'width:100%;min-height:50px;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:12px\'>"+(src?src.text:"")+"</textarea>"+' +
+    '      "<div style=\'margin-top:6px\'><button class=\'btn\' style=\'font-size:11px;padding:4px 10px\' onclick=\'saveVariantEdit(\\""+v.id+"\\",this)\'>Save</button> "+' +
+    '      "<button class=\'btnsec\' style=\'font-size:11px;padding:4px 10px\' onclick=\'cancelEditVariant(\\""+v.id+"\\")\'>Cancel</button></div></div>";' +
+    '    return "<div class=\'vrow\' id=\'row-"+v.id+"\'>"+delBtn+editBtn+"<div class=\'vangle\'>"+(v.angle||v.id)+(isTop?" <span class=\'topbadge\'>TOP PERFORMER</span>":"")+"</div>" +' +
+    '      "<div class=\'vstat\'>"+fmt(v.impressions)+" impr \u00b7 "+v.pct+"%</div>" +' +
+    '      "<div class=\'vtext\' id=\'text-"+v.id+"\'>"+(src?src.text:"")+"</div>"+editForm+"</div>";' +
+    '  }).join("");' +
+    '}' +
+    'function loadCampaignActivity(campId){' +
+    '  fetch("/dashboard?view=advertiser&advId="+encodeURIComponent(ADV_ID)+"&campaignId="+encodeURIComponent(campId)).then(function(r){return r.json();}).then(function(d){' +
+    '    var el=document.getElementById("camp-activity");if(!el)return;' +
+    '    var matches=(d.recentMatches||[]).filter(function(m){return m.campaignId===campId;});' +
+    '    if(!matches.length){el.innerHTML="<div class=\'empty\'>No crawler activity yet</div>";return;}' +
+    '    el.innerHTML=matches.slice(0,10).map(function(m){' +
+    '      var url=(function(u){try{return new URL(u||"/").pathname;}catch(e){return u||"/";}})(m.url);' +
+    '      var outcome=m.served?("<span style=\'color:#16a34a\'>won \u2014 "+(m.variantAngle||"")+"</span>"):"<span style=\'color:#999\'>did not win</span>";' +
+    '      var ago=(function(t){if(!t)return "\u2014";var s=Math.floor((Date.now()-new Date(t).getTime())/1000);if(s<60)return s+"s ago";if(s<3600)return Math.floor(s/60)+"m ago";return Math.floor(s/3600)+"h ago";})(m.time);' +
+    '      return "<div class=\'actrow\'><div><span class=\'plat\'>"+(m.platform||"unknown")+"</span> visited "+url+"<br>"+outcome+"</div><div>"+ago+"</div></div>";' +
+    '    }).join("");' +
+    '  }).catch(function(){var el=document.getElementById("camp-activity");if(el)el.innerHTML="<div class=\'empty\'>Could not load activity</div>";});' +
+    '}' +
+    'function newCampaignHtml(){' +
+    '  var html="";' +
+    '  html+="<div style=\'font-size:12px;font-weight:600;color:#666;margin:14px 0 8px;text-transform:uppercase;letter-spacing:0.03em\'>New campaign <span class=\'newbadge\'>NOT SAVED YET</span></div>";' +
+    '  html+="<div class=\'formrow\'><div style=\'flex:1\'><label style=\'font-size:11px;color:#888\'>Category</label><select id=\'newCat\' class=\'campsel\' style=\'max-width:none\'><option value=\'finance\'>finance</option><option value=\'tech\'>tech</option></select></div>" +' +
+    '    "<div style=\'flex:1\'><label style=\'font-size:11px;color:#888\'>CPM (\u00a3)</label><input type=\'number\' id=\'newCpm\' step=\'0.01\' min=\'1\' value=\'10\'></div>" +' +
+    '    "<div style=\'flex:1\'><label style=\'font-size:11px;color:#888\'>Daily budget (\u00a3)</label><input type=\'number\' id=\'newDailyBudget\' step=\'1\' min=\'1\' value=\'50\'></div>" +' +
+    '    "<div style=\'flex:1\'><label style=\'font-size:11px;color:#888\'>Total budget (\u00a3)</label><input type=\'number\' id=\'newTotalBudget\' step=\'1\' min=\'1\' value=\'500\'></div></div>";' +
+    '  html+="<div class=\'formrow\'><div style=\'flex:1\'><label style=\'font-size:11px;color:#888\'>Keywords (comma-separated)</label><input type=\'text\' id=\'newKeywords\' placeholder=\'isa, pension, investment\'></div></div>";' +
+    '  html+="<div class=\'formrow\'><div style=\'flex:1\'><label style=\'font-size:11px;color:#888\'>Matching description</label><textarea id=\'newMatchDesc\' maxlength=\'300\' placeholder=\'One sentence \u2014 geography and topic\'></textarea></div></div>";' +
+    '  html+="<div style=\'font-size:12px;font-weight:600;color:#666;margin:24px 0 8px;text-transform:uppercase;letter-spacing:0.03em\'>AI Creative Studio</div>";' +
+    '  html+="<div class=\'h2sub\' style=\'margin-bottom:8px\'>Draft your first variants before saving \u2014 at least 5 are required to create the campaign. At least 2 of your 3 ideas need a real stat, fee, or figure.</div>";' +
+    '  html+="<div class=\'formrow\'><textarea id=\'csIdea1\' placeholder=\'Idea 1, e.g. we have 1.6 million users\' maxlength=\'200\'></textarea></div>";' +
+    '  html+="<div class=\'formrow\'><textarea id=\'csIdea2\' placeholder=\'Idea 2, e.g. our fee is 0.15% vs industry average 0.45%\' maxlength=\'200\'></textarea></div>";' +
+    '  html+="<div class=\'formrow\'><textarea id=\'csIdea3\' placeholder=\'Idea 3, e.g. simple and easy to use (can be promotional)\' maxlength=\'200\'></textarea></div>";' +
+    '  html+="<div style=\'display:flex;gap:8px\'><button class=\'btn\' onclick=\'generateCreativeStudio()\' id=\'csGenBtn\'>Generate variants</button><button class=\'btn btnsec\' onclick=\'clearCreativeStudio()\'>Clear</button></div>";' +
+    '  html+="<div class=\'formmsg\' id=\'csMsg\'></div><div id=\'csResults\' style=\'margin-top:14px\'></div>";' +
+    '  html+="<div style=\'font-size:12px;font-weight:600;color:#666;margin:24px 0 8px;text-transform:uppercase;letter-spacing:0.03em\'>Add a creative</div>";' +
+    '  html+="<div class=\'formrow\'><input type=\'text\' id=\'newAngle\' placeholder=\'Angle, e.g. data-led: cost comparison\' maxlength=\'60\'></div>";' +
+    '  html+="<div class=\'formrow\'><textarea id=\'newText\' placeholder=\'Ad copy (max 280 characters)\' maxlength=\'280\'></textarea></div>";' +
+    '  html+="<div class=\'charcount\' id=\'newTextCount\'>0/280</div>";' +
+    '  html+="<button class=\'btn\' onclick=\'addStagedCreative()\' id=\'addCreativeBtn\'>Add creative</button>";' +
+    '  html+="<div class=\'formmsg\' id=\'addCreativeMsg\'></div>";' +
+    '  html+="<div style=\'font-size:12px;font-weight:600;color:#666;margin:24px 0 8px;text-transform:uppercase;letter-spacing:0.03em\'>Staged variants <span id=\'stagedCount\'>(0/5 minimum)</span></div>";' +
+    '  html+="<div id=\'staged-variants\'>"+renderStagedRows()+"</div>";' +
+    '  html+="<div style=\'margin-top:20px\'><button class=\'btn\' id=\'createCampBtn\' onclick=\'createCampaign()\' disabled>Create campaign</button> <button class=\'btn btnsec\' onclick=\'cancelNewCampaign()\'>Cancel</button></div>";' +
+    '  html+="<div class=\'formmsg\' id=\'createCampMsg\'></div>";' +
+    '  return html;' +
+    '}' +
+    'function attachNewCampaignCharCounters(){' +
+    '  var t=document.getElementById("newText");' +
+    '  if(t)t.oninput=function(){var c=document.getElementById("newTextCount");if(c)c.textContent=this.value.length+"/280";};' +
+    '}' +
+    'function renderStagedRows(){' +
+    '  if(!stagedVariants.length)return "<div class=\'empty\'>No variants staged yet</div>";' +
+    '  return stagedVariants.map(function(v,idx){' +
+    '    return "<div class=\'vrow\'><button class=\'btnsec\' style=\'font-size:11px;padding:3px 8px;float:right\' onclick=\'removeStagedVariant("+idx+")\'>Remove</button>" +' +
+    '      "<div class=\'vangle\'>"+v.angle+"</div><div class=\'vtext\'>"+v.text+"</div></div>";' +
+    '  }).join("");' +
+    '}' +
+    'function refreshStagedDisplay(){' +
+    '  var el=document.getElementById("staged-variants");if(el)el.innerHTML=renderStagedRows();' +
+    '  var countEl=document.getElementById("stagedCount");if(countEl)countEl.textContent="("+stagedVariants.length+"/5 minimum)";' +
+    '  var btn=document.getElementById("createCampBtn");if(btn)btn.disabled=stagedVariants.length<5;' +
+    '}' +
+    'function addStagedCreative(){' +
     '  var angle=document.getElementById("newAngle").value.trim();' +
     '  var text=document.getElementById("newText").value.trim();' +
     '  var msg=document.getElementById("addCreativeMsg");' +
     '  if(!angle||!text){msg.textContent="Both fields are required.";msg.style.color="#dc2626";return;}' +
-    '  if(!CAMP_ID){msg.textContent="No campaign loaded yet \u2014 try again in a moment.";msg.style.color="#dc2626";return;}' +
-    '  var btn=document.getElementById("addCreativeBtn");btn.disabled=true;btn.textContent="Saving...";' +
-    '  fetch("/dashboard?view=advertiser&advId="+encodeURIComponent(ADV_ID)).then(function(r){return r.json();}).then(function(d){' +
-    '    var camp=(d.campaigns||[])[0];if(!camp)throw new Error("Campaign not found");' +
-    '    var newVariants=(camp.variants||[]).concat([{angle:angle,text:text}]);' +
-    '    var body={id:camp.id,advId:camp.advId,advertiser:camp.advertiser,category:camp.category,cpmGBP:camp.cpmGBP,' +
-    '      budgetDailyGBP:camp.budgetDailyGBP,budgetTotalGBP:camp.budgetTotalGBP,keywords:camp.keywords,' +
-    '      matchingDescription:camp.matchingDescription,variants:newVariants,link:camp.link,linkText:camp.linkText,' +
-    '      advSlug:camp.advSlug,active:camp.active};' +
-    '    return fetch("/admin/campaign",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});' +
-    '  }).then(function(r){return r.json();}).then(function(res){' +
-    '    if(res.error){msg.textContent="Error: "+res.error;msg.style.color="#dc2626";}' +
-    '    else{msg.textContent="Creative added. "+(res.autoCrawl||"");msg.style.color="#16a34a";' +
-    '      document.getElementById("newAngle").value="";document.getElementById("newText").value="";' +
-    '      document.getElementById("newTextCount").textContent="0/280";load();}' +
-    '    btn.disabled=false;btn.textContent="Add creative";' +
-    '  }).catch(function(e){msg.textContent="Error: "+e.message;msg.style.color="#dc2626";btn.disabled=false;btn.textContent="Add creative";});' +
+    '  if(stagedVariants.length>=15){msg.textContent="Maximum 15 variants.";msg.style.color="#dc2626";return;}' +
+    '  stagedVariants.push({angle:angle,text:text});' +
+    '  document.getElementById("newAngle").value="";document.getElementById("newText").value="";' +
+    '  document.getElementById("newTextCount").textContent="0/280";' +
+    '  msg.textContent="Staged.";msg.style.color="#16a34a";' +
+    '  refreshStagedDisplay();' +
+    '}' +
+    'function removeStagedVariant(idx){stagedVariants.splice(idx,1);refreshStagedDisplay();}' +
+    'function cancelNewCampaign(){stagedVariants=[];IS_NEW_CAMPAIGN=false;renderCampaignPicker();}' +
+    'function createCampaign(){' +
+    '  var msg=document.getElementById("createCampMsg");' +
+    '  if(stagedVariants.length<5){msg.textContent="At least 5 variants are required.";msg.style.color="#dc2626";return;}' +
+    '  var category=document.getElementById("newCat").value;' +
+    '  var cpm=parseFloat(document.getElementById("newCpm").value);' +
+    '  var daily=parseFloat(document.getElementById("newDailyBudget").value);' +
+    '  var total=parseFloat(document.getElementById("newTotalBudget").value);' +
+    '  var kw=document.getElementById("newKeywords").value.split(",").map(function(s){return s.trim();}).filter(Boolean);' +
+    '  var desc=document.getElementById("newMatchDesc").value.trim();' +
+    '  if(!cpm||cpm<1){msg.textContent="CPM must be at least \u00a31.";msg.style.color="#dc2626";return;}' +
+    '  if(!daily||!total){msg.textContent="Daily and total budget are required.";msg.style.color="#dc2626";return;}' +
+    '  if(kw.length===0){msg.textContent="At least one keyword is required.";msg.style.color="#dc2626";return;}' +
+    '  var id=nextCampaignId();' +
+    '  var btn=document.getElementById("createCampBtn");btn.disabled=true;btn.textContent="Creating...";' +
+    '  var body={id:id,advId:ADV_ID,advertiser:ADV_NAME,category:category,cpmGBP:cpm,' +
+    '    budgetDailyGBP:daily,budgetTotalGBP:total,keywords:kw,matchingDescription:desc,' +
+    '    variants:stagedVariants,link:"",linkText:"Learn more",advSlug:ADV_SLUG,active:true};' +
+    '  fetch("/admin/campaign",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})' +
+    '    .then(function(r){return r.json();}).then(function(res){' +
+    '    if(res.error){msg.textContent=res.error;msg.style.color="#dc2626";btn.disabled=false;btn.textContent="Create campaign";return;}' +
+    '    stagedVariants=[];IS_NEW_CAMPAIGN=false;SELECTED_CAMP_ID=id;' +
+    '    msg.textContent="Campaign created.";msg.style.color="#16a34a";' +
+    '    load();' +
+    '  }).catch(function(e){msg.textContent="Error: "+e.message;msg.style.color="#dc2626";btn.disabled=false;btn.textContent="Create campaign";});' +
     '}' +
     'function generateCreativeStudio(){' +
     '  var i1=document.getElementById("csIdea1").value.trim();' +
@@ -270,7 +398,7 @@ function scopedAdvertiserDashboardHtml(adv) {
     '  if(!i1||!i2||!i3){msg.textContent="All 3 idea fields are required.";msg.style.color="#dc2626";return;}' +
     '  var btn=document.getElementById("csGenBtn");btn.disabled=true;btn.textContent="Generating... (~10-15s)";' +
     '  fetch("/admin/creative-studio",{method:"POST",headers:{"Content-Type":"application/json"},' +
-    '    body:JSON.stringify({advertiser:"' + escapeHtml(adv.name) + '",ideas:[i1,i2,i3]})})' +
+    '    body:JSON.stringify({advertiser:ADV_NAME,ideas:[i1,i2,i3]})})' +
     '  .then(function(r){return r.json();}).then(function(d){' +
     '    btn.disabled=false;btn.textContent="Generate variants";' +
     '    if(d.error){msg.textContent=d.error;msg.style.color="#dc2626";document.getElementById("csResults").innerHTML="";return;}' +
@@ -288,8 +416,51 @@ function scopedAdvertiserDashboardHtml(adv) {
     '  document.getElementById("csIdea1").value="";document.getElementById("csIdea2").value="";document.getElementById("csIdea3").value="";' +
     '  document.getElementById("csMsg").textContent="";document.getElementById("csResults").innerHTML="";window.__csVariants=[];' +
     '}' +
+    'function addStudioVariant(idx,btn){' +
+    '  var v=(window.__csVariants||[])[idx];if(!v){if(btn)btn.textContent="Error: no variant data";return;}' +
+    '  if(IS_NEW_CAMPAIGN){' +
+    '    stagedVariants.push({angle:v.angle,text:v.text});' +
+    '    if(btn){btn.textContent="\\u2713 Added";btn.style.background="#16a34a";btn.disabled=true;}' +
+    '    refreshStagedDisplay();' +
+    '    return;' +
+    '  }' +
+    '  var camp=getSelectedCampaign();if(!camp){if(btn)btn.textContent="Error: no campaign loaded";return;}' +
+    '  if(btn){btn.disabled=true;btn.textContent="Adding...";}' +
+    '  var newVariants=(camp.variants||[]).concat([{angle:v.angle,text:v.text}]);' +
+    '  var body={id:camp.id,advId:camp.advId,advertiser:camp.advertiser,category:camp.category,cpmGBP:camp.cpmGBP,' +
+    '    budgetDailyGBP:camp.budgetDailyGBP,budgetTotalGBP:camp.budgetTotalGBP,keywords:camp.keywords,' +
+    '    matchingDescription:camp.matchingDescription,variants:newVariants,link:camp.link,linkText:camp.linkText,' +
+    '    advSlug:camp.advSlug,active:camp.active};' +
+    '  fetch("/admin/campaign",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})' +
+    '    .then(function(r){return r.json();}).then(function(res){' +
+    '    if(res.error){if(btn){btn.disabled=false;btn.textContent="Failed: "+res.error;}return;}' +
+    '    if(btn){btn.textContent="\\u2713 Added";btn.style.background="#16a34a";}' +
+    '    load();' +
+    '  }).catch(function(e){if(btn){btn.disabled=false;btn.textContent="Failed: "+e.message;}});' +
+    '}' +
+    'function addCreative(){' +
+    '  var angle=document.getElementById("newAngle").value.trim();' +
+    '  var text=document.getElementById("newText").value.trim();' +
+    '  var msg=document.getElementById("addCreativeMsg");' +
+    '  if(!angle||!text){msg.textContent="Both fields are required.";msg.style.color="#dc2626";return;}' +
+    '  var camp=getSelectedCampaign();if(!camp){msg.textContent="No campaign loaded yet \u2014 try again in a moment.";msg.style.color="#dc2626";return;}' +
+    '  var btn=document.getElementById("addCreativeBtn");btn.disabled=true;btn.textContent="Saving...";' +
+    '  var newVariants=(camp.variants||[]).concat([{angle:angle,text:text}]);' +
+    '  var body={id:camp.id,advId:camp.advId,advertiser:camp.advertiser,category:camp.category,cpmGBP:camp.cpmGBP,' +
+    '    budgetDailyGBP:camp.budgetDailyGBP,budgetTotalGBP:camp.budgetTotalGBP,keywords:camp.keywords,' +
+    '    matchingDescription:camp.matchingDescription,variants:newVariants,link:camp.link,linkText:camp.linkText,' +
+    '    advSlug:camp.advSlug,active:camp.active};' +
+    '  fetch("/admin/campaign",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})' +
+    '    .then(function(r){return r.json();}).then(function(res){' +
+    '    if(res.error){msg.textContent="Error: "+res.error;msg.style.color="#dc2626";}' +
+    '    else{msg.textContent="Creative added. "+(res.autoCrawl||"");msg.style.color="#16a34a";' +
+    '      document.getElementById("newAngle").value="";document.getElementById("newText").value="";' +
+    '      document.getElementById("newTextCount").textContent="0/280";load();}' +
+    '    btn.disabled=false;btn.textContent="Add creative";' +
+    '  }).catch(function(e){msg.textContent="Error: "+e.message;msg.style.color="#dc2626";btn.disabled=false;btn.textContent="Add creative";});' +
+    '}' +
     'function saveSettings(){' +
-    '  if(!CAMP_ID)return;' +
+    '  var camp=getSelectedCampaign();if(!camp)return;' +
     '  var cpm=parseFloat(document.getElementById("setCpm").value);' +
     '  var daily=parseFloat(document.getElementById("setDailyBudget").value);' +
     '  var total=parseFloat(document.getElementById("setTotalBudget").value);' +
@@ -301,13 +472,11 @@ function scopedAdvertiserDashboardHtml(adv) {
     '  if(!daily||!total){msg.textContent="Daily and total budget are required.";msg.style.color="#dc2626";return;}' +
     '  if(kw.length===0){msg.textContent="At least one keyword is required.";msg.style.color="#dc2626";return;}' +
     '  var btn=document.getElementById("saveSettingsBtn");btn.disabled=true;btn.textContent="Saving...";' +
-    '  fetch("/dashboard?view=advertiser&advId="+encodeURIComponent(ADV_ID)).then(function(r){return r.json();}).then(function(d){' +
-    '    var camp=(d.campaigns||[])[0];if(!camp)throw new Error("Campaign not found");' +
-    '    var body={id:camp.id,advId:camp.advId,advertiser:camp.advertiser,category:camp.category,' +
-    '      cpmGBP:cpm,budgetDailyGBP:daily,budgetTotalGBP:total,keywords:kw,matchingDescription:desc,' +
-    '      variants:camp.variants,link:camp.link,linkText:camp.linkText,advSlug:camp.advSlug,active:isActive};' +
-    '    return fetch("/admin/campaign",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});' +
-    '  }).then(function(r){return r.json();}).then(function(res){' +
+    '  var body={id:camp.id,advId:camp.advId,advertiser:camp.advertiser,category:camp.category,' +
+    '    cpmGBP:cpm,budgetDailyGBP:daily,budgetTotalGBP:total,keywords:kw,matchingDescription:desc,' +
+    '    variants:camp.variants,link:camp.link,linkText:camp.linkText,advSlug:camp.advSlug,active:isActive};' +
+    '  fetch("/admin/campaign",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})' +
+    '    .then(function(r){return r.json();}).then(function(res){' +
     '    btn.disabled=false;btn.textContent="Save settings";' +
     '    if(res.error){msg.textContent=res.error;msg.style.color="#dc2626";return;}' +
     '    msg.textContent="Settings saved.";msg.style.color="#16a34a";settingsDirty=false;load();' +
@@ -325,54 +494,42 @@ function scopedAdvertiserDashboardHtml(adv) {
     '  var angle=document.getElementById("editAngle-"+id).value.trim();' +
     '  var text=document.getElementById("editText-"+id).value.trim();' +
     '  if(!angle||!text){alert("Both angle and text are required.");return;}' +
-    '  if(!CAMP_ID)return;' +
+    '  var camp=getSelectedCampaign();if(!camp)return;' +
     '  btn.disabled=true;btn.textContent="Saving...";' +
-    '  fetch("/dashboard?view=advertiser&advId="+encodeURIComponent(ADV_ID)).then(function(r){return r.json();}).then(function(d){' +
-    '    var camp=(d.campaigns||[])[0];if(!camp)throw new Error("Campaign not found");' +
-    '    var newVariants=(camp.variants||[]).map(function(v){return v.id===id?{id:v.id,angle:angle,text:text}:v;});' +
-    '    var body={id:camp.id,advId:camp.advId,advertiser:camp.advertiser,category:camp.category,cpmGBP:camp.cpmGBP,' +
-    '      budgetDailyGBP:camp.budgetDailyGBP,budgetTotalGBP:camp.budgetTotalGBP,keywords:camp.keywords,' +
-    '      matchingDescription:camp.matchingDescription,variants:newVariants,link:camp.link,linkText:camp.linkText,' +
-    '      advSlug:camp.advSlug,active:camp.active};' +
-    '    return fetch("/admin/campaign",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});' +
-    '  }).then(function(r){return r.json();}).then(function(res){' +
+    '  var newVariants=(camp.variants||[]).map(function(v){return v.id===id?{id:v.id,angle:angle,text:text}:v;});' +
+    '  var body={id:camp.id,advId:camp.advId,advertiser:camp.advertiser,category:camp.category,cpmGBP:camp.cpmGBP,' +
+    '    budgetDailyGBP:camp.budgetDailyGBP,budgetTotalGBP:camp.budgetTotalGBP,keywords:camp.keywords,' +
+    '    matchingDescription:camp.matchingDescription,variants:newVariants,link:camp.link,linkText:camp.linkText,' +
+    '    advSlug:camp.advSlug,active:camp.active};' +
+    '  fetch("/admin/campaign",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})' +
+    '    .then(function(r){return r.json();}).then(function(res){' +
     '    if(res.error){btn.disabled=false;btn.textContent="Save";alert(res.error);return;}' +
     '    load();' +
     '  }).catch(function(e){btn.disabled=false;btn.textContent="Save";alert("Error: "+e.message);});' +
     '}' +
     'function deleteVariant(variantId,btn){' +
-    '  if(!CAMP_ID||!confirm("Remove this variant? This cannot be undone."))return;' +
+    '  var camp=getSelectedCampaign();if(!camp||!confirm("Remove this variant? This cannot be undone."))return;' +
     '  btn.disabled=true;btn.textContent="Removing...";' +
-    '  fetch("/dashboard?view=advertiser&advId="+encodeURIComponent(ADV_ID)).then(function(r){return r.json();}).then(function(d){' +
-    '    var camp=(d.campaigns||[])[0];if(!camp)throw new Error("Campaign not found");' +
-    '    var newVariants=(camp.variants||[]).filter(function(v){return v.id!==variantId;});' +
-    '    if(newVariants.length<5){btn.disabled=false;btn.textContent="Remove";alert("Cannot remove \u2014 minimum 5 variants required.");return;}' +
-    '    var body={id:camp.id,advId:camp.advId,advertiser:camp.advertiser,category:camp.category,cpmGBP:camp.cpmGBP,' +
-    '      budgetDailyGBP:camp.budgetDailyGBP,budgetTotalGBP:camp.budgetTotalGBP,keywords:camp.keywords,' +
-    '      matchingDescription:camp.matchingDescription,variants:newVariants,link:camp.link,linkText:camp.linkText,' +
-    '      advSlug:camp.advSlug,active:camp.active};' +
-    '    return fetch("/admin/campaign",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});' +
-    '  }).then(function(r){return r?r.json():null;}).then(function(res){' +
+    '  var newVariants=(camp.variants||[]).filter(function(v){return v.id!==variantId;});' +
+    '  if(newVariants.length<5){btn.disabled=false;btn.textContent="Remove";alert("Cannot remove \u2014 minimum 5 variants required.");return;}' +
+    '  var body={id:camp.id,advId:camp.advId,advertiser:camp.advertiser,category:camp.category,cpmGBP:camp.cpmGBP,' +
+    '    budgetDailyGBP:camp.budgetDailyGBP,budgetTotalGBP:camp.budgetTotalGBP,keywords:camp.keywords,' +
+    '    matchingDescription:camp.matchingDescription,variants:newVariants,link:camp.link,linkText:camp.linkText,' +
+    '    advSlug:camp.advSlug,active:camp.active};' +
+    '  fetch("/admin/campaign",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})' +
+    '    .then(function(r){return r?r.json():null;}).then(function(res){' +
     '    if(res&&res.error){btn.disabled=false;btn.textContent="Failed";alert(res.error);return;}' +
     '    if(res)load();' +
     '  }).catch(function(e){btn.disabled=false;btn.textContent="Remove";alert("Error: "+e.message);});' +
     '}' +
-    'function addStudioVariant(idx,btn){' +
-    '  var v=(window.__csVariants||[])[idx];if(!v||!CAMP_ID){if(btn)btn.textContent="Error: no campaign loaded";return;}' +
-    '  if(btn){btn.disabled=true;btn.textContent="Adding...";}' +
-    '  fetch("/dashboard?view=advertiser&advId="+encodeURIComponent(ADV_ID)).then(function(r){return r.json();}).then(function(d){' +
-    '    var camp=(d.campaigns||[])[0];if(!camp)throw new Error("Campaign not found");' +
-    '    var newVariants=(camp.variants||[]).concat([{angle:v.angle,text:v.text}]);' +
-    '    var body={id:camp.id,advId:camp.advId,advertiser:camp.advertiser,category:camp.category,cpmGBP:camp.cpmGBP,' +
-    '      budgetDailyGBP:camp.budgetDailyGBP,budgetTotalGBP:camp.budgetTotalGBP,keywords:camp.keywords,' +
-    '      matchingDescription:camp.matchingDescription,variants:newVariants,link:camp.link,linkText:camp.linkText,' +
-    '      advSlug:camp.advSlug,active:camp.active};' +
-    '    return fetch("/admin/campaign",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});' +
-    '  }).then(function(r){return r.json();}).then(function(res){' +
-    '    if(res.error){if(btn){btn.disabled=false;btn.textContent="Failed: "+res.error;}return;}' +
-    '    if(btn){btn.textContent="\\u2713 Added";btn.style.background="#16a34a";}' +
-    '    load();' +
-    '  }).catch(function(e){if(btn){btn.disabled=false;btn.textContent="Failed: "+e.message;}});' +
+    'function deleteCampaign(){' +
+    '  var camp=getSelectedCampaign();if(!camp)return;' +
+    '  if(!confirm("Delete campaign "+camp.id+"? This cannot be undone."))return;' +
+    '  fetch("/admin/campaign/delete",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:camp.id})})' +
+    '    .then(function(r){return r.json();}).then(function(res){' +
+    '    if(res.error){alert(res.error);return;}' +
+    '    SELECTED_CAMP_ID=null;load();' +
+    '  }).catch(function(e){alert("Error: "+e.message);});' +
     '}' +
     'load();setInterval(load,15000);' +
     '</script></body></html>';
@@ -419,8 +576,8 @@ function scopedAdvertiserAnalyticsHtml(adv) {
     '<div class="spark" id="adv-spark"></div></section>' +
 
     '<section><h2>Campaign performance</h2><div class="h2sub">Where your ad is currently serving</div>' +
-    '<table><thead><tr><th>Page</th><th>Variant served</th><th>Method</th><th>Last crawl</th></tr></thead>' +
-    '<tbody id="adv-board"><tr><td colspan="4" class="empty">Loading...</td></tr></tbody></table></section>' +
+    '<table><thead><tr><th>Page</th><th>Campaign</th><th>Variant served</th><th>Method</th><th>Last crawl</th></tr></thead>' +
+    '<tbody id="adv-board"><tr><td colspan="5" class="empty">Loading...</td></tr></tbody></table></section>' +
 
     '<section><h2>Recent activity</h2><div class="h2sub">AI crawlers that have visited pages where you compete</div>' +
     '<div id="adv-activity"><div class="empty">Loading...</div></div></section>' +
@@ -437,10 +594,12 @@ function scopedAdvertiserAnalyticsHtml(adv) {
     '    if(board.length){' +
     '      document.getElementById("adv-board").innerHTML=board.map(function(p){' +
     '        var url=urlPath(p.url);' +
+    '        var camp=camps.find(function(c){return c.id===p.servingId;});' +
+    '        var campLabel=camp?camp.id:"\u2014";' +
     '        var variant=p.servingId?(p.variantAngle||"\u2014"):"<span style=\'color:#ccc\'>not serving</span>";' +
-    '        return "<tr><td style=\'font-family:monospace;font-size:12px\'>"+url+"</td><td>"+variant+"</td><td>"+(p.matchMethod||"\u2014")+"</td><td>"+ago(p.lastCrawl)+"</td></tr>";' +
+    '        return "<tr><td style=\'font-family:monospace;font-size:12px\'>"+url+"</td><td style=\'font-family:monospace;font-size:12px\'>"+campLabel+"</td><td>"+variant+"</td><td>"+(p.matchMethod||"\u2014")+"</td><td>"+ago(p.lastCrawl)+"</td></tr>";' +
     '      }).join("");' +
-    '    }else{document.getElementById("adv-board").innerHTML="<tr><td colspan=\'4\' class=\'empty\'>No pages yet</td></tr>";}' +
+    '    }else{document.getElementById("adv-board").innerHTML="<tr><td colspan=\'5\' class=\'empty\'>No pages yet</td></tr>";}' +
     '    if(matches.length){' +
     '      document.getElementById("adv-activity").innerHTML=matches.slice(0,10).map(function(m){' +
     '        var url=urlPath(m.url);' +

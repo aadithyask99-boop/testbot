@@ -209,123 +209,117 @@ When an advertiser saves a campaign with new/changed variants:
 
 ---
 
-## PART 4 — ADVERTISER PORTAL (Current State)
+## PART 4 — ADVERTISER PORTAL (Current State, Session 11)
 
-**URL:** `/ui/advertiser/{slug}` (e.g. `/ui/advertiser/trading-212`)
-**Scoped by:** `advId` — only shows data for this one advertiser
-**Polling:** auto-refreshes every 15 seconds
-**Data source:** `GET /dashboard?view=advertiser&advId={advId}`
+**Routing (Session 11):** `/advertiser/{slug}/dashboard` (operational) and
+`/advertiser/{slug}/analytics` (performance) — see Part 13. Both pages
+share a `Dashboard | Analytics` tab nav, fetch the same
+`GET /dashboard?view=advertiser&advId={advId}` endpoint, and render
+disjoint subsets of the response. Polling: every 15 seconds on both pages.
 
-### Section 1: Summary Cards (top row, 4-5 cards in a grid)
+### DASHBOARD page (`/advertiser/{slug}/dashboard`)
 
-| Card | Main value | Subtitle | Color | Notes |
-|------|-----------|----------|-------|-------|
-| Status | "Active" or "Paused" | "CPM £{cpmGBP}" | Green if active | — |
-| Total impressions | formatted number | "{viewable} viewable" | Blue | — |
-| Total spend | "£{totalSpendGBP}" | "vCPM £{blendedVcpmGBP}" | Green | — |
-| Daily budget used | "{pct}%" | "£{dailySpend} / £{dailyBudget}" | Default, or amber if ≥80% | — |
-| ⚠ Approaching cap | (empty) | "Daily budget exhausted" or "Within {n}% of daily cap" | Amber | ONLY appears if daily budget used ≥ 80% |
+#### Section 1: Summary Cards (top row, grid)
+| Card | Main value | Subtitle | Color |
+|------|-----------|----------|-------|
+| Status | "Active" or "Paused" (ANY campaign active) | "{N} campaigns" | Green if any active |
+| Total impressions | formatted number | "{viewable} viewable" | Blue |
+| Total spend | "£{totalSpendGBP}" | "vCPM £{blendedVcpmGBP}" | Green |
 
-### Section 2: Spend Sparkline
-- Label: "Spend, last 7 days" with subtitle "Daily spend trend"
-- 7 vertical bars, green (`#bbf7d0`), heights proportional to value
-- **KNOWN ISSUE:** Currently uses SIMULATED data (random variance around
-  today's actual spend), NOT real daily historical series. Real daily
-  spend series are not yet stored in KV. Fixing this requires adding
-  `spend:daily:{campaignId}:{date}` reads for the past 7 days.
+All three aggregated across ALL of this advertiser's campaigns. The
+per-campaign daily-budget-cap warning card (previously Section 1's 4th/5th
+cards) moved into the Campaign dropdown's selected-campaign settings view,
+since budget caps are inherently per-campaign, not advertiser-wide.
 
-### Section 3: Campaign Performance Table
-- Label: "Campaign performance" with subtitle "Where your ad is currently serving"
-- Table columns: Page | Variant served | Method | Last crawl
-- Page: monospace font, shows URL path only (strips domain)
-- Variant served: the variant angle text, or "not serving" in grey
-- Method: how the match was made (e.g. "keyword", "haiku")
-- Last crawl: relative time (e.g. "3m ago", "2h ago")
+#### Section 2: Campaign (the main working area — multi-campaign, Session 11)
 
-### Section 4: AI Creative Studio
-- Label: "AI Creative Studio" with subtitle explaining the 2+1 output model
-- **3 textarea inputs**, each with maxlength=200:
-  - Placeholder 1: "Idea 1, e.g. we have 1.6 million users"
-  - Placeholder 2: "Idea 2, e.g. our fee is 0.15% vs industry average 0.45%"
-  - Placeholder 3: "Idea 3, e.g. simple and easy to use (can be promotional)"
-- **2 buttons side by side:**
-  - [Generate variants] (black, primary) — calls `/admin/creative-studio`
-  - [Clear] (white, secondary) — clears all 3 inputs + results
-- **Message area** (`#csMsg`) — shows success/error after generation
-- **Results area** (`#csResults`) — appears after generation:
-  - Each result is a card (`.rec` class) containing:
-    - Angle label + badge: green "FACT-LED" or amber "PROMO"
-    - Variant text
-    - [Add to my variants] button — on click: disabled → "Adding..." → "✓ Added" (green, stays disabled)
-  - Up to 3 results (2 fact-led + 1 promo), may be fewer if safety filter drops some
+**Why this changed:** the backend (`campaignList` in `api/dashboard.js`)
+always supported multiple campaigns per `advId` — every campaign object is
+independently keyed in KV. The UI simply never surfaced more than the
+first (`campaigns[0]`, hardcoded in every render path). This was flagged
+as a known gap in Part 8 prior to this session. Fixing it was pulled
+forward from Part 17 §3 (Add/Remove Campaign UI) ahead of its original
+position in the build order, because the planned left-sidebar layout work
+depends on Campaign's real multi-campaign shape.
 
-**Creative Studio safety model (server-side, in `api/admin.js`):**
-1. INPUT GATE: count ideas containing figures (regex: digits, million/billion/thousand).
-   If fewer than 2 of 3 → refuse with error, no Haiku call made.
-2. Quote sanitisation: strip `"` `"` `"` from ideas before embedding in prompt.
-3. Haiku call with journalist-vs-copywriter prompt (see Part 7 for full prompt text).
-4. OUTPUT SAFETY: `outputTraceable()` checks every number in output traces to input.
-   Numbers in brand name excluded (e.g. "212" in "Trading 212").
-   Years (2024-2026) excluded. Untraceable → variant dropped.
-5. Em dash backstop: `stripEmDash()` replaces `—` with `, ` in output text.
-6. Null-text filter: variants with null/empty text are dropped (for honest "skipped" slots).
+**Campaign dropdown** (`#campSelect`, single `<select>` — minimalist
+choice over cards or tabs, confirmed explicitly with Aadi over those
+alternatives):
+- One `<option>` per existing campaign: `{id} — {category} · £{cpm} CPM`
+  (+ `(paused)` suffix if inactive)
+- Final option: `+ Add new campaign`
+- `onchange="selectCampaign(this.value)"` re-renders `#campBody` for the
+  selected campaign, or the new-campaign creation form
+- Auto-selects the first campaign in the list on initial load
 
-### Section 5: Campaign (contains 3 sub-sections)
+**Selecting an existing campaign** renders `#campBody` scoped to that
+campaign's `id` (replacing the old global `CAMP_ID` singleton):
+- **Settings** — CPM, daily/total budget, keywords, matching description,
+  active/paused, dirty-flag guarded (`onfocus="settingsDirty=true"`,
+  unchanged behavior from Session 10, now keyed per-campaign)
+- **AI Creative Studio** — **moved inside Campaign this session,
+  reversing the Session 10 decision** ("Creative Studio sits ABOVE
+  Campaign section — drafting tool → feeds into live bank", documented in
+  SESSION_LOG.md Session 10 and the original structural diagram). New
+  decision, explicit from Aadi: "creative studio should be under each
+  campaign and once they generate variants it gets added to the
+  variants." 3 ideas in, 2 fact-led + 1 promo out — same Haiku
+  prompt/safety model as before (Part 7, unchanged). "Add to my variants"
+  now writes directly into the SELECTED campaign's variant bank via
+  `POST /admin/campaign`, never a platform-wide pool.
+- **Ad variants** — variant bank for the selected campaign only
+  (view/edit/remove, min-5 floor enforced on removal, unchanged UI)
+- **Recent activity** — `recentMatches` filtered to the selected
+  `campaignId` specifically (new `campaignId` query param added to
+  `GET /dashboard?view=advertiser` this session — narrows the existing
+  advId-level filter further; falls back to advertiser-wide scope if the
+  param is absent or doesn't belong to this advId, a security boundary so
+  a crafted `campaignId` can't leak another advertiser's activity)
+- **Delete campaign** button (red, confirm dialog) — calls the
+  already-existing `POST /admin/campaign/delete` (built Session 4, never
+  had a UI button until now)
 
-#### Sub-section 5a: Settings
-- Label divider: "SETTINGS" (uppercase, grey, small)
-- **4 fields in a row:**
-  - CPM (£): number input, step 0.01, min 1, `id="setCpm"`
-  - Daily budget (£): number input, step 1, min 1, `id="setDailyBudget"`
-  - Total budget (£): number input, step 1, min 1, `id="setTotalBudget"`
-  - Status: dropdown (`<select>`), options "Active" / "Paused", `id="setActive"`
-- **Keywords row:** text input, comma-separated, `id="setKeywords"`
-- **Matching description row:** textarea, maxlength 300, `id="setMatchDesc"`
-- [Save settings] button (black, primary) — `id="saveSettingsBtn"`
-- Message area `#setMsg` — shows "Settings saved." in green or error in red
-- **Dirty-flag guard:** all 5 fields + dropdown have `onfocus="settingsDirty=true"`.
-  While `settingsDirty=true`, auto-refresh does NOT overwrite these fields
-  (prevents clobbering in-progress edits). Reset to false on successful save.
-- **Pre-populated on load** from campaign data (cpmGBP, budgetDailyGBP, etc.)
+**Selecting "+ Add new campaign"** renders a creation flow, same visual
+shape as the Settings/Creative Studio/Variants stack above but unsaved:
+- Blank form: category (finance/tech dropdown), CPM, daily/total budget,
+  keywords, matching description
+- AI Creative Studio works immediately, but "Add to my variants" and "Add
+  a creative" write to a browser-side `stagedVariants` array in memory,
+  NOT to KV — there's no campaign `id` yet to attach them to
+- **Staged variants list** with a live `(N/5 minimum)` counter, each row
+  removable before save
+- **[Create campaign]** button — disabled until 5+ variants are staged
+  (matches the existing removal floor, confirmed explicitly with Aadi).
+  On click: computes the next free `camp_NNN` ID from currently-loaded
+  campaign IDs client-side, then `POST /admin/campaign` with the full
+  payload including staged variants — reuses the existing endpoint
+  unchanged (it already handles create-or-update transparently; no new
+  backend endpoint was needed). On success, the new campaign appears in
+  the dropdown and becomes selected.
 
-#### Sub-section 5b: Add a Creative
-- Label divider: "ADD A CREATIVE" (uppercase, grey, small)
-- Subtitle: "New variants are auto-crawled within 60 seconds of saving"
-- **Angle input:** text, maxlength 60, placeholder "Angle, e.g. data-led: cost comparison"
-- **Text textarea:** maxlength 280, placeholder "Ad copy (max 280 characters)"
-- **Character counter:** "0/280" below textarea, updates on input
-- [Add creative] button (black) — `id="addCreativeBtn"`
-- Message area `#addCreativeMsg` — shows success + auto-crawl status, or error
-- On success: clears both fields, resets char counter, triggers `load()` refresh
+### ANALYTICS page (`/advertiser/{slug}/analytics`)
 
-#### Sub-section 5c: Ad Variants
-- Label divider: "AD VARIANTS" (uppercase, grey, small)
-- Subtitle: "Top performer marked · minimum 5 variants required"
-- **Each variant row (`.vrow`):**
-  - **Remove button** (top-right, float right): "Remove" — confirm dialog,
-    disabled if variant count ≤ 5 (shows "min 5 required" text instead).
-    On click: disabled → "Removing..." → removes variant from campaign → refreshes.
-  - **Edit button** (top-right, float right, left of Remove): "Edit" —
-    toggles inline edit form (see below).
-  - **Angle label** (bold, 12px) + "TOP PERFORMER" badge (amber background)
-    if this variant has the highest impression percentage and pct > 0
-  - **Stats line:** "{impressions} impr · {pct}%"
-  - **Variant text** (12px, grey-ish #444)
-  - **Inline edit form** (hidden by default, shown when Edit clicked):
-    - Angle input (pre-filled with current angle, maxlength 60)
-    - Text textarea (pre-filled with current text, maxlength 280)
-    - [Save] button — updates the variant in-place, refreshes on success
-    - [Cancel] button — hides the edit form, shows the text again
+#### Section 1: Spend Sparkline
+- Unchanged from Session 10. Still SIMULATED daily variance, not a real
+  historical series — open issue, see Part 16.
 
-### Section 6: Recent Activity
-- Label: "Recent activity" with subtitle "AI crawlers that have visited
-  pages where you compete"
-- **Each activity row (`.actrow`):**
-  - Left side: **Platform name** (bold) + " visited " + page URL path
-    + line break + outcome: green "won — {variantAngle}" or grey "did not win"
-  - Right side: relative timestamp ("3m ago")
-- Shows last 10 entries, scoped to this advId's campaigns
-- Data source: `recentMatches` from dashboard API
+#### Section 2: Campaign Performance Table
+- Columns: Page | **Campaign** | Variant served | Method | Last crawl
+- **Campaign column added this session** (confirmed explicitly with
+  Aadi) — with multiple campaigns now visible per advertiser, rows were
+  previously indistinguishable. Looks up
+  `camps.find(c => c.id === p.servingId)` and renders the campaign `id`
+  in monospace, or `—` if nothing is currently serving that page.
+- Aggregated across ALL campaigns — this is the cross-campaign rollup;
+  per-campaign detail lives in the Dashboard page's Campaign dropdown.
+
+#### Section 3: Recent Activity
+- Unchanged in shape — advertiser-wide (all campaigns pooled), last 10
+  entries. This is deliberately a DIFFERENT scope from the new
+  per-campaign Recent Activity living inside the Dashboard page's Campaign
+  section — one is "everything happening for this advertiser," the other
+  is "everything happening for this one campaign I'm looking at." Both
+  intentional, not a duplication.
 
 ---
 
@@ -510,13 +504,13 @@ position on EVERY save, which broke Remove and Edit. DO NOT REGRESS.
 | POST | /admin/creative-studio | `{ advertiser, ideas: [3 strings] }` |
 | GET | /ad | Fetch current creative for a category (legacy) |
 
-### Missing operations (NOT YET BUILT)
-- **Add Campaign UI** — no form in any portal to create a new campaign.
-  Currently done via raw `POST /admin/campaign` or JSON payload files.
-- **Remove Campaign UI** — no button in the advertiser portal to delete.
-  Currently via `POST /admin/campaign/delete` only.
-- **Campaign list view** — if an advertiser has multiple campaigns, there's
-  no UI to see them all and switch between them.
+### Missing operations — RESOLVED Session 11
+- ~~Add Campaign UI~~ — ✅ built (Dashboard page Campaign dropdown, "+ Add
+  new campaign" option). See Part 4 and Part 17 §3.
+- ~~Remove Campaign UI~~ — ✅ built (Delete campaign button in the
+  selected campaign's Settings). See Part 4 and Part 17 §3.
+- ~~Campaign list view~~ — ✅ built (the dropdown itself IS the list/switch
+  UI — every campaign for this `advId` is enumerated as an option).
 
 ---
 
@@ -629,29 +623,40 @@ Two Workers deployed:
 
 ## PART 13 — PORTAL ROUTING
 
-### Current routing
+### Current routing (Session 11 — built)
 | URL | What | Handler |
 |-----|------|---------|
-| `/ui` | Chooser (3 links: Advertiser/Publisher/Admin) | dashboard-ui.js |
-| `/ui/admin` | Full operator dashboard (3 tabs) | dashboard-ui.js |
-| `/ui/advertiser` | List of 15 advertisers | dashboard-ui.js |
-| `/ui/advertiser/{slug}` | Scoped advertiser portal | dashboard-ui.js |
-| `/ui/publisher` | List of 2 publishers | dashboard-ui.js |
-| `/ui/publisher/{slug}` | Scoped publisher portal | dashboard-ui.js |
-| Unknown slug | 404 page | dashboard-ui.js |
+| `/ui` | Chooser ONLY (3 links: Advertiser/Publisher/Admin) | dashboard-ui.js |
+| `/admin/dashboard` | Full operator dashboard (3 tabs, unsplit — banner notes split pending) | dashboard-ui.js |
+| `/admin/analytics` | Same as above — content split not yet built (Part 6) | dashboard-ui.js |
+| `/advertiser` | List of advertisers, links to `/dashboard` | dashboard-ui.js |
+| `/advertiser/{slug}/dashboard` | Scoped advertiser portal — operational (Campaign dropdown, settings, Creative Studio, variants) | dashboard-ui.js |
+| `/advertiser/{slug}/analytics` | Scoped advertiser portal — performance (sparkline, campaign performance table incl. Campaign column, recent activity) | dashboard-ui.js |
+| `/publisher` | List of publishers, links to `/dashboard` | dashboard-ui.js |
+| `/publisher/{slug}/dashboard` | Scoped publisher portal — operational (earnings, serving by page) | dashboard-ui.js |
+| `/publisher/{slug}/analytics` | Scoped publisher portal — performance (recent activity only; thin until Part 17 §2 Ad Unit/Placement lands) | dashboard-ui.js |
+| Unknown slug | 404 page, links back to `/advertiser` or `/publisher` | dashboard-ui.js |
 
-All `/ui` routes anchored with `^...$` in vercel.json to prevent prefix matching.
+All slug + dashboard/analytics routes anchored with `^...$` in vercel.json.
+`view` (dashboard/analytics) and `slug` are both passed as query params via
+`dest` rewrites — NOT parsed from `req.url` path segments, since Vercel's
+legacy `routes`-array `dest` rewrite behavior for `req.url` inside the
+handler isn't reliably verifiable from outside a live deploy. Matches the
+proven convention from the original `/ui/advertiser/{slug}` route.
 
-### Proposed routing (NOT YET BUILT)
-```
-/advertiser/{slug}/dashboard   — operational (settings, variants, Creative Studio)
-/advertiser/{slug}/analytics   — deeper performance data
-/publisher/{slug}/dashboard    — operational (earnings, serving status)
-/publisher/{slug}/analytics    — traffic trends, crawl activity
-/admin/dashboard               — daily operations (all campaigns, all publishers)
-/admin/analytics               — platform-level performance trends
-```
-Drop `/ui` prefix entirely. Split single portal page into dashboard + analytics.
+**Known shadowing bug found and fixed during this build:** `^/dashboard$`
+(the JSON data API route) was previously unanchored as `/dashboard`, which
+would have substring-matched `/admin/dashboard`, `/advertiser/{slug}/
+dashboard`, and `/publisher/{slug}/dashboard` — silently routing all of
+them to the JSON API instead of the UI. Caught via a route-matching
+simulation before deploy. Anchored to `^/dashboard$`.
+
+### What was NOT built this session
+The admin portal's actual CONTENT split (Part 6's proposed Dashboard vs
+Analytics section lists) — only the URLs exist. Both `/admin/dashboard`
+and `/admin/analytics` currently serve the identical unsplit 3-tab view,
+with a visible banner stating the redesign is planned. This is intentional
+— flagged explicitly rather than silently served as if finished.
 
 ---
 
@@ -767,23 +772,27 @@ variant_rr:{campaignId}                    Integer, cycles through variants
 
 ## PART 17 — PROPOSED CHANGES (Detailed)
 
-### 1. URL routing redesign
+### 1. URL routing redesign — ✅ DONE (Session 11)
 **What:** Drop `/ui` prefix, split into dashboard + analytics pages.
-**New routes:**
+**New routes (live):**
 ```
 /advertiser/{slug}/dashboard    → dashboard-ui.js (operational)
 /advertiser/{slug}/analytics    → dashboard-ui.js (performance)
 /publisher/{slug}/dashboard     → dashboard-ui.js (operational)
 /publisher/{slug}/analytics     → dashboard-ui.js (performance)
-/admin/dashboard                → dashboard-ui.js (daily ops, cross-entity)
-/admin/analytics                → dashboard-ui.js (platform trends)
+/admin/dashboard                → dashboard-ui.js (unsplit content, banner notes split pending)
+/admin/analytics                → dashboard-ui.js (unsplit content, banner notes split pending)
 ```
-**vercel.json changes:** remove all `^/ui` routes, add new anchored patterns.
-**dashboard-ui.js changes:** add new route handler branches, split existing
-single-page content into dashboard vs analytics rendering functions.
-**Impact:** advertiser portal's current single page splits into:
-- Dashboard: cards + Creative Studio + Campaign (settings + add creative + variants)
-- Analytics: sparkline + performance table + recent activity (deeper trends later)
+`/ui` retained as the chooser ONLY (confirmed explicitly with Aadi — all
+other `/ui/*` routes removed, no parallel-running period, cut over in one
+deploy). See Part 13 for full routing table and the `/dashboard` route
+shadowing bug found and fixed during this build.
+**Impact:** advertiser portal's single page split into Dashboard (cards +
+Campaign — see Part 4, Campaign now also contains the per-campaign
+Creative Studio after the Session 11 relocation) and Analytics (sparkline
++ performance table with new Campaign column + recent activity).
+**NOT done:** admin portal's actual section-content split (Part 6) —
+routing exists, content is identical on both URLs.
 
 ### 2. Publisher-side Ad Unit / Placement formalization
 **What:** Turn hardcoded `PUBLISHER_PAGES`/`CATEGORY_PUBLISHERS` into real schemas.
@@ -793,18 +802,30 @@ single-page content into dashboard vs analytics rendering functions.
 inventory view, grouped by Placement.
 **Admin portal change:** add cross-publisher Ad Unit overview table.
 
-### 3. Add Campaign / Remove Campaign
-**Add Campaign:**
-- Button placement: top of Campaign section in advertiser portal (or admin)
-- Form fields: id (auto-generated), category (dropdown: finance/tech),
-  cpmGBP, budgetDailyGBP, budgetTotalGBP, keywords, matchingDescription
-- On submit: POST /admin/campaign with advId pre-filled
-- After creation: redirect to the new campaign's view
-**Remove Campaign:**
-- Button placement: inside Campaign Settings, bottom, red/destructive styling
-- Confirmation dialog with campaign name
-- On confirm: POST /admin/campaign/delete
-- After deletion: redirect to advertiser list or show empty state
+### 3. Add Campaign / Remove Campaign — ✅ DONE (Session 11, pulled forward)
+**Why pulled forward:** originally scheduled after §1/§2/§4/§5. Pulled
+forward ahead of the left-sidebar layout work (raised by Aadi outside this
+spec — not previously documented anywhere) because the sidebar's Campaign
+section design depended on knowing the real (multi-campaign) shape first.
+**Add Campaign (as built):**
+- Campaign dropdown at top of the Dashboard page's Campaign section, final
+  option `+ Add new campaign` — confirmed as a single `<select>` over
+  cards/tabs alternatives (Aadi: "minimalism for now")
+- Form fields: category (dropdown: finance/tech), cpmGBP, budgetDailyGBP,
+  budgetTotalGBP, keywords, matchingDescription — id computed client-side
+  (next free `camp_NNN`), not server-generated
+- **5+ staged variants required before the Create campaign button enables**
+  (confirmed explicitly — matches the existing removal floor)
+- On submit: `POST /admin/campaign` (existing endpoint, unchanged — already
+  handled create-or-update, no new backend work needed)
+- After creation: dropdown refreshes, new campaign becomes selected (no
+  page redirect — stays on the same Dashboard page)
+**Remove Campaign (as built):**
+- Button inside the selected campaign's Settings sub-section, red/destructive
+- Confirmation dialog (`confirm()`) showing the campaign ID
+- On confirm: `POST /admin/campaign/delete` (existing endpoint from Session
+  4, never had a UI button before this)
+- After deletion: campaign list reloads, no campaign selected by default
 
 ### 4. Variant `focus` tag
 **What:** Optional free-text tag on each variant for organizational grouping.
@@ -814,11 +835,43 @@ inventory view, grouped by Placement.
 **Matching change:** NONE — purely organizational, does not affect The Matcher.
 
 ### 5. Creative Studio quality improvements
-**Priority fixes:**
+**Context update (Session 11):** Creative Studio now lives inside the
+Campaign section, scoped per-campaign (see Part 4) — this section's fixes
+still apply to the same underlying Haiku prompt/safety model in
+`api/admin.js` (Part 7), unaffected by where the UI surfaces it.
+**Priority fixes (not yet built):**
 - Fuzzy number matching in `outputTraceable()` (0.15% ≈ 15 basis points)
 - Stronger honesty-test enforcement (reject vague filler more aggressively)
 - Consider page-context input (let advertiser optionally paste a target page
   URL so Haiku can tailor tone to that specific article)
+
+### 7. Left-side persistent sidebar (raised mid-Session 11, NOT YET BUILT)
+**Status:** real requirement, confirmed with Aadi, but not previously
+written down anywhere this spec or any prior session log could find —
+discovered only when Aadi reacted to the deployed §1 routing redesign
+("I wanted a layout where the dashboard, analytics etc stay on the left,
+like discussed" / "a persistent sidebar with sections like overview,
+campaigns, creative/settings"). Searched past chats and this spec
+specifically for prior mention before treating it as new scope; found
+none — noting that explicitly so a future session doesn't assume it was
+missed rather than newly introduced.
+**Confirmed sections:** Overview, Campaign, Creative studio, Analytics.
+**Note:** "Creative studio" as a sidebar item does NOT mean it's a
+top-level page separate from Campaign — Aadi confirmed Creative Studio
+"should be under each new campaign," i.e. it's part of the Campaign
+section's content, not a sibling of it. The sidebar item list and the
+actual page/section boundaries are two different things; don't conflate
+a nav label with a routing boundary when building this.
+**Open decision, NOT yet resolved:** separate page per sidebar section
+(own URL, lighter loads) vs. one page with the sidebar scrolling/revealing
+sections (single URL, simpler, heavier). Shown to Aadi as a visual
+comparison; not yet chosen as of this entry.
+**Likely motivation for the slow-analytics complaint that surfaced this:**
+the Analytics page currently does one `fetch` for the FULL advertiser
+payload (all campaigns' impressions, spend, variant breakdowns, etc.) just
+to render three relatively simple sections. A separate-page-per-section
+sidebar would naturally fix this by only fetching what each section needs
+— worth keeping in mind when the layout choice above gets made.
 
 ### 6. Prompt-Level Visibility Monitoring (researched Session 10, NOT BUILT)
 

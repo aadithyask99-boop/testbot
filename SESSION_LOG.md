@@ -627,3 +627,141 @@ testbot-worker.projectatlas.workers.dev).
 - PLATFORM_STRUCTURE_SPEC.md created as canonical reference
 - Migration plan for routing redesign + publisher-side Ad Unit/Placement formalization needed
 - Session docs being updated (this entry)
+
+---
+
+## Session 11 — URL Routing Redesign + Multi-Campaign Support + Creative Studio Relocation
+**Date:** 2026-06-21
+**Chat:** Claude.ai (claude.ai chat, not Claude Code)
+**Goal:** Build Part 17 proposed changes in order: routing redesign, Ad Unit/
+Placement, Add/Remove Campaign, variant focus tag, Creative Studio fixes.
+Explicitly deferred Part 17 §6 (Prompt-Level Visibility Monitoring).
+
+**What was built:**
+
+**§1 — URL routing redesign (DONE):**
+- Dropped `/ui` prefix except the chooser itself (kept as `/ui`, confirmed
+  explicitly — not in the original Part 17 §1 spec, which didn't address
+  what happens to the chooser; resolved by asking)
+- New anchored routes: `/advertiser`, `/advertiser/{slug}/dashboard`,
+  `/advertiser/{slug}/analytics`, `/publisher`, `/publisher/{slug}/
+  dashboard`, `/publisher/{slug}/analytics`, `/admin/dashboard`,
+  `/admin/analytics`
+- Cut over immediately, no parallel `/ui/*` period (confirmed explicitly)
+- `scopedAdvertiserPortalHtml`/`scopedPublisherPortalHtml` split into
+  Dashboard/Analytics render function pairs, shared `navTabsHtml()` helper
+- Admin `/admin/dashboard` and `/admin/analytics` both serve the existing
+  unsplit 3-tab view, with a visible banner stating the redesign is
+  planned (not silently served as if finished — per CONTINUE.md #15)
+- **Bug found and fixed before deploy:** `vercel.json`'s `/dashboard` route
+  was unanchored and would have substring-matched `/admin/dashboard`,
+  `/advertiser/{slug}/dashboard`, `/publisher/{slug}/dashboard` — routing
+  all of them to the JSON API instead of the UI. Caught via a Python
+  route-matching simulation before deploy.
+- Verified live (Aadi ran PowerShell-translated commands): all new routes
+  return correct content, old `/ui/advertiser/{slug}` now 404s, directory
+  lists populate all advertisers/publishers correctly, `/health` confirms
+  no infra regression
+
+**Mid-session: layout feedback led to scope changes.**
+After deploying §1, Aadi reported: (1) Analytics page slow to load, (2)
+the overall design "still looks legacy," (3) a left-side persistent
+sidebar was expected "like discussed" — but no prior record of this was
+found anywhere (spec, session logs, past-chat search). Resolved by asking
+directly rather than guessing or assuming the requirement was missed.
+Aadi also uploaded `boop_structural_map.svg` — confirmed this was an
+architecture/relationship diagram, NOT a UI mockup, and said so explicitly
+before using it (it has no sidebar or nav-layout information; it did
+confirm Creative Studio → Campaign → variant bank relationships and the
+Matcher's stage naming, which were already correctly understood).
+
+Two follow-up questions surfaced real new requirements:
+- "Creative Studio should be under each campaign" — reverses the Session
+  10 decision that it was a separate tool above Campaign
+- "Didn't we discuss multiple campaigns per advertiser?" — confirmed
+  TRUE: the backend (`campaignList` in dashboard.js) always supported it;
+  the UI never surfaced more than `campaigns[0]`. This had in fact already
+  been documented as a known gap in PLATFORM_STRUCTURE_SPEC.md Part 8
+  ("Campaign list view... no UI to see them all and switch between
+  them") — so not a new discovery, but confirmed real and pulled forward.
+
+**Revised plan, confirmed with Aadi:** multi-campaign support (pulled
+forward from §3) + Creative Studio relocation BEFORE the sidebar, since
+the sidebar's Campaign section design depends on the real (multi-campaign)
+shape. Sidebar layout question (separate pages vs. one scrolling page)
+shown as a visual comparison via the Visualizer tool; not yet decided.
+
+**§3 — Add/Remove Campaign + multi-campaign (DONE, pulled forward):**
+- Campaign dropdown (`<select>`, confirmed as minimalist choice over
+  cards/tabs) at the top of the Dashboard page's Campaign section —
+  lists every campaign for this advId + a final "+ Add new campaign" option
+- Selecting an existing campaign scopes Settings, Creative Studio, Ad
+  Variants, and a NEW per-campaign Recent Activity feed to that specific
+  campaign's `id` (previously all hardcoded to `campaigns[0]`)
+- Selecting "+ Add new campaign" renders a creation flow: blank settings
+  form + Creative Studio with browser-side STAGED variants (not yet
+  saved to KV, no campaign id exists yet) + a live "(N/5 minimum)" counter
+  + a Create campaign button disabled until 5+ variants staged (confirmed:
+  same floor as the existing removal guard)
+- `nextCampaignId()` computes the next free `camp_NNN` client-side from
+  currently-loaded campaign IDs; reuses the EXISTING `POST /admin/campaign`
+  endpoint unchanged (already handled create-or-update transparently — no
+  new backend endpoint needed)
+- Delete campaign button added (red, confirm dialog) — calls the
+  already-existing `POST /admin/campaign/delete` (built Session 4, never
+  had a UI button until now)
+- `api/dashboard.js`: added optional `campaignId` query param to the
+  advertiser view, narrowing `recentMatches` to one campaign (additive,
+  falls back to prior advId-level scope when absent — verified by reading
+  the diff, not live, since this sandbox can't reach the live KV/Vercel)
+
+**Creative Studio relocation (DONE, reverses Session 10 decision):**
+- Moved from "separate tool above Campaign" to "inside Campaign, scoped
+  per-campaign" — explicit instruction from Aadi this session
+- "Add to my variants" now writes directly into the selected campaign's
+  variant bank (existing campaigns) or the staged-variants array (new
+  campaign, not yet saved) — same Haiku prompt/safety model, unchanged
+
+**Analytics — Campaign column (DONE, confirmed explicitly):**
+- Campaign Performance Table gained a Campaign column (`camp.id`, looked
+  up via `p.servingId`) so rows are identifiable now that an advertiser
+  can have multiple campaigns serving different pages
+
+**New verification technique this session:**
+- `node --check` (the existing parse gate) only validates syntax, not
+  behavior. Installed `jsdom`, rendered the real page HTML, mocked
+  `window.fetch` with a realistic payload matching `api/dashboard.js`'s
+  actual response shape, and ran 21 real behavioral assertions on the
+  dashboard page (dropdown population, campaign-switching re-populates
+  the RIGHT fields, staged-variant counter gates Create at exactly 5,
+  Creative Studio routes correctly between staging vs. live save) + 5 on
+  the analytics page's new Campaign column. Caught zero real bugs this
+  time (all passed on first real run after one test-harness ordering fix
+  — `window.fetch` must be mocked before jsdom executes the auto-invoking
+  `load()` call, not after) but is a meaningfully stronger bar than the
+  parse gate alone, worth keeping for future interactive-state changes.
+
+**NOT started this session:** §2 (Ad Unit/Placement), §4 (variant focus
+tag), §5 (Creative Studio prompt quality fixes), the left-sidebar layout
+itself (only the requirement was captured and a layout-choice comparison
+shown; nothing built).
+
+**Docs updated:** PLATFORM_STRUCTURE_SPEC.md (Part 4 rewritten, Part 8
+missing-ops resolved, Part 13 marked built with the shadowing-bug note,
+Part 17 §1/§3 marked DONE, new §7 for the sidebar requirement),
+CONTINUE.md (6 new learnings: jsdom technique, decision-reversal
+documentation, "like discussed" handling, diagram-vs-mockup distinction,
+side-by-side comparison-widget clarity, multi-campaign was already
+backend-supported), HANDOVER.md (full rewrite of current state + planned
+work + PowerShell-specific verification commands, since Aadi is on
+Windows and the previous bash-only commands didn't work for him).
+
+**Where we stopped:**
+- Routing redesign live and verified by Aadi directly (PowerShell commands)
+- Multi-campaign support and Creative Studio relocation built and verified
+  via jsdom behavioral tests locally — NOT YET verified live by Aadi (this
+  entry written before that round-trip happened)
+- Function count unchanged: 10/12
+- Ready to continue: get live verification from Aadi on the multi-campaign
+  work, then either the left-sidebar layout (once the page-vs-scroll
+  decision is made) or §2/§4/§5 in original order

@@ -7,42 +7,56 @@
 
 ---
 
-## Current State (end of Session 10, 2026-06-21)
+## Current State (end of Session 11, 2026-06-21)
 
 **Live URL:** https://testbot-two-psi.vercel.app
-**Dashboard:** https://testbot-two-psi.vercel.app/ui
+**Dashboard:** https://testbot-two-psi.vercel.app/ui (chooser only — see routing below)
 **GitHub:** https://github.com/aadithyask99-boop/testbot (main branch)
 **Vercel:** Hobby plan — 10/12 serverless functions used, 2 free
 
 ### What's deployed and working
 - Bot detection + HTML injection — confirmed across ChatGPT Browse, Perplexity, Grok, Gemini, Meta AI, Claude
 - The Matcher: 8-stage pipeline (see PLATFORM_STRUCTURE_SPEC.md §3 for full detail)
-  - Stages 0-3 (category classification): precomputed by sweep
-  - Stages 4-5 (per-campaign relevance + auction): live, benefits from cached classification
-  - Stages 6-8 (variant selection): separately cached, NOT precomputed
-- 14 active campaigns across finance and tech categories, all with data-led variants
+- 14+ campaigns across finance and tech categories, all with data-led variants
 - Revenue tracking: 80/20 publisher/platform split, atomic tenths-of-pence in KV
-- Portal architecture:
-  - `/ui` — chooser page (Advertiser / Publisher / Admin)
-  - `/ui/admin` — full operator dashboard (unchanged)
-  - `/ui/advertiser/{slug}` — scoped advertiser portal with: cards, sparkline, performance table, AI Creative Studio, Campaign (settings + add creative + variant bank with edit/remove), recent activity
-  - `/ui/publisher/{slug}` — scoped publisher portal with: earnings cards, per-page serving table, recent activity
-- AI Creative Studio: 3-idea input, 2 fact-led + 1 promo output, input gate, output traceability, em dash backstop
+- **Portal architecture (Session 11 — routing redesign, §1 DONE):**
+  - `/ui` — chooser ONLY (links to `/advertiser`, `/publisher`, `/admin/dashboard`)
+  - `/admin/dashboard`, `/admin/analytics` — full operator dashboard, content UNSPLIT
+    (both serve the identical 3-tab view with a banner noting the split is planned)
+  - `/advertiser`, `/publisher` — directory lists, link to `/dashboard` sub-paths
+  - `/advertiser/{slug}/dashboard` — Cards, **Campaign** (dropdown switcher across
+    multiple campaigns, settings, AI Creative Studio scoped per-campaign, variant
+    bank, per-campaign recent activity, delete campaign)
+  - `/advertiser/{slug}/analytics` — sparkline, campaign performance table (now
+    with a **Campaign** column), advertiser-wide recent activity
+  - `/publisher/{slug}/dashboard` — earnings cards, per-page serving table
+  - `/publisher/{slug}/analytics` — recent activity (thin until Ad Unit/Placement
+    work, Part 17 §2, lands)
+  - All `/ui/*` sub-routes (except `/ui` itself) REMOVED — cut over in one deploy,
+    no parallel-running period
+- **Multi-campaign support (Session 11 — Part 17 §3 DONE, pulled forward):**
+  previously every render path hardcoded `campaigns[0]`; the backend always
+  supported multiple campaigns per `advId`. Now a real dropdown switcher,
+  Add Campaign (5+ staged variants required before save), Delete Campaign.
+- **AI Creative Studio relocated (Session 11):** now lives INSIDE the Campaign
+  section, scoped per-campaign — reverses the Session 10 "separate drafting
+  tool above Campaign" decision, on Aadi's explicit instruction. Same Haiku
+  prompt/safety model (Part 7), unchanged.
 - Auto-crawl on variant save (60s delay) + manual Crawl buttons
 - Variant ID stability across saves (normalizeVariants fix)
 
 ### What's a demo placeholder right now
 - Publisher pages are hardcoded demo articles (Finance Weekly ISA/pension/dividend/first-time-buyer, Tech Briefing VPN/antivirus/broadband/cloud-storage)
 - No real auth — portal access is URL-based only (anyone with the link sees the data)
-- No Add Campaign or Remove Campaign UI in the advertiser portal (done via raw API only)
 - Spend sparkline uses simulated variance, not real daily historical data
 - Creative Studio output quality is inconsistent — safety filter sometimes too aggressive, prompt sometimes produces vague filler instead of honest "skipped" on weak ideas
 - `api/sdk.js` is client-side only (headless browser detection) — secondary layer
 - `requestsPerMinute` always 1 — behavioural rate signal (+30 pts) never fires
+- Admin portal content split (Dashboard vs Analytics) — routing exists, content identical on both URLs
 
 ---
 
-## Serverless Function Slots (10/12 used)
+## Serverless Function Slots (10/12 used — UNCHANGED this session)
 
 ```
 USED (10/12):
@@ -66,102 +80,114 @@ FREE (2/12):
 
 ## Planned Work — Next Session(s)
 
-### Priority 1: URL routing redesign
-Drop the `/ui` prefix entirely. Proposed scheme:
-```
-/advertiser/{slug}/dashboard   — operational (settings, variants, Creative Studio)
-/advertiser/{slug}/analytics   — deeper performance data
-/publisher/{slug}/dashboard    — operational (earnings, serving status)
-/publisher/{slug}/analytics    — traffic trends, crawl activity
-/admin                         — full operator view
-```
-Requires: vercel.json route changes, dashboard-ui.js handler updates,
-splitting the current single-page portal into dashboard + analytics pages.
+### Priority 1: Left-side persistent sidebar (raised mid-Session 11, NOT YET BUILT)
+Real requirement, confirmed with Aadi, no prior written record found anywhere
+before this session — see PLATFORM_STRUCTURE_SPEC.md Part 17 §7 for full
+context and the open layout-choice decision (separate page per section vs.
+one page with scrolling sections — shown to Aadi as a visual comparison,
+not yet chosen). Confirmed sections: Overview, Campaign, Creative studio,
+Analytics. **Important:** Creative Studio is a sub-item WITHIN Campaign, not
+a sibling section — don't conflate the sidebar nav label with a routing
+boundary.
 
-### Priority 2: Publisher-side Ad Unit / Placement formalization
+### Priority 2: Investigate "Analytics is slow" complaint
+Raised by Aadi mid-session. Leading hypothesis (not yet confirmed): the
+Analytics page does one `fetch` for the FULL advertiser payload (all
+campaigns' impressions/spend/variant breakdowns) to render comparatively
+simple sections. Worth profiling before assuming the sidebar layout choice
+above is the fix — the separate-page-per-section option would likely
+resolve it as a side effect, but the root cause should be confirmed
+directly (e.g. check actual response size/timing from `/dashboard?view=
+advertiser&advId=X` for an advertiser with several campaigns) rather than
+assumed.
+
+### Priority 3: Publisher-side Ad Unit / Placement formalization (Part 17 §2)
 Turn hardcoded `PUBLISHER_PAGES` and `CATEGORY_PUBLISHERS` in admin.js into
 real `adUnits[]` and `placements[]` structures per publisher in config/KV.
-See PLATFORM_STRUCTURE_SPEC.md §5 for schema design.
+See PLATFORM_STRUCTURE_SPEC.md §2 (Part 17) for schema design. NOT yet
+started.
 
-### Priority 3: Add Campaign / Remove Campaign UI
-Currently campaigns are only created/deleted via raw API calls or payload files.
-The advertiser portal needs:
-- "Add Campaign" button/form (creates a new campaign with this advId)
-- "Delete Campaign" option (with confirmation)
-This requires deciding: does Creative Studio sit inside each Campaign (so
-generated variants target a specific campaign), or stay above all campaigns
-as a general drafting tool?
+### Priority 4: Variant `focus` tag (Part 17 §4)
+Optional free-text tag on each variant for organizational grouping.
+Agreed in Session 10, not yet implemented. See PLATFORM_STRUCTURE_SPEC.md
+Part 17 §4.
 
-### Priority 4: Creative Studio prompt quality
+### Priority 5: Creative Studio prompt quality (Part 17 §5)
 Current issues:
 - Safety filter drops valid variants when numbers are reformatted by Haiku
   (e.g. "0.15%" → "15 basis points" → traceability fails)
 - Fact-led variants sometimes produce vague filler ("comparable to several
   established platforms") instead of honestly skipping when no comparison exists
 - Brand mention on fact-led variants is inconsistent
+NOT yet started — was next in the original build order before the
+left-sidebar requirement surfaced and the multi-campaign work was pulled
+forward ahead of it.
 
-### Priority 5: Variant `focus` tag
-Optional free-text tag on each variant for organizational grouping.
-Agreed in Session 10, not yet implemented. See PLATFORM_STRUCTURE_SPEC.md §4.
+### Deferred, not in scope
+- Part 17 §6 (Prompt-Level Visibility Monitoring) — intentionally deferred per Aadi's instruction at the start of this session.
+- Admin portal content split (Dashboard vs Analytics sections) — Part 6, routing exists, content doesn't yet.
 
 ---
 
 ## Open Decisions for Aadi
 
-1. **Routing scheme confirmation:** `/advertiser/{slug}/dashboard` and `/analytics`
-   as proposed, or different naming? What about `/admin`?
-2. **Creative Studio per-campaign:** If an advertiser eventually has multiple campaigns,
-   does Creative Studio sit inside each campaign (variants target that campaign) or
-   stay above as a general tool (user manually picks which campaign to add to)?
-3. **Campaign tiebreaker at identical effective CPM:** Round-robin, first-created, or random?
-4. **Publisher floor price:** per-publisher configurable, stored in publisher schema.
-   Not yet built. When built: floor applies to gross CPM before split.
+1. **Sidebar layout:** separate page per section (own URL, lighter loads,
+   shareable, more routing code) vs. one page with the sidebar
+   scrolling/revealing sections (single URL, simpler, heavier initial load).
+   Visual comparison shown; not yet chosen.
+2. **Campaign tiebreaker at identical effective CPM:** Round-robin, first-created, or random? (carried over, unresolved)
+3. **Publisher floor price:** per-publisher configurable, stored in publisher schema.
+   Not yet built. When built: floor applies to gross CPM before split. (carried over, unresolved)
 
 ---
 
 ## How to Verify the Live System
 
-```bash
-# Check chooser page
-curl https://testbot-two-psi.vercel.app/ui
+Aadi is on Windows/PowerShell. `curl` in PowerShell is aliased to
+`Invoke-WebRequest`, NOT curl.exe — flags like `-s`/`-o`/`-w` and tools like
+`grep`/`/dev/null` do not work. Use PowerShell-native equivalents:
 
-# Check scoped advertiser portal
-curl https://testbot-two-psi.vercel.app/ui/advertiser/trading-212
+```powershell
+# Chooser links
+(Invoke-WebRequest -Uri "https://testbot-two-psi.vercel.app/ui" -UseBasicParsing).Links | Select-Object href
 
-# Check scoped publisher portal
-curl https://testbot-two-psi.vercel.app/ui/publisher/financeweekly
+# Scoped advertiser portal — new routes
+(Invoke-WebRequest -Uri "https://testbot-two-psi.vercel.app/advertiser/trading-212/dashboard" -UseBasicParsing).Content -match "AI Creative Studio"
+(Invoke-WebRequest -Uri "https://testbot-two-psi.vercel.app/advertiser/trading-212/analytics" -UseBasicParsing).Content -match "Spend, last 7 days"
 
-# Simulate bot impression
-curl -H "User-Agent: Mozilla/5.0 (compatible; PerplexityBot/1.0)" \
-  https://finance-weekly-worker.projectatlas.workers.dev/articles/best-isa-2026.html
+# Scoped publisher portal
+(Invoke-WebRequest -Uri "https://testbot-two-psi.vercel.app/publisher/financeweekly/dashboard" -UseBasicParsing).Content -match "Ad serving"
 
-# Check dashboard API
-curl https://testbot-two-psi.vercel.app/dashboard
-curl "https://testbot-two-psi.vercel.app/dashboard?view=advertiser&advId=adv_002"
-curl "https://testbot-two-psi.vercel.app/dashboard?view=publisher&pubId=pub_001"
+# Dashboard API directly
+(Invoke-WebRequest -Uri "https://testbot-two-psi.vercel.app/dashboard?view=advertiser&advId=adv_002" -UseBasicParsing).Content | ConvertFrom-Json
 
-# Manual crawl
-curl -X POST -H "Content-Type: application/json" \
-  -d '{"category":"all"}' \
-  https://testbot-two-psi.vercel.app/admin/crawl
+# Per-campaign activity filter (Session 11 addition)
+(Invoke-WebRequest -Uri "https://testbot-two-psi.vercel.app/dashboard?view=advertiser&advId=adv_002&campaignId=camp_002" -UseBasicParsing).Content | ConvertFrom-Json
 
-# Test Creative Studio
-curl -X POST -H "Content-Type: application/json" \
-  -d '{"advertiser":"Trading 212","ideas":["we have 1.6 million users","our fee is 0.15% vs industry average 0.45%","simple to use"]}' \
-  https://testbot-two-psi.vercel.app/admin/creative-studio
+# Health check
+(Invoke-WebRequest -Uri "https://testbot-two-psi.vercel.app/health" -UseBasicParsing).Content | ConvertFrom-Json | Format-List
 ```
+
+If working from a Unix shell (bash/zsh) instead, standard curl + grep work as
+normal — only PowerShell needs the above translation.
 
 ---
 
-## Key Files Changed in Session 10
+## Key Files Changed in Session 11
 
 | File | Changes |
 |------|---------|
-| api/admin.js | Auto-crawl infrastructure, Creative Studio endpoint (replaced AI Recommendations), normalizeVariants ID stability fix, manual crawl endpoint |
-| api/dashboard.js | advId scoping for advertiser view, todayImpressions field, advId in campaignList |
-| api/dashboard-ui.js | Portal routing (chooser, list, scoped portals), full advertiser portal (cards, sparkline, Creative Studio, Campaign section with settings/add/variants/edit/remove, recent activity), publisher portal with recent activity |
-| lib/config.js | Slug fields on advertisers and publishers |
-| lib/relevance.js | Removed old approval-gate logic |
-| vercel.json | Anchored /ui routes, added /admin/crawl, /admin/creative-studio routes |
-| variant_payloads/*.json | Data-led variants for all 14 campaigns, Freetrade keywords tightened |
-| PLATFORM_STRUCTURE_SPEC.md | NEW: canonical naming + architecture reference |
+| vercel.json | Removed all `/ui/*` sub-routes except `/ui` itself; added anchored `/advertiser`, `/advertiser/{slug}/dashboard`, `/advertiser/{slug}/analytics`, `/publisher`, `/publisher/{slug}/dashboard`, `/publisher/{slug}/analytics`, `/admin/dashboard`, `/admin/analytics`; fixed a shadowing bug where unanchored `/dashboard` would have substring-matched all four new `/dashboard`-suffixed routes |
+| api/dashboard-ui.js | Full routing handler rewrite (slug+view query params); `scopedAdvertiserPortalHtml` split into `scopedAdvertiserDashboardHtml`/`scopedAdvertiserAnalyticsHtml`; `scopedPublisherPortalHtml` split likewise; new `navTabsHtml()` shared helper; Dashboard page's Campaign section rewritten for multi-campaign (dropdown switcher, per-campaign Settings/Creative Studio/Variants/Activity, Add/Delete campaign, staged-variant flow for new campaigns); Analytics page's performance table gained a Campaign column; admin `/admin/dashboard` and `/admin/analytics` both serve the unsplit view with a banner |
+| api/dashboard.js | Added optional `campaignId` query param to the advertiser view, narrowing `recentMatches` to a single campaign (additive — falls back to prior advId-level scoping when absent) |
+| PLATFORM_STRUCTURE_SPEC.md | Part 4 (advertiser portal) rewritten for the Dashboard/Analytics split and multi-campaign Creative Studio relocation; Part 8 missing-operations list marked resolved; Part 13 (routing) marked built with the shadowing-bug note; Part 17 §1 and §3 marked DONE; new §7 documenting the left-sidebar requirement and its open layout decision |
+| CONTINUE.md | Session 11 learnings: jsdom behavioral testing approach, documenting decision reversals explicitly, handling "like we discussed" when no record exists, treating uploaded diagrams correctly, multi-campaign was already backend-supported |
+
+**Verification approach this session:** no live Vercel access from the build
+sandbox. Used `node --check` (parse gate, as before) PLUS a new technique —
+installed `jsdom`, rendered the actual page HTML, mocked `window.fetch` with
+a realistic payload, and ran real behavioral assertions (21 checks on the
+dashboard page's campaign-switching logic, 5 on the analytics page's new
+Campaign column) against the executing JS, not just its syntax. See
+CONTINUE.md #18 for the technique and its one gotcha (mock `fetch` before
+the auto-invoking `load()` call runs, not after).

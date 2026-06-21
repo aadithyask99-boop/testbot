@@ -518,9 +518,19 @@ module.exports = async function handler(req, res) {
       // Recent matches scoped to this advertiser's campaigns only
       const scopedCampaignIds = new Set(scopedCampaigns.map(c => c.id));
 
+      // Session 11: optional further scoping to a SINGLE campaign within
+      // this advertiser, for the multi-campaign dropdown in the Campaign
+      // section. advId scoping still applies first (security boundary —
+      // a campaignId outside this advId's set is ignored, not trusted).
+      const campaignIdParam = (req.query && req.query.campaignId) || null;
+      const filterCampaignIds = (campaignIdParam && scopedCampaignIds.has(campaignIdParam))
+        ? new Set([campaignIdParam])
+        : scopedCampaignIds;
+
       return res.status(200).json({
         _view: 'advertiser',
         scopedAdvId: advId,
+        scopedCampaignId: (campaignIdParam && filterCampaignIds.has(campaignIdParam)) ? campaignIdParam : null,
         publishers: publisherList,
         advertisers: advertiserList,
         // Per-page live board: what's actually serving on each page right now,
@@ -531,8 +541,11 @@ module.exports = async function handler(req, res) {
         // dashboard's "Recent Match Decisions" table can read them directly.
         // Includes served AND unserved entries — the diagnostic value is
         // seeing WHY matching rejects things, not just successes.
+        // Session 11: when campaignId is given, narrows further to that
+        // single campaign's activity (used by the per-campaign Recent
+        // Activity feed in the Campaign section's dropdown view).
         recentMatches: (recentBotLogs || [])
-          .filter(e => !advId || (e.campaignId && scopedCampaignIds.has(e.campaignId)))
+          .filter(e => !advId || (e.campaignId && filterCampaignIds.has(e.campaignId)))
           .slice(0, 15).map(e => {
           // Normalise URL — strip Worker proxy domain so dashboard shows
           // just the path (e.g. /articles/best-isa-2026.html) regardless

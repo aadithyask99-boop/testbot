@@ -690,3 +690,95 @@ Our system doesn't have keyword bids — we have content-relevance scoring. Nati
 platforms (our actual analogue) don't use Ad Groups at all. Copying a structural
 pattern from the wrong industry model creates complexity that doesn't solve a real
 problem. Always research the WHY behind a competitor's structure before adopting it.
+
+---
+
+## Session 11 Learnings
+
+### 18. node --check validates syntax, not behavior — use jsdom for real DOM logic
+`node --check` on extracted inline `<script>` content (the existing "parse gate")
+only confirms the JS is syntactically valid. It will NOT catch: a function that
+calls `document.getElementById` for an ID that's never actually rendered, a dropdown
+whose `onchange` handler doesn't actually re-render the right subtree, or staged
+client-side state that doesn't reset correctly between selections. For Session 11's
+multi-campaign dropdown work, syntax-only checking would have shipped silently with
+zero confidence the dropdown actually worked. Installed `jsdom` (`npm install jsdom
+--no-save`, allowed via the registry.npmjs.org domain already on the allowlist),
+rendered the real page HTML, mocked `window.fetch` with a realistic payload shape
+matching `api/dashboard.js`'s actual response, and ran 21 real assertions (dropdown
+options populate, switching re-populates form fields with the RIGHT campaign's data,
+staged-variant counter gates the Create button at exactly 5, Creative Studio routes
+to staging vs. live save depending on mode). All genuinely executed against the real
+file — this is a meaningfully stronger bar than the parse gate alone, and worth
+reaching for whenever a change touches interactive state, not just markup.
+**Gotcha:** if the page's last line is an auto-invoking `load();setInterval(...)`,
+attaching a mocked `window.fetch` AFTER jsdom parses the script is too late — the
+real `fetch` call already threw. Strip the auto-invoke line before constructing the
+JSDOM instance (or use jsdom's `beforeParse` hook to attach mocks before any script
+runs), then call the function manually once mocks are in place.
+
+### 19. A documented architectural decision can be reversed — but say so explicitly
+Session 10 explicitly decided Creative Studio sits ABOVE Campaign as a separate
+drafting tool (SESSION_LOG.md, CLAUDE.md, the original structural diagram all said
+this). Session 11 reversed it — Creative Studio now lives INSIDE Campaign, scoped
+per-campaign — on Aadi's explicit instruction. This is a legitimate thing to do
+(requirements change), but it's exactly the kind of cross-session inconsistency
+CONTINUE.md #16 warns about if left undocumented: a future session reading only
+CLAUDE.md or the old session log would build against the WRONG, superseded decision.
+Fixed by updating PLATFORM_STRUCTURE_SPEC.md Part 4 with an explicit "this reverses
+the Session 10 decision, here's the new instruction that caused it" note, rather
+than silently overwriting the old rationale as if it never existed.
+
+### 20. "Like we discussed" needs an actual search, not a guess — and the search can come up empty
+When Aadi referenced a left-sidebar layout as "like discussed," a thorough search of
+PLATFORM_STRUCTURE_SPEC.md, CONTINUE.md, SESSION_LOG.md, and past-chat search found
+NO prior record of it anywhere. Two honest possibilities: it was discussed verbally
+in a part of a session with no searchable trace, or it's genuinely new scope being
+introduced in the moment. Neither is a reason to silently comply as if the
+requirement had always been known, NOR a reason to flatly insist "this was never
+discussed" in a way that argues with the person's memory. The right move: say
+plainly what was and wasn't found, treat the requirement as real and worth building
+regardless of its origin, and document it going forward so it has a paper trail this
+time. Retroactively blaming "you should have told me" when nothing in the available
+record supports that is not constructive — better to focus on capturing it correctly
+now than relitigating whether it was missed before.
+
+### 21. An uploaded "structural map" diagram is not a UI mockup — say so before guessing from it
+Aadi uploaded an SVG titled `boop_structural_map.svg` and asked Claude to use it to
+resolve a layout question (where should the sidebar live, what should it contain).
+The SVG was a CONCEPTUAL/ARCHITECTURE diagram (boxes + arrows showing how Creative
+Studio, Campaign, and The Matcher's pipeline stages relate to each other) — useful
+for confirming relationships between concepts, but it contained no sidebar, no nav
+chrome, no pixel layout information at all. Treating it as a UI spec and guessing
+sidebar contents from it would have been a confident-sounding wrong answer. Instead:
+state plainly what kind of artifact it actually is, what it DOES confirm (Creative
+Studio → Campaign → variant bank relationship, the Matcher's stage names), and what
+it does NOT answer (navigation placement) — then ask the real question directly
+rather than force-fitting an answer out of the wrong artifact.
+
+### 22. Showing two options side-by-side in one visual can read as "duplicate" — separate them or label clearly
+Built a single Visualizer widget showing Option A and Option B sidebars side by
+side, each containing the same 4-item nav list (Overview/Campaign/Creative
+studio/Analytics). Aadi's first reaction was "why do I see Creative Studio twice" —
+reasonable, since two near-identical-looking sidebar mockups next to each other can
+read as one broken/duplicated component rather than two distinct comparable options.
+Resolved by checking: the duplication was the two-panel comparison structure itself,
+not a real bug in either panel. For future side-by-side comparison widgets: either
+make the distinguishing label between panels much more visually prominent, or
+present options sequentially with confirmation between each rather than simultaneously.
+
+### 23. Multi-campaign was already fully supported server-side — the gap was UI-only
+`api/dashboard.js`'s `campaignList` construction has always returned the FULL array
+of campaigns for an advId (not just the first), complete with per-campaign
+`variantBreakdown`, `dailyBudgetUsedPct`, `vcpmGBP`, etc. `api/admin.js`'s
+`POST /admin/campaign` already handled create-or-update transparently keyed by
+`id`, and `POST /admin/campaign/delete` existed since Session 4. The ENTIRE gap was
+that `dashboard-ui.js` hardcoded `campaigns[0]` in every render path and every
+mutation handler (`addCreative`, `saveSettings`, `deleteVariant`, etc. all fetched
+fresh data and grabbed `[0]` before mutating). Building multi-campaign support
+required zero new backend endpoints — only a `campaignId` query-param addition to
+narrow `recentMatches` further, and a full frontend rewrite to thread a selected
+campaign ID through every handler instead of always re-deriving `[0]`. Worth
+checking the backend's actual capability before assuming a feature needs new
+server-side work — sometimes the data layer was already ahead of the UI.
+
