@@ -767,18 +767,37 @@ not a real bug in either panel. For future side-by-side comparison widgets: eith
 make the distinguishing label between panels much more visually prominent, or
 present options sequentially with confirmation between each rather than simultaneously.
 
-### 23. Multi-campaign was already fully supported server-side — the gap was UI-only
-`api/dashboard.js`'s `campaignList` construction has always returned the FULL array
-of campaigns for an advId (not just the first), complete with per-campaign
-`variantBreakdown`, `dailyBudgetUsedPct`, `vcpmGBP`, etc. `api/admin.js`'s
-`POST /admin/campaign` already handled create-or-update transparently keyed by
-`id`, and `POST /admin/campaign/delete` existed since Session 4. The ENTIRE gap was
-that `dashboard-ui.js` hardcoded `campaigns[0]` in every render path and every
-mutation handler (`addCreative`, `saveSettings`, `deleteVariant`, etc. all fetched
-fresh data and grabbed `[0]` before mutating). Building multi-campaign support
-required zero new backend endpoints — only a `campaignId` query-param addition to
-narrow `recentMatches` further, and a full frontend rewrite to thread a selected
-campaign ID through every handler instead of always re-deriving `[0]`. Worth
-checking the backend's actual capability before assuming a feature needs new
-server-side work — sometimes the data layer was already ahead of the UI.
+### 24. "Insanely slow" was real, pre-existing, and structural — sequential KV calls in a per-campaign loop
+Aadi reported the campaign dropdown (and the admin page's publisher/advertiser
+picker, and campaign detail panel) were "insanely slow." Rather than guess at the
+sidebar/layout being the cause, traced the actual network path: `api/dashboard.js`'s
+`campaignList` construction looped over every campaign SEQUENTIALLY, doing 4 awaited
+KV round-trips per campaign (`kvGet` campaign object, `getCampaignSpend`, 2x
+`kvHashGetAll`) one at a time via a plain `for` loop — not `Promise.all`'d across
+campaigns. With 15 campaigns that's 60+ sequential network round-trips before the
+response could even begin assembling. A second loop just above it (`variantLookup`)
+had the exact same pattern, redundantly re-fetching the same campaign objects
+sequentially again. Two more minor instances in the per-publisher/per-advertiser
+revenue lookups. None of this was introduced this session — `git log` traces the
+`campaignList` loop's sequential pattern back to Session 5 — it just got
+progressively worse as campaigns were added (5 campaigns sequential ≈ fine, 15
+sequential ≈ clearly broken) without anyone profiling it directly. Fixed by wrapping
+each loop's body in `Promise.all(ids.map(async id => {...}))` instead of `for...of`
+with `await` inside. Verified with a synthetic timing test (mocked `kvGet`/
+`kvHashGetAll` with a simulated 15ms round-trip each, 15 mock campaigns): confirmed
+parallelized response time was 16.7x faster than what the equivalent sequential
+version would take, with all correctness checks (campaign count, shape) still
+passing — not just "looks parallel," actually measured.
+**Lesson:** when someone reports vague-sounding slowness ("insanely slow"), get
+specific about WHERE before guessing at WHY — "switching the dropdown" pointed
+directly at one network call, which made tracing the actual `for`/`await` pattern in
+that endpoint's code tractable in minutes rather than guessing at unrelated causes
+(it would have been easy to wrongly blame the new sidebar/layout work instead, since
+that's what was being discussed at the time the complaint came in).
+**Known remaining inefficiency, not fixed:** the `view=advertiser&advId=X` endpoint
+still computes the FULL platform-wide `campaignList` (all advertisers' campaigns)
+before filtering down to the requested `advId`. No longer the dominant cost since
+it's parallel now, but it's doing more work than strictly necessary — a future pass
+could scope the campaign ID list to just this `advId`'s campaigns before the
+expensive per-campaign loop runs, rather than after.
 

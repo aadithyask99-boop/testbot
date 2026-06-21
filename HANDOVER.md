@@ -90,16 +90,23 @@ Analytics. **Important:** Creative Studio is a sub-item WITHIN Campaign, not
 a sibling section — don't conflate the sidebar nav label with a routing
 boundary.
 
-### Priority 2: Investigate "Analytics is slow" complaint
-Raised by Aadi mid-session. Leading hypothesis (not yet confirmed): the
-Analytics page does one `fetch` for the FULL advertiser payload (all
-campaigns' impressions/spend/variant breakdowns) to render comparatively
-simple sections. Worth profiling before assuming the sidebar layout choice
-above is the fix — the separate-page-per-section option would likely
-resolve it as a side effect, but the root cause should be confirmed
-directly (e.g. check actual response size/timing from `/dashboard?view=
-advertiser&advId=X` for an advertiser with several campaigns) rather than
-assumed.
+### Priority 2: "Analytics is slow" — ✅ ROOT CAUSE FOUND AND FIXED (same session)
+Aadi clarified it was specifically the campaign dropdown (and admin page's
+publisher/advertiser picker) that was slow, not page-load in general. Traced
+to `api/dashboard.js`: `campaignList` construction looped over every campaign
+SEQUENTIALLY (4 awaited KV round-trips per campaign, one campaign at a time)
+— with 15 campaigns, 60+ sequential network round-trips before the response
+could start. Pre-existing since Session 5, not introduced this session — just
+got worse as campaign count grew. Fixed by parallelizing with `Promise.all`
+across campaigns (4 call sites: `campaignList`, `variantLookup`, per-publisher
+revenue, per-advertiser revenue). Verified with a synthetic timing test:
+16.7x faster with all correctness checks still passing. NOT yet verified live
+by Aadi as of this entry — should confirm the dropdown actually feels fast
+after this deploys.
+**Known remaining inefficiency (not fixed, lower priority):** the
+`view=advertiser&advId=X` endpoint still computes the FULL platform-wide
+campaign list before filtering to the requested advId. No longer the
+dominant cost since it's parallel now, but doing more work than necessary.
 
 ### Priority 3: Publisher-side Ad Unit / Placement formalization (Part 17 §2)
 Turn hardcoded `PUBLISHER_PAGES` and `CATEGORY_PUBLISHERS` in admin.js into

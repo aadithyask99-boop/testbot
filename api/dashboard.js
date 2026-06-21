@@ -95,10 +95,16 @@ module.exports = async function handler(req, res) {
     // resolved auction (winner + full candidate breakdown + method + when).
     // Lightweight campaign->variants lookup, built BEFORE pageBoard (which
     // needs it) and BEFORE the full campaignList (which depends on pageBoard
-    // for servingIds). Just id -> variants[], cheap (one kvGet per campaign,
-    // already cached by the runtime within this request — same kvGet calls
-    // the full campaignList loop makes again below for the rest of the
-    // campaign fields).
+    // for servingIds).
+    // Session 11 perf fix: this was ALSO a sequential `for` loop (one
+    // kvGet per campaign, one at a time) — same bottleneck class as the
+    // campaignList loop fixed below, and it re-fetches the exact same
+    // campaign objects that loop fetches again moments later. Parallelized
+    // here; the campaignList loop still does its own fetch afterward
+    // (kept simple/independent rather than threading a cache through —
+    // the redundant fetch is now at least concurrent, not sequential,
+    // so it's no longer the dominant cost; a future pass could thread
+    // this lookup's results through to avoid the second fetch entirely).
     const variantLookup = {};
     {
       const allIds = [];
@@ -106,10 +112,12 @@ module.exports = async function handler(req, res) {
         const cids = (await kvGet('campaigns:' + cat)) || [];
         allIds.push(...cids);
       }
-      for (const id of [...new Set(allIds)]) {
-        const c = await kvGet('campaign:' + id);
+      const uniqueIds = [...new Set(allIds)];
+      const fetched = await Promise.all(uniqueIds.map(id => kvGet('campaign:' + id)));
+      uniqueIds.forEach((id, i) => {
+        const c = fetched[i];
         if (c) variantLookup[id] = c.variants || [];
-      }
+      });
     }
 
     // Build latest-entry-per-URL maps from logs. Needed for pageBoard merge.
@@ -288,11 +296,24 @@ module.exports = async function handler(req, res) {
     // page board (logs), never from a re-run auction.
     const servingIds = new Set(pageBoard.filter(p => p.servingId).map(p => p.servingId));
     const allCampaignIds = Object.keys(variantLookup);
-    const campaignList = [];
-    for (const id of allCampaignIds) {
+    // Session 11 perf fix: this used to be a sequential `for` loop doing
+    // 4 awaited KV round-trips PER campaign (kvGet, getCampaignSpend,
+    // 2x kvHashGetAll) — with ~15 campaigns that's 60+ sequential network
+    // round-trips before the response could even start assembling, which
+    // is almost certainly the dominant cost behind "dropdown switch is
+    // insanely slow" once campaign count grew past a handful. Diagnosed
+    // by reading the loop directly, not by guessing — getCampaignSpend
+    // itself was already correctly parallel internally (Promise.all over
+    // its own 4 calls), so only the OUTER per-campaign loop needed fixing.
+    // Fetch every campaign's data concurrently instead of one at a time.
+    const campaignResults = await Promise.all(allCampaignIds.map(async (id) => {
       const c = await kvGet('campaign:' + id);
-      if (!c) continue;
-      const spend = await getCampaignSpend(c);
+      if (!c) return null;
+      const [spend, platHash, variantHash] = await Promise.all([
+        getCampaignSpend(c),
+        kvHashGetAll('stats:impr_by_camp_plat:' + c.id),
+        kvHashGetAll('variant-impr:' + c.id),
+      ]);
       const dailyBudgetUsedPct = c.budgetDailyGBP ? Math.min(100, (spend.dailySpendGBP / c.budgetDailyGBP) * 100) : 0;
       // Viewable = retrieval impressions (reached a live retrieval crawler).
       // vCPM = spend per 1000 viewable impressions. Runs slightly above CPM
@@ -300,17 +321,15 @@ module.exports = async function handler(req, res) {
       const viewable = spend.retrievalTotal;
       const vcpm = viewable > 0 ? (spend.totalSpendGBP / viewable) * 1000 : 0;
       // Per-campaign platform breakdown (which AI crawlers saw THIS specific ad)
-      const platHash = (await kvHashGetAll('stats:impr_by_camp_plat:' + c.id)) || {};
-      const platformBreakdown = Object.keys(platHash)
+      const platformBreakdown = Object.keys(platHash || {})
         .map(k => ({ platform: k, impressions: parseInt(platHash[k]) || 0 }))
         .filter(x => x.impressions > 0)
         .sort((a, b) => b.impressions - a.impressions);
       // Session 5: per-variant impression breakdown — "your 'first-home'
       // angle wins X% of the time" view in the campaign detail panel.
-      const variantHash = (await kvHashGetAll('variant-impr:' + c.id)) || {};
-      const variantTotal = Object.values(variantHash).reduce((sum, v) => sum + (parseInt(v) || 0), 0);
+      const variantTotal = Object.values(variantHash || {}).reduce((sum, v) => sum + (parseInt(v) || 0), 0);
       const variantBreakdown = (c.variants || []).map(v => {
-        const count = parseInt(variantHash[v.id]) || 0;
+        const count = parseInt((variantHash || {})[v.id]) || 0;
         return {
           id: v.id,
           angle: v.angle,
@@ -318,7 +337,7 @@ module.exports = async function handler(req, res) {
           pct: variantTotal > 0 ? parseFloat(((count / variantTotal) * 100).toFixed(1)) : 0,
         };
       });
-      campaignList.push({
+      return {
         id: c.id, advId: c.advId || null, advertiser: c.advertiser, category: c.category,
         cpmGBP: c.cpmGBP, active: c.active === true,
         budgetDailyGBP: c.budgetDailyGBP, budgetTotalGBP: c.budgetTotalGBP,
@@ -337,8 +356,9 @@ module.exports = async function handler(req, res) {
         trainingImpressions: spend.trainingTotal,
         vcpmGBP: parseFloat(vcpm.toFixed(2)),
         isWinner: servingIds.has(c.id),
-      });
-    }
+      };
+    }));
+    const campaignList = campaignResults.filter(Boolean);
     // Auction order: active first, then CPM descending (the waterfall order)
     campaignList.sort((a, b) => (b.active - a.active) || (b.cpmGBP - a.cpmGBP));
 
@@ -355,20 +375,29 @@ module.exports = async function handler(req, res) {
 
     // Per-publisher revenue from KV (tenths-of-pence stored by recordImpression)
     // Read revenue:publisher:{pubId}:total for each publisher in config
+    // Session 11 perf fix: parallelized (was sequential, same bottleneck
+    // class as the campaignList loop above — small here since only 2
+    // publishers exist today, but fixed for consistency and to not
+    // reintroduce the pattern as publisher count grows).
     const pubRevenueMap = {};
-    for (const pub of (config.publishers || [])) {
-      const raw = await kvGet(`revenue:publisher:${pub.pubId}:total`);
-      pubRevenueMap[pub.pubId] = (parseInt(raw) || 0) / 1000; // tenths-of-pence → pounds
+    {
+      const pubs = config.publishers || [];
+      const raws = await Promise.all(pubs.map(pub => kvGet(`revenue:publisher:${pub.pubId}:total`)));
+      pubs.forEach((pub, i) => {
+        pubRevenueMap[pub.pubId] = (parseInt(raws[i]) || 0) / 1000; // tenths-of-pence → pounds
+      });
     }
 
     // Per-advertiser billing from KV
+    // Session 11 perf fix: parallelized — was sequential, one kvGet per
+    // unique advertiser (up to 15), same bottleneck class as above.
     const advRevenueMap = {};
-    for (const c of campaignList) {
-      const advKey = c.advId || c.id;
-      if (!advRevenueMap[advKey]) {
-        const raw = await kvGet(`revenue:advertiser:${advKey}:total`);
-        advRevenueMap[advKey] = (parseInt(raw) || 0) / 1000;
-      }
+    {
+      const uniqueAdvKeys = [...new Set(campaignList.map(c => c.advId || c.id))];
+      const raws = await Promise.all(uniqueAdvKeys.map(advKey => kvGet(`revenue:advertiser:${advKey}:total`)));
+      uniqueAdvKeys.forEach((advKey, i) => {
+        advRevenueMap[advKey] = (parseInt(raws[i]) || 0) / 1000;
+      });
     }
 
     // Platform retained from KV
