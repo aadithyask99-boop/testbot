@@ -45,6 +45,25 @@ human traffic, rather than competing with it.
 **Initial categories:** Finance and Tech (the ad categories, not the
 publisher types — any publisher with finance/tech content is eligible).
 
+### Competitive context — Oasy.ai
+
+Oasy is the closest direct competitor, running the same core mechanism
+(detect AI crawler, serve sponsored variant). Researched their public
+case studies (Session 10, blog.oasy.ai) — two findings worth internalising:
+
+1. **They measure a different, further-downstream outcome than we do.**
+   We measure "did a crawler visit and did we inject something" (crawl-time).
+   They measure "did the AI's final answer to a real user question actually
+   mention the brand" (query-time), via independent third-party prompt
+   monitoring (Promptwatch.com). This is a more persuasive sales artifact —
+   "your brand went from 0% to 33% AI-answer visibility" beats "your ad was
+   injected 340 times." See Part 17 §6 for our proposed equivalent.
+
+2. **They lead with independent measurement specifically to defeat the
+   "grading your own homework" objection.** Worth remembering if/when we
+   publish our own case studies — self-reported dashboard numbers will
+   face the same skepticism Oasy pre-empted.
+
 ---
 
 ## PART 2 — INFRASTRUCTURE & DEPLOYMENT
@@ -800,6 +819,123 @@ inventory view, grouped by Placement.
 - Stronger honesty-test enforcement (reject vague filler more aggressively)
 - Consider page-context input (let advertiser optionally paste a target page
   URL so Haiku can tailor tone to that specific article)
+
+### 6. Prompt-Level Visibility Monitoring (researched Session 10, NOT BUILT)
+
+**The gap this fills:** Today we measure Stage A of a two-stage funnel —
+"did an AI crawler visit the page and did we serve a variant?" We have
+ZERO visibility into Stage B — "did that injected content actually make
+it into the AI's final answer when a real user asked a real question?"
+A crawl can be triggered by any of thousands of possible user prompts;
+we cannot connect a specific crawl to a specific question, and we cannot
+see whether the AI's answer to ANY question ends up naming our advertiser.
+
+**Competitive context:** Oasy (our direct competitor) publishes case
+studies built entirely around this Stage B measurement — e.g. "Amsterdam
+Food Tours was named in 52.6% of AI answers when their publisher was
+cited vs 16.6% when it wasn't, a 3.2x lift" and "Glider Insurance went
+from 0% to 33% AI-answer visibility in 26 days." These numbers come from
+an independent third-party monitor (Promptwatch.com), not Oasy's own
+dashboard — explicitly to pre-empt the "grading your own homework"
+objection. This is a meaningfully more persuasive sales artifact than
+anything our current dashboard can produce (we can only say "your ad was
+injected N times"; they can say "your brand went from invisible to
+recommended one time in three").
+
+**How this measurement actually works (no privileged AI-company access
+required):** The monitoring platforms are NOT getting internal data from
+OpenAI/Perplexity/Google. They maintain a fixed list of prompts, send
+those exact prompts to each AI product's own public-facing surface
+(API or web app) on a repeating schedule, and parse the response text
+for brand mentions plus, where the product exposes them, the visible
+citation/source list (Perplexity and ChatGPT Browse both show clickable
+source links — this is public, visible, parseable from the API response,
+not inferred). It is disciplined, repeated, automated querying of the
+public product — the same thing a human could do by hand, just scheduled
+and logged.
+
+**Proposed architecture for our own version:**
+
+```
+New subsystem — runs on its own schedule, separate from The Matcher.
+Does NOT touch injection, auction, or variant selection.
+
+1. PROMPT DEFINITION (per campaign, manual/considered — not automated
+   from keywords, since prompt quality matters more than quantity).
+   Stored as new campaign field: monitoredPrompts: [
+     "best commission-free investing platform UK",
+     "cheapest stocks and shares ISA"
+   ]
+   Oasy's own case studies show: 2-10 well-chosen high-intent commercial
+   prompts produce meaningful, stable measurement. More isn't always better
+   — broad "explain the system" prompts barely moved in their data; narrow,
+   high-commercial-intent prompts moved the most.
+
+2. SCHEDULED QUERY JOB (new, e.g. api/visibility-check.js — BUT WE HAVE
+   ONLY 2 FREE FUNCTION SLOTS, so this may need to fold into an existing
+   file, likely precompute.js or a new lightweight cron-triggered handler)
+   - Runs daily (Vercel Cron or external scheduler)
+   - For each campaign with monitoredPrompts defined:
+       For each prompt:
+         Query Perplexity API (has a stable, documented API + citations)
+         Query other platforms WHERE FEASIBLE (see constraints below)
+         Parse response text for brand name mention (case-insensitive)
+         Parse citations/sources list for publisher URL presence
+         Store result
+
+3. STORAGE (new KV pattern)
+   visibility:{campaignId}:{promptHash}:{date} → 
+     { mentioned: bool, citedPublisher: bool, sentiment?: number, rawAnswer: string }
+   
+   Mirrors Oasy's own split: track BOTH whether the brand was mentioned
+   AND whether our publisher's page was in the citation list for that
+   response. This lets us compute our own version of their headline
+   number: "mention rate when our publisher was cited vs when it wasn't."
+
+4. DASHBOARD SECTION (new, in advertiser portal — likely under Analytics
+   once the dashboard/analytics split is built, see Proposed Change #1)
+   - Per-prompt visibility trend (line chart, daily mention rate)
+   - "Cited vs not cited" split, mirroring Oasy's methodology exactly
+   - Peak visibility, current visibility, days-to-first-lift stats
+   - Per-prompt breakdown table (which prompts are working, which aren't)
+```
+
+**Real constraints — must be scoped before building, not discovered during:**
+
+- **API cost.** This is a recurring, ongoing cost (daily queries × prompts ×
+  platforms × advertisers), structurally different from the occasional
+  Haiku call we make today. 14 advertisers × 5 prompts × 1 platform × daily
+  = 70 API calls/day minimum just for Perplexity; multiply by however many
+  platforms we add. Needs real budget scoping against Anthropic/Perplexity
+  API pricing before committing to a build.
+
+- **Not all platforms have equivalent public APIs.** Perplexity has a
+  documented API with citations exposed. ChatGPT's API does NOT browse the
+  web the same way the consumer ChatGPT Browse product does by default —
+  needs verification whether a `web_search`-enabled API call produces
+  genuinely comparable citation/mention behaviour to what a real user sees
+  in the consumer app, or whether this realistically only works well for
+  Perplexity-style products first.
+
+- **This is a genuinely separate subsystem, not an extension of The
+  Matcher.** Different schedule (daily, not per-crawl), different target
+  (external AI products' public APIs, not our own Worker), different
+  storage pattern, different dashboard surface. Should be scoped and built
+  as its own piece of work, not bolted onto an existing file.
+
+- **Prompt selection requires human judgement per campaign**, similar to
+  how Creative Studio inputs require a real stat — there's no shortcut
+  to "good prompts," and bad prompt selection produces a measurement that
+  looks broken (flat 0% lines) even if the underlying injection strategy
+  is working fine on the prompts that matter.
+
+**Recommended path before full build:** a small, cheap pilot — ONE
+advertiser, 2-3 hand-picked prompts, Perplexity only — to validate the
+mechanism (can we reliably parse mentions + citations from Perplexity's
+API response) before committing to the full scheduled, multi-advertiser,
+multi-platform system. This mirrors how Session 9-10's CPM testing
+validated the core data-led-vs-promo insight cheaply before scaling it
+across all 14 campaigns.
 
 ---
 
