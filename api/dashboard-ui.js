@@ -1,13 +1,17 @@
 const config = require('../lib/config');
 
 // ============================================================
-// PORTAL ROUTING (Session 10)
-// /ui                       → chooser page (3 links)
-// /ui/admin                 → full dashboard (today's view, unchanged)
-// /ui/advertiser            → directory list of advertisers
-// /ui/advertiser/{slug}     → scoped advertiser portal (Batch 3)
-// /ui/publisher             → directory list of publishers
-// /ui/publisher/{slug}      → scoped publisher portal (Batch 3)
+// PORTAL ROUTING (Session 11 — /ui prefix retired except the chooser itself,
+// see PLATFORM_STRUCTURE_SPEC.md Part 17 §1)
+// /ui                             → chooser page ONLY (links to the 3 routes below)
+// /advertiser/{slug}/dashboard   → scoped advertiser portal, operational view
+// /advertiser/{slug}/analytics   → scoped advertiser portal, performance view
+// /publisher/{slug}/dashboard    → scoped publisher portal, operational view
+// /publisher/{slug}/analytics    → scoped publisher portal, performance view
+// /admin/dashboard               → full operator view (3-tab, unsplit — banner notes split is planned)
+// /admin/analytics               → full operator view (3-tab, unsplit — banner notes split is planned)
+// /advertiser                    → directory list of advertisers
+// /publisher                     → directory list of publishers
 // ============================================================
 
 function escapeHtml(s) {
@@ -32,11 +36,11 @@ function chooserHtml() {
     '</style></head><body><div class="wrap">' +
     '<h1>AI Ad Platform</h1>' +
     '<p class="sub">Choose your view</p>' +
-    '<a class="opt" href="/ui/advertiser"><div class="t">Advertiser</div>' +
+    '<a class="opt" href="/advertiser"><div class="t">Advertiser</div>' +
     '<div class="d">View your campaign performance, spend, and ad variants</div></a>' +
-    '<a class="opt" href="/ui/publisher"><div class="t">Publisher</div>' +
+    '<a class="opt" href="/publisher"><div class="t">Publisher</div>' +
     '<div class="d">View your earnings, pages, and what\'s serving</div></a>' +
-    '<a class="opt" href="/ui/admin"><div class="t">Admin</div>' +
+    '<a class="opt" href="/admin/dashboard"><div class="t">Admin</div>' +
     '<div class="d">Full platform view — all advertisers and publishers</div></a>' +
     '</div></body></html>';
 }
@@ -46,16 +50,16 @@ function listPageHtml(kind) {
   if (kind === 'advertiser') {
     items = (config.advertisers || []).filter(a => a.status === 'active');
     title = 'Advertisers';
-    base = '/ui/advertiser/';
+    base = '/advertiser/';
   } else {
     items = (config.publishers || []).filter(p => p.active);
     title = 'Publishers';
-    base = '/ui/publisher/';
+    base = '/publisher/';
   }
   var rows = items.map(function (it) {
     var slug = it.slug || '';
     var name = it.name || '';
-    return '<a class="opt" href="' + base + encodeURIComponent(slug) + '">' +
+    return '<a class="opt" href="' + base + encodeURIComponent(slug) + '/dashboard">' +
       '<div class="t">' + escapeHtml(name) + '</div></a>';
   }).join('');
   return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">' +
@@ -80,10 +84,25 @@ function listPageHtml(kind) {
     '</div></body></html>';
 }
 
+// Session 11: shared Dashboard/Analytics tab nav for scoped portal pages.
+// base = '/advertiser/{slug}' or '/publisher/{slug}'. active = 'dashboard' or 'analytics'.
+function navTabsHtml(base, active) {
+  var dashClass = active === 'dashboard' ? 'navtab active' : 'navtab';
+  var analyticsClass = active === 'analytics' ? 'navtab active' : 'navtab';
+  return '<div class="navtabs">' +
+    '<a class="' + dashClass + '" href="' + base + '/dashboard">Dashboard</a>' +
+    '<a class="' + analyticsClass + '" href="' + base + '/analytics">Analytics</a>' +
+    '</div>';
+}
+
 // Session 10 Batch 3: scoped advertiser portal.
 // A self-contained, dedicated page for ONE advertiser — fetches
 // /dashboard?view=advertiser&advId=X, no picker, no cross-advertiser data.
-function scopedAdvertiserPortalHtml(adv) {
+// Session 11: scoped advertiser DASHBOARD page — operational view.
+// Cards, AI Creative Studio, Campaign (settings + add creative + variants).
+// Fetches /dashboard?view=advertiser&advId=X, no picker, no cross-advertiser data.
+function scopedAdvertiserDashboardHtml(adv) {
+  var base = '/advertiser/' + encodeURIComponent(adv.slug || '');
   return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
     '<title>' + escapeHtml(adv.name) + ' \u2014 AI Ad Platform</title><style>' +
@@ -94,6 +113,10 @@ function scopedAdvertiserPortalHtml(adv) {
     'header a{font-size:11px;color:#888;text-decoration:none}' +
     '#ts{font-size:11px;color:#aaa}' +
     'main{padding:24px;max-width:1100px;margin:0 auto}' +
+    '.navtabs{display:flex;gap:4px;border-bottom:1px solid #e5e5e5;margin-bottom:20px}' +
+    '.navtab{font-size:13px;color:#888;text-decoration:none;padding:8px 14px;border-bottom:2px solid transparent;margin-bottom:-1px}' +
+    '.navtab.active{color:#111;font-weight:600;border-bottom-color:#111}' +
+    '.navtab:hover{color:#111}' +
     '.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:24px}' +
     '.card{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:16px}' +
     '.card .v{font-size:22px;font-weight:600}.card .l{font-size:11px;color:#888;margin-top:2px}.card .s{font-size:11px;color:#aaa;margin-top:4px}' +
@@ -101,9 +124,6 @@ function scopedAdvertiserPortalHtml(adv) {
     'section{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:20px;margin-bottom:20px}' +
     'section h2{font-size:14px;font-weight:600;margin-bottom:4px}' +
     'section .h2sub{font-size:11px;color:#999;margin-bottom:12px}' +
-    'table{width:100%;border-collapse:collapse;font-size:13px}' +
-    'th{text-align:left;font-size:11px;color:#888;font-weight:500;padding:6px 8px;border-bottom:1px solid #eee}' +
-    'td{padding:8px;border-bottom:1px solid #f3f3f3;vertical-align:top}' +
     '.empty{color:#aaa;font-size:12px;padding:16px;text-align:center}' +
     '.vrow{padding:10px 0;border-bottom:1px solid #f3f3f3;position:relative}.vrow:last-child{border-bottom:none}' +
     '.vangle{font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:6px}' +
@@ -126,23 +146,12 @@ function scopedAdvertiserPortalHtml(adv) {
     '.rec.approved{border-color:#16a34a;background:#f0fdf4}' +
     '.rec.rejected{opacity:0.4}' +
     '.tag-approved{font-size:10px;background:#dcfce7;color:#166534;padding:1px 6px;border-radius:3px;font-weight:600}' +
-    '.actrow{font-size:12px;padding:8px 0;border-bottom:1px solid #f3f3f3;display:flex;justify-content:space-between}' +
-    '.actrow:last-child{border-bottom:none}' +
-    '.actrow .plat{font-weight:600}' +
-    '.spark{display:flex;align-items:flex-end;gap:3px;height:40px;margin-top:8px}' +
-    '.spark .bar{flex:1;background:#bbf7d0;border-radius:2px 2px 0 0;min-height:2px}' +
     '</style></head><body>' +
     '<header><div><h1>' + escapeHtml(adv.name) + '</h1><div class="sub">Advertiser portal</div></div>' +
     '<div><span id="ts"></span> &nbsp; <a href="/ui">switch view</a></div></header>' +
     '<main>' +
+    navTabsHtml(base, 'dashboard') +
     '<div class="grid" id="adv-cards"><div class="empty">Loading...</div></div>' +
-
-    '<section><h2>Spend, last 7 days</h2><div class="h2sub">Daily spend trend</div>' +
-    '<div class="spark" id="adv-spark"></div></section>' +
-
-    '<section><h2>Campaign performance</h2><div class="h2sub">Where your ad is currently serving</div>' +
-    '<table><thead><tr><th>Page</th><th>Variant served</th><th>Method</th><th>Last crawl</th></tr></thead>' +
-    '<tbody id="adv-board"><tr><td colspan="4" class="empty">Loading...</td></tr></tbody></table></section>' +
 
     '<section><h2>AI Creative Studio</h2><div class="h2sub">Turn rough ideas into ad copy AI systems are more likely to cite as fact. At least 2 of your 3 ideas need a real stat, fee, or figure \u2014 Haiku will not invent data. Produces 2 fact-led variants (styled like a market report, not an ad) plus 1 honest promotional variant.</div>' +
     '<div class="formrow"><textarea id="csIdea1" placeholder="Idea 1, e.g. we have 1.6 million users" maxlength="200"></textarea></div>' +
@@ -176,9 +185,6 @@ function scopedAdvertiserPortalHtml(adv) {
     '<div class="h2sub" style="margin-bottom:8px">Top performer marked \u00b7 minimum 5 variants required</div>' +
     '<div id="adv-variants"><div class="empty">Loading...</div></div></section>' +
 
-    '<section><h2>Recent activity</h2><div class="h2sub">AI crawlers that have visited pages where you compete</div>' +
-    '<div id="adv-activity"><div class="empty">Loading...</div></div></section>' +
-
     '</main>' +
     '<script>' +
     'var ADV_ID="' + escapeHtml(adv.advId) + '";' +
@@ -186,12 +192,10 @@ function scopedAdvertiserPortalHtml(adv) {
     'var settingsDirty=false;' +
     'function fmt(n){return (n||0).toLocaleString("en-GB");}' +
     'function money(n){return "\u00a3"+(n||0).toFixed(2);}' +
-    'function ago(t){if(!t)return "\u2014";var s=Math.floor((Date.now()-new Date(t).getTime())/1000);if(s<60)return s+"s ago";if(s<3600)return Math.floor(s/60)+"m ago";return Math.floor(s/3600)+"h ago";}' +
     'function card(label,val,sub,cls){return "<div class=\'card "+(cls||"")+"\'><div class=\'v\'>"+val+"</div><div class=\'l\'>"+label+"</div>"+(sub?"<div class=\'s\'>"+sub+"</div>":"")+"</div>";}' +
-    'function urlPath(u){try{return new URL(u||"/").pathname;}catch(e){return u||"/";}}' +
     'function load(){' +
     '  fetch("/dashboard?view=advertiser&advId="+encodeURIComponent(ADV_ID)).then(function(r){return r.json();}).then(function(d){' +
-    '    var agg=d.aggregate||{},camps=d.campaigns||[],board=d.pageBoard||[],matches=d.recentMatches||[];' +
+    '    var agg=d.aggregate||{},camps=d.campaigns||[];' +
     '    var totalSpend=camps.reduce(function(a,c){return a+(c.totalSpendGBP||0);},0);' +
     '    var totalImpr=camps.reduce(function(a,c){return a+(c.impressions||0);},0);' +
     '    var activeCamp=camps[0];' +
@@ -213,13 +217,6 @@ function scopedAdvertiserPortalHtml(adv) {
     '      card("Total spend",money(totalSpend),"vCPM "+money(agg.blendedVcpmGBP||0),"green")+' +
     '      card("Daily budget used",dailyPct+"%",money(activeCamp?activeCamp.dailySpendGBP:0)+" / "+money(activeCamp?activeCamp.budgetDailyGBP:0),budgetWarn?"warn":"")+' +
     '      (budgetWarn?card("\u26a0 Approaching cap","",dailyPct>=100?"Daily budget exhausted":"Within "+(100-dailyPct)+"% of daily cap","warn"):"");' +
-    '    if(board.length){' +
-    '      document.getElementById("adv-board").innerHTML=board.map(function(p){' +
-    '        var url=urlPath(p.url);' +
-    '        var variant=p.servingId?(p.variantAngle||"\u2014"):"<span style=\'color:#ccc\'>not serving</span>";' +
-    '        return "<tr><td style=\'font-family:monospace;font-size:12px\'>"+url+"</td><td>"+variant+"</td><td>"+(p.matchMethod||"\u2014")+"</td><td>"+ago(p.lastCrawl)+"</td></tr>";' +
-    '      }).join("");' +
-    '    }else{document.getElementById("adv-board").innerHTML="<tr><td colspan=\'4\' class=\'empty\'>No pages yet</td></tr>";}' +
     '    var variants=(activeCamp&&activeCamp.variantBreakdown)||[];' +
     '    if(variants.length){' +
     '      var topPct=Math.max.apply(null,variants.map(function(v){return v.pct||0;}));' +
@@ -239,24 +236,8 @@ function scopedAdvertiserPortalHtml(adv) {
     '          "<div class=\'vtext\' id=\'text-"+v.id+"\'>"+(src?src.text:"")+"</div>"+editForm+"</div>";' +
     '      }).join("");' +
     '    }else{document.getElementById("adv-variants").innerHTML="<div class=\'empty\'>No variants yet</div>";}' +
-    '    if(matches.length){' +
-    '      document.getElementById("adv-activity").innerHTML=matches.slice(0,10).map(function(m){' +
-    '        var url=urlPath(m.url);' +
-    '        var outcome=m.served?("<span style=\'color:#16a34a\'>won \u2014 "+(m.variantAngle||"")+"</span>"):"<span style=\'color:#999\'>did not win</span>";' +
-    '        return "<div class=\'actrow\'><div><span class=\'plat\'>"+(m.platform||"unknown")+"</span> visited "+url+"<br>"+outcome+"</div><div>"+ago(m.time)+"</div></div>";' +
-    '      }).join("");' +
-    '    }else{document.getElementById("adv-activity").innerHTML="<div class=\'empty\'>No crawler activity yet</div>";}' +
     '    document.getElementById("ts").textContent="Updated "+new Date().toLocaleTimeString("en-GB");' +
-    '    loadSpark();' +
     '  }).catch(function(e){document.getElementById("ts").textContent="Error: "+e.message;});' +
-    '}' +
-    'function loadSpark(){' +
-    '  fetch("/dashboard?view=advertiser&advId="+encodeURIComponent(ADV_ID)).then(function(r){return r.json();}).then(function(d){' +
-    '    var camps=d.campaigns||[];if(!camps.length)return;' +
-    '    var c=camps[0];var bars=[];for(var i=0;i<7;i++)bars.push(Math.max(2,(c.dailySpendGBP||1)*(0.4+Math.random()*1.2)));' +
-    '    var max=Math.max.apply(null,bars);' +
-    '    document.getElementById("adv-spark").innerHTML=bars.map(function(b){return "<div class=\'bar\' style=\'height:"+Math.max(4,(b/max)*40)+"px\'></div>";}).join("");' +
-    '  }).catch(function(){});' +
     '}' +
     'function addCreative(){' +
     '  var angle=document.getElementById("newAngle").value.trim();' +
@@ -365,7 +346,7 @@ function scopedAdvertiserPortalHtml(adv) {
     '  fetch("/dashboard?view=advertiser&advId="+encodeURIComponent(ADV_ID)).then(function(r){return r.json();}).then(function(d){' +
     '    var camp=(d.campaigns||[])[0];if(!camp)throw new Error("Campaign not found");' +
     '    var newVariants=(camp.variants||[]).filter(function(v){return v.id!==variantId;});' +
-    '    if(newVariants.length<5){btn.disabled=false;btn.textContent="Remove";alert("Cannot remove — minimum 5 variants required.");return;}' +
+    '    if(newVariants.length<5){btn.disabled=false;btn.textContent="Remove";alert("Cannot remove \u2014 minimum 5 variants required.");return;}' +
     '    var body={id:camp.id,advId:camp.advId,advertiser:camp.advertiser,category:camp.category,cpmGBP:camp.cpmGBP,' +
     '      budgetDailyGBP:camp.budgetDailyGBP,budgetTotalGBP:camp.budgetTotalGBP,keywords:camp.keywords,' +
     '      matchingDescription:camp.matchingDescription,variants:newVariants,link:camp.link,linkText:camp.linkText,' +
@@ -396,10 +377,96 @@ function scopedAdvertiserPortalHtml(adv) {
     'load();setInterval(load,15000);' +
     '</script></body></html>';
 }
+
+// Session 11: scoped advertiser ANALYTICS page — performance view.
+// Spend sparkline, campaign performance table, recent activity.
+// Fetches /dashboard?view=advertiser&advId=X, no picker, no cross-advertiser data.
+function scopedAdvertiserAnalyticsHtml(adv) {
+  var base = '/advertiser/' + encodeURIComponent(adv.slug || '');
+  return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>' + escapeHtml(adv.name) + ' \u2014 AI Ad Platform</title><style>' +
+    '*{box-sizing:border-box;margin:0;padding:0}' +
+    'body{font-family:system-ui,-apple-system,sans-serif;background:#f9f9f9;color:#111;font-size:14px}' +
+    'header{background:#fff;border-bottom:1px solid #e5e5e5;padding:14px 24px;display:flex;align-items:center;justify-content:space-between}' +
+    'header h1{font-size:14px;font-weight:600}header .sub{font-size:11px;color:#999}' +
+    'header a{font-size:11px;color:#888;text-decoration:none}' +
+    '#ts{font-size:11px;color:#aaa}' +
+    'main{padding:24px;max-width:1100px;margin:0 auto}' +
+    '.navtabs{display:flex;gap:4px;border-bottom:1px solid #e5e5e5;margin-bottom:20px}' +
+    '.navtab{font-size:13px;color:#888;text-decoration:none;padding:8px 14px;border-bottom:2px solid transparent;margin-bottom:-1px}' +
+    '.navtab.active{color:#111;font-weight:600;border-bottom-color:#111}' +
+    '.navtab:hover{color:#111}' +
+    'section{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:20px;margin-bottom:20px}' +
+    'section h2{font-size:14px;font-weight:600;margin-bottom:4px}' +
+    'section .h2sub{font-size:11px;color:#999;margin-bottom:12px}' +
+    'table{width:100%;border-collapse:collapse;font-size:13px}' +
+    'th{text-align:left;font-size:11px;color:#888;font-weight:500;padding:6px 8px;border-bottom:1px solid #eee}' +
+    'td{padding:8px;border-bottom:1px solid #f3f3f3;vertical-align:top}' +
+    '.empty{color:#aaa;font-size:12px;padding:16px;text-align:center}' +
+    '.actrow{font-size:12px;padding:8px 0;border-bottom:1px solid #f3f3f3;display:flex;justify-content:space-between}' +
+    '.actrow:last-child{border-bottom:none}' +
+    '.actrow .plat{font-weight:600}' +
+    '.spark{display:flex;align-items:flex-end;gap:3px;height:40px;margin-top:8px}' +
+    '.spark .bar{flex:1;background:#bbf7d0;border-radius:2px 2px 0 0;min-height:2px}' +
+    '</style></head><body>' +
+    '<header><div><h1>' + escapeHtml(adv.name) + '</h1><div class="sub">Advertiser portal</div></div>' +
+    '<div><span id="ts"></span> &nbsp; <a href="/ui">switch view</a></div></header>' +
+    '<main>' +
+    navTabsHtml(base, 'analytics') +
+
+    '<section><h2>Spend, last 7 days</h2><div class="h2sub">Daily spend trend</div>' +
+    '<div class="spark" id="adv-spark"></div></section>' +
+
+    '<section><h2>Campaign performance</h2><div class="h2sub">Where your ad is currently serving</div>' +
+    '<table><thead><tr><th>Page</th><th>Variant served</th><th>Method</th><th>Last crawl</th></tr></thead>' +
+    '<tbody id="adv-board"><tr><td colspan="4" class="empty">Loading...</td></tr></tbody></table></section>' +
+
+    '<section><h2>Recent activity</h2><div class="h2sub">AI crawlers that have visited pages where you compete</div>' +
+    '<div id="adv-activity"><div class="empty">Loading...</div></div></section>' +
+
+    '</main>' +
+    '<script>' +
+    'var ADV_ID="' + escapeHtml(adv.advId) + '";' +
+    'function fmt(n){return (n||0).toLocaleString("en-GB");}' +
+    'function ago(t){if(!t)return "\u2014";var s=Math.floor((Date.now()-new Date(t).getTime())/1000);if(s<60)return s+"s ago";if(s<3600)return Math.floor(s/60)+"m ago";return Math.floor(s/3600)+"h ago";}' +
+    'function urlPath(u){try{return new URL(u||"/").pathname;}catch(e){return u||"/";}}' +
+    'function load(){' +
+    '  fetch("/dashboard?view=advertiser&advId="+encodeURIComponent(ADV_ID)).then(function(r){return r.json();}).then(function(d){' +
+    '    var camps=d.campaigns||[],board=d.pageBoard||[],matches=d.recentMatches||[];' +
+    '    if(board.length){' +
+    '      document.getElementById("adv-board").innerHTML=board.map(function(p){' +
+    '        var url=urlPath(p.url);' +
+    '        var variant=p.servingId?(p.variantAngle||"\u2014"):"<span style=\'color:#ccc\'>not serving</span>";' +
+    '        return "<tr><td style=\'font-family:monospace;font-size:12px\'>"+url+"</td><td>"+variant+"</td><td>"+(p.matchMethod||"\u2014")+"</td><td>"+ago(p.lastCrawl)+"</td></tr>";' +
+    '      }).join("");' +
+    '    }else{document.getElementById("adv-board").innerHTML="<tr><td colspan=\'4\' class=\'empty\'>No pages yet</td></tr>";}' +
+    '    if(matches.length){' +
+    '      document.getElementById("adv-activity").innerHTML=matches.slice(0,10).map(function(m){' +
+    '        var url=urlPath(m.url);' +
+    '        var outcome=m.served?("<span style=\'color:#16a34a\'>won \u2014 "+(m.variantAngle||"")+"</span>"):"<span style=\'color:#999\'>did not win</span>";' +
+    '        return "<div class=\'actrow\'><div><span class=\'plat\'>"+(m.platform||"unknown")+"</span> visited "+url+"<br>"+outcome+"</div><div>"+ago(m.time)+"</div></div>";' +
+    '      }).join("");' +
+    '    }else{document.getElementById("adv-activity").innerHTML="<div class=\'empty\'>No crawler activity yet</div>";}' +
+    '    if(camps.length){' +
+    '      var c=camps[0];var bars=[];for(var i=0;i<7;i++)bars.push(Math.max(2,(c.dailySpendGBP||1)*(0.4+Math.random()*1.2)));' +
+    '      var max=Math.max.apply(null,bars);' +
+    '      document.getElementById("adv-spark").innerHTML=bars.map(function(b){return "<div class=\'bar\' style=\'height:"+Math.max(4,(b/max)*40)+"px\'></div>";}).join("");' +
+    '    }' +
+    '    document.getElementById("ts").textContent="Updated "+new Date().toLocaleTimeString("en-GB");' +
+    '  }).catch(function(e){document.getElementById("ts").textContent="Error: "+e.message;});' +
+    '}' +
+    'load();setInterval(load,15000);' +
+    '</script></body></html>';
+}
 // Session 10 Batch 3: scoped publisher portal.
 // A self-contained, dedicated page for ONE publisher — fetches
 // /dashboard?view=publisher&pubId=X, no picker, no cross-publisher data.
-function scopedPublisherPortalHtml(pub) {
+// Session 11: scoped publisher DASHBOARD page — operational view.
+// Earnings/traffic cards, ad serving by page.
+// Fetches /dashboard?view=publisher&pubId=X, no picker, no cross-publisher data.
+function scopedPublisherDashboardHtml(pub) {
+  var base = '/publisher/' + encodeURIComponent(pub.slug || '');
   return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
     '<title>' + escapeHtml(pub.name) + ' \u2014 AI Ad Platform</title><style>' +
@@ -410,6 +477,10 @@ function scopedPublisherPortalHtml(pub) {
     'header a{font-size:11px;color:#888;text-decoration:none}' +
     '#ts{font-size:11px;color:#aaa}' +
     'main{padding:24px;max-width:1100px;margin:0 auto}' +
+    '.navtabs{display:flex;gap:4px;border-bottom:1px solid #e5e5e5;margin-bottom:20px}' +
+    '.navtab{font-size:13px;color:#888;text-decoration:none;padding:8px 14px;border-bottom:2px solid transparent;margin-bottom:-1px}' +
+    '.navtab.active{color:#111;font-weight:600;border-bottom-color:#111}' +
+    '.navtab:hover{color:#111}' +
     '.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:24px}' +
     '.card{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:16px}' +
     '.card .v{font-size:22px;font-weight:600}.card .l{font-size:11px;color:#888;margin-top:2px}.card .s{font-size:11px;color:#aaa;margin-top:4px}' +
@@ -421,19 +492,15 @@ function scopedPublisherPortalHtml(pub) {
     'th{text-align:left;font-size:11px;color:#888;font-weight:500;padding:6px 8px;border-bottom:1px solid #eee}' +
     'td{padding:8px;border-bottom:1px solid #f3f3f3;vertical-align:top}' +
     '.empty{color:#aaa;font-size:12px;padding:16px;text-align:center}' +
-    '.actrow{font-size:12px;padding:8px 0;border-bottom:1px solid #f3f3f3;display:flex;justify-content:space-between}' +
-    '.actrow:last-child{border-bottom:none}' +
-    '.actrow .plat{font-weight:600}' +
     '</style></head><body>' +
     '<header><div><h1>' + escapeHtml(pub.name) + '</h1><div class="sub">Publisher portal</div></div>' +
     '<div><span id="ts"></span> &nbsp; <a href="/ui">switch view</a></div></header>' +
     '<main>' +
+    navTabsHtml(base, 'dashboard') +
     '<div class="grid" id="pub-cards"><div class="empty">Loading...</div></div>' +
     '<section><h2>Ad serving \u2014 by page</h2><div class="h2sub">What is currently injected on each of your pages</div>' +
     '<table><thead><tr><th>Page</th><th>Serving</th><th>Platform</th><th>Last crawl</th></tr></thead>' +
     '<tbody id="pub-pages"><tr><td colspan="4" class="empty">Loading...</td></tr></tbody></table></section>' +
-    '<section><h2>Recent activity</h2><div class="h2sub">AI crawlers that have visited your pages</div>' +
-    '<div id="pub-activity"><div class="empty">Loading...</div></div></section>' +
     '</main>' +
     '<script>' +
     'var PUB_ID="' + escapeHtml(pub.pubId) + '";' +
@@ -444,7 +511,7 @@ function scopedPublisherPortalHtml(pub) {
     'function card(label,val,sub,cls){return "<div class=\'card "+(cls||"")+"\'><div class=\'v\'>"+val+"</div><div class=\'l\'>"+label+"</div>"+(sub?"<div class=\'s\'>"+sub+"</div>":"")+"</div>";}' +
     'function load(){' +
     '  fetch("/dashboard?view=publisher&pubId="+encodeURIComponent(PUB_ID)).then(function(r){return r.json();}).then(function(d){' +
-    '    var e=d.earnings||{},t=d.traffic||{},pages=d.pages||[],visits=d.recentVisits||[];' +
+    '    var e=d.earnings||{},t=d.traffic||{},pages=d.pages||[];' +
     '    document.getElementById("pub-cards").innerHTML=' +
     '      card("Your earnings",money(e.estimatedGBP),"today: "+money(e.estimatedTodayGBP)+" \u00b7 80% share","green")+' +
     '      card("Gross ad spend",money(e.grossGBP),"advertiser paid","green")+' +
@@ -458,6 +525,54 @@ function scopedPublisherPortalHtml(pub) {
     '        return "<tr><td style=\'font-family:monospace;font-size:12px\'>"+url+"</td><td>"+status+"</td><td>"+(p.lastPlatform||"\u2014")+"</td><td>"+ago(p.lastCrawl)+"</td></tr>";' +
     '      }).join("");' +
     '    }else{document.getElementById("pub-pages").innerHTML="<tr><td colspan=\'4\' class=\'empty\'>No pages yet</td></tr>";}' +
+    '    document.getElementById("ts").textContent="Updated "+new Date().toLocaleTimeString("en-GB");' +
+    '  }).catch(function(e){document.getElementById("ts").textContent="Error: "+e.message;});' +
+    '}' +
+    'load();setInterval(load,10000);' +
+    '</script></body></html>';
+}
+
+// Session 11: scoped publisher ANALYTICS page — performance view.
+// Recent activity only for now — thin until Ad Unit/Placement (Part 17 §2) lands.
+// Fetches /dashboard?view=publisher&pubId=X, no picker, no cross-publisher data.
+function scopedPublisherAnalyticsHtml(pub) {
+  var base = '/publisher/' + encodeURIComponent(pub.slug || '');
+  return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>' + escapeHtml(pub.name) + ' \u2014 AI Ad Platform</title><style>' +
+    '*{box-sizing:border-box;margin:0;padding:0}' +
+    'body{font-family:system-ui,-apple-system,sans-serif;background:#f9f9f9;color:#111;font-size:14px}' +
+    'header{background:#fff;border-bottom:1px solid #e5e5e5;padding:14px 24px;display:flex;align-items:center;justify-content:space-between}' +
+    'header h1{font-size:14px;font-weight:600}header .sub{font-size:11px;color:#999}' +
+    'header a{font-size:11px;color:#888;text-decoration:none}' +
+    '#ts{font-size:11px;color:#aaa}' +
+    'main{padding:24px;max-width:1100px;margin:0 auto}' +
+    '.navtabs{display:flex;gap:4px;border-bottom:1px solid #e5e5e5;margin-bottom:20px}' +
+    '.navtab{font-size:13px;color:#888;text-decoration:none;padding:8px 14px;border-bottom:2px solid transparent;margin-bottom:-1px}' +
+    '.navtab.active{color:#111;font-weight:600;border-bottom-color:#111}' +
+    '.navtab:hover{color:#111}' +
+    'section{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:20px;margin-bottom:20px}' +
+    'section h2{font-size:14px;font-weight:600;margin-bottom:4px}' +
+    'section .h2sub{font-size:11px;color:#999;margin-bottom:12px}' +
+    '.empty{color:#aaa;font-size:12px;padding:16px;text-align:center}' +
+    '.actrow{font-size:12px;padding:8px 0;border-bottom:1px solid #f3f3f3;display:flex;justify-content:space-between}' +
+    '.actrow:last-child{border-bottom:none}' +
+    '.actrow .plat{font-weight:600}' +
+    '</style></head><body>' +
+    '<header><div><h1>' + escapeHtml(pub.name) + '</h1><div class="sub">Publisher portal</div></div>' +
+    '<div><span id="ts"></span> &nbsp; <a href="/ui">switch view</a></div></header>' +
+    '<main>' +
+    navTabsHtml(base, 'analytics') +
+    '<section><h2>Recent activity</h2><div class="h2sub">AI crawlers that have visited your pages</div>' +
+    '<div id="pub-activity"><div class="empty">Loading...</div></div></section>' +
+    '</main>' +
+    '<script>' +
+    'var PUB_ID="' + escapeHtml(pub.pubId) + '";' +
+    'function ago(t){if(!t)return "\u2014";var s=Math.floor((Date.now()-new Date(t).getTime())/1000);if(s<60)return s+"s ago";if(s<3600)return Math.floor(s/60)+"m ago";return Math.floor(s/3600)+"h ago";}' +
+    'function urlPath(u){try{return new URL(u||"/").pathname;}catch(e){return u||"/";}}' +
+    'function load(){' +
+    '  fetch("/dashboard?view=publisher&pubId="+encodeURIComponent(PUB_ID)).then(function(r){return r.json();}).then(function(d){' +
+    '    var visits=d.recentVisits||[];' +
     '    if(visits.length){' +
     '      document.getElementById("pub-activity").innerHTML=visits.slice(0,10).map(function(v){' +
     '        var url=urlPath(v.url);' +
@@ -483,7 +598,7 @@ function notFoundHtml(kind, slug) {
     '</style></head><body><div>' +
     '<h1>No ' + escapeHtml(kind) + ' found for &ldquo;' + escapeHtml(slug) + '&rdquo;</h1>' +
     '<p>Check the URL or browse the directory.</p>' +
-    '<a href="/ui/' + escapeHtml(kind) + '">&larr; back to ' + escapeHtml(kind) + ' list</a>' +
+    '<a href="/' + escapeHtml(kind) + '">&larr; back to ' + escapeHtml(kind) + ' list</a>' +
     '</div></body></html>';
 }
 
@@ -492,40 +607,43 @@ module.exports = function handler(req, res) {
 
   var url = (req.url || '/ui').split('?')[0];
   var slug = (req.query && req.query.slug) || null;
+  var view = (req.query && req.query.view) || 'dashboard';
 
-  // /ui — chooser
+  // /ui — chooser ONLY (everything else under /ui is retired, see Part 17 §1)
   if (url === '/ui' || url === '/ui/') {
     return res.status(200).send(chooserHtml());
   }
 
-  // /ui/admin — full dashboard (unchanged)
-  if (url === '/ui/admin') {
+  // /admin/dashboard, /admin/analytics — full operator view (unsplit, banner notes split is planned)
+  if (url.indexOf('/admin/dashboard') === 0 || url.indexOf('/admin/analytics') === 0) {
     return res.status(200).send(html);
   }
 
-  // /ui/advertiser or /ui/advertiser/{slug}
-  if (url === '/ui/advertiser') {
+  // /advertiser — directory list
+  if (url.indexOf('/advertiser') === 0 && !slug) {
     return res.status(200).send(listPageHtml('advertiser'));
   }
-  if (url.indexOf('/ui/advertiser/') === 0) {
-    var advSlug = slug || decodeURIComponent(url.slice('/ui/advertiser/'.length));
-    var adv = (config.advertisers || []).find(a => a.slug === advSlug);
-    if (!adv) return res.status(404).send(notFoundHtml('advertiser', advSlug));
-    return res.status(200).send(scopedAdvertiserPortalHtml(adv));
+  // /advertiser/{slug}/dashboard or /advertiser/{slug}/analytics
+  if (url.indexOf('/advertiser') === 0 && slug) {
+    var adv = (config.advertisers || []).find(a => a.slug === slug);
+    if (!adv) return res.status(404).send(notFoundHtml('advertiser', slug));
+    if (view === 'analytics') return res.status(200).send(scopedAdvertiserAnalyticsHtml(adv));
+    return res.status(200).send(scopedAdvertiserDashboardHtml(adv));
   }
 
-  // /ui/publisher or /ui/publisher/{slug}
-  if (url === '/ui/publisher') {
+  // /publisher — directory list
+  if (url.indexOf('/publisher') === 0 && !slug) {
     return res.status(200).send(listPageHtml('publisher'));
   }
-  if (url.indexOf('/ui/publisher/') === 0) {
-    var pubSlug = slug || decodeURIComponent(url.slice('/ui/publisher/'.length));
-    var pub = (config.publishers || []).find(p => p.slug === pubSlug);
-    if (!pub) return res.status(404).send(notFoundHtml('publisher', pubSlug));
-    return res.status(200).send(scopedPublisherPortalHtml(pub));
+  // /publisher/{slug}/dashboard or /publisher/{slug}/analytics
+  if (url.indexOf('/publisher') === 0 && slug) {
+    var pub = (config.publishers || []).find(p => p.slug === slug);
+    if (!pub) return res.status(404).send(notFoundHtml('publisher', slug));
+    if (view === 'analytics') return res.status(200).send(scopedPublisherAnalyticsHtml(pub));
+    return res.status(200).send(scopedPublisherDashboardHtml(pub));
   }
 
-  // Fallback — unrecognised /ui path, show chooser
+  // Fallback — unrecognised path, show chooser
   return res.status(200).send(chooserHtml());
 };
 
@@ -587,6 +705,7 @@ var html = '<!DOCTYPE html>' +
 '<button onclick="switchTab(\'advertiser\',this)">Advertiser</button>' +
 '<button onclick="switchTab(\'publisher\',this)">Publisher</button>' +
 '</nav><main>' +
+'<div style="background:#fffbeb;border:1px solid #fde68a;color:#92400e;font-size:12px;padding:10px 14px;border-radius:8px;margin-bottom:20px">This view will split into Dashboard and Analytics \u2014 full redesign not yet built.</div>' +
 
 '<div id="tab-overview" class="tab active">' +
 '<div class="grid" id="ov-cards"></div>' +
