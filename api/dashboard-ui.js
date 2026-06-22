@@ -163,12 +163,10 @@ function sidebarHtml(items, base, active) {
 var ADVERTISER_SIDEBAR_ITEMS = [
   { key: 'overview', label: 'Overview' },
   { key: 'campaign', label: 'Campaign' },
-  { key: 'analytics', label: 'Analytics' },
 ];
 var PUBLISHER_SIDEBAR_ITEMS = [
   { key: 'overview', label: 'Overview' },
   { key: 'pages', label: 'Pages' },
-  { key: 'analytics', label: 'Analytics' },
 ];
 
 
@@ -187,12 +185,36 @@ var PUBLISHER_SIDEBAR_ITEMS = [
 // Lightest page: just the 3 summary cards. Own scoped fetch, independent
 // of Campaign/Analytics — switching to this page does NOT pay for
 // campaign-detail or performance-table rendering work.
+// Session 12: scoped advertiser OVERVIEW page — merged Overview + Analytics.
+// Cards, date-range bar charts (spend + impressions), winning creative per page,
+// and recent activity. Date filter triggers a fresh fetch with ?days=N or
+// ?from=YYYY-MM-DD&to=YYYY-MM-DD — real daily KV data, zeros where none exists.
 function scopedAdvertiserOverviewHtml(adv) {
   var base = '/advertiser/' + encodeURIComponent(adv.slug || '');
   return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
     '<title>' + escapeHtml(adv.name) + ' \u2014 AI Ad Platform</title><style>' +
     SIDEBAR_SHELL_CSS +
+    '.filter-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:20px}' +
+    '.filter-bar button{padding:6px 12px;font-size:12px;border:1px solid #ddd;border-radius:6px;cursor:pointer;background:#fff;color:#555}' +
+    '.filter-bar button.active{background:#111;color:#fff;border-color:#111}' +
+    '.filter-bar input[type=date]{padding:6px 8px;font-size:12px;border:1px solid #ddd;border-radius:6px;font-family:inherit}' +
+    '.filter-bar .custom-range{display:none;gap:6px;align-items:center}' +
+    '.filter-bar .custom-range.show{display:flex}' +
+    '.chart-wrap{margin-bottom:24px}' +
+    '.chart-label{font-size:11px;color:#888;margin-bottom:6px}' +
+    '.bar-chart{display:flex;align-items:flex-end;gap:2px;height:80px;background:#f9f9f9;border-radius:6px;padding:4px;overflow:hidden}' +
+    '.bar-chart .bar{flex:1;border-radius:2px 2px 0 0;min-height:1px;position:relative;cursor:default}' +
+    '.bar-chart .bar.spend{background:#4ade80}' +
+    '.bar-chart .bar.impr{background:#60a5fa}' +
+    '.bar-chart .bar:hover::after{content:attr(data-tip);position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#111;color:#fff;font-size:10px;padding:3px 6px;border-radius:4px;white-space:nowrap;z-index:10;pointer-events:none}' +
+    '.chart-axis{display:flex;justify-content:space-between;font-size:10px;color:#aaa;margin-top:2px}' +
+    '.two-charts{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}' +
+    'table{width:100%;border-collapse:collapse;font-size:13px}' +
+    'th{text-align:left;font-size:11px;color:#888;font-weight:500;padding:6px 8px;border-bottom:1px solid #eee}' +
+    'td{padding:8px;border-bottom:1px solid #f3f3f3;vertical-align:top}' +
+    '.actrow{font-size:12px;padding:8px 0;border-bottom:1px solid #f3f3f3;display:flex;justify-content:space-between}' +
+    '.actrow:last-child{border-bottom:none}.actrow .plat{font-weight:600}' +
     '</style></head><body>' +
     '<header><div><h1>' + escapeHtml(adv.name) + '</h1><div class="sub">Advertiser portal</div></div>' +
     '<div><span id="ts"></span> &nbsp; <a href="/ui">switch view</a></div></header>' +
@@ -200,17 +222,63 @@ function scopedAdvertiserOverviewHtml(adv) {
     sidebarHtml(ADVERTISER_SIDEBAR_ITEMS, base, 'overview') +
     '<main>' +
     '<div class="grid" id="adv-cards"><div class="empty">Loading...</div></div>' +
-    '</main>' +
-    '</div>' +
+
+    '<section><h2>Performance</h2><div class="h2sub">Daily spend and impressions over the selected range</div>' +
+    '<div class="filter-bar" id="dateFilter">' +
+    '<button onclick="setRange(7)" id="btn7" class="active">7d</button>' +
+    '<button onclick="setRange(30)" id="btn30">30d</button>' +
+    '<button onclick="setRange(60)" id="btn60">60d</button>' +
+    '<button onclick="setRange(90)" id="btn90">90d</button>' +
+    '<button onclick="toggleCustom()" id="btnCustom">Custom</button>' +
+    '<div class="custom-range" id="customRange">' +
+    '<input type="date" id="fromDate"> <span style="font-size:12px;color:#888">to</span> <input type="date" id="toDate">' +
+    '<button onclick="applyCustom()">Apply</button>' +
+    '</div></div>' +
+    '<div class="two-charts">' +
+    '<div class="chart-wrap"><div class="chart-label">Daily spend (\u00a3)</div><div class="bar-chart" id="chart-spend"></div><div class="chart-axis"><span id="chart-from"></span><span id="chart-to"></span></div></div>' +
+    '<div class="chart-wrap"><div class="chart-label">Daily impressions</div><div class="bar-chart" id="chart-impr"></div></div>' +
+    '</div></section>' +
+
+    '<section><h2>Winning creative \u2014 by page</h2><div class="h2sub">Which variant is currently serving on each page</div>' +
+    '<table><thead><tr><th>Page</th><th>Campaign</th><th>Variant</th><th>Method</th><th>Last crawl</th></tr></thead>' +
+    '<tbody id="winning-creative"><tr><td colspan="5" class="empty">Loading...</td></tr></tbody></table></section>' +
+
+    '<section><h2>Recent activity</h2><div class="h2sub">AI crawlers that have visited pages where you compete</div>' +
+    '<div id="adv-activity"><div class="empty">Loading...</div></div></section>' +
+
+    '</main></div>' +
     '<script>' +
     'var ADV_ID="' + escapeHtml(adv.advId) + '";' +
+    'var currentDays=7,currentFrom=null,currentTo=null,showCustom=false;' +
     'function fmt(n){return (n||0).toLocaleString("en-GB");}' +
     'function money(n){return "\u00a3"+(n||0).toFixed(2);}' +
+    'function ago(t){if(!t)return "\u2014";var s=Math.floor((Date.now()-new Date(t).getTime())/1000);if(s<60)return s+"s ago";if(s<3600)return Math.floor(s/60)+"m ago";return Math.floor(s/3600)+"h ago";}' +
+    'function urlPath(u){try{return new URL(u||"/").pathname;}catch(e){return u||"/";}}' +
     'function card(label,val,sub,cls){return "<div class=\'card "+(cls||"")+"\'><div class=\'v\'>"+val+"</div><div class=\'l\'>"+label+"</div>"+(sub?"<div class=\'s\'>"+sub+"</div>":"")+"</div>";}' +
+    'function setRange(d){currentDays=d;currentFrom=null;currentTo=null;showCustom=false;document.getElementById("customRange").className="custom-range";["7","30","60","90"].forEach(function(x){var b=document.getElementById("btn"+x);if(b)b.className=x===String(d)?"active":"";});document.getElementById("btnCustom").className="";loadCharts();}' +
+    'function toggleCustom(){showCustom=!showCustom;document.getElementById("customRange").className="custom-range"+(showCustom?" show":"");document.getElementById("btnCustom").className=showCustom?"active":"";}' +
+    'function applyCustom(){var f=document.getElementById("fromDate").value,t=document.getElementById("toDate").value;if(!f||!t){alert("Select both dates.");return;}currentFrom=f;currentTo=t;currentDays=null;["7","30","60","90"].forEach(function(x){var b=document.getElementById("btn"+x);if(b)b.className="";});loadCharts();}' +
+    'function buildChartUrl(){var base="/dashboard?view=advertiser&advId="+encodeURIComponent(ADV_ID);return currentDays?base+"&days="+currentDays:base+"&from="+currentFrom+"&to="+currentTo;}' +
+    'function renderBars(containerId,data,key,colorClass,fmtFn){' +
+    '  var el=document.getElementById(containerId);if(!el||!data||!data.length){if(el)el.innerHTML="<div style=\'text-align:center;color:#ccc;font-size:11px;line-height:80px;width:100%\'>No data yet</div>";return;}' +
+    '  var max=Math.max.apply(null,data.map(function(d){return d[key]||0;}));' +
+    '  if(max===0){el.innerHTML="<div style=\'text-align:center;color:#ccc;font-size:11px;line-height:80px;width:100%\'>No data yet</div>";return;}' +
+    '  el.innerHTML=data.map(function(d){' +
+    '    var h=max>0?Math.max(2,Math.round(((d[key]||0)/max)*72)):2;' +
+    '    return "<div class=\'bar "+colorClass+"\' style=\'height:"+h+"px\' data-tip=\'"+d.date+": "+fmtFn(d[key])+"\'></div>";' +
+    '  }).join("");' +
+    '}' +
+    'function loadCharts(){' +
+    '  fetch(buildChartUrl()).then(function(r){return r.json();}).then(function(d){' +
+    '    var cd=d.chartData||[];' +
+    '    renderBars("chart-spend",cd,"spendGBP","spend",money);' +
+    '    renderBars("chart-impr",cd,"impressions","impr",fmt);' +
+    '    if(cd.length){document.getElementById("chart-from").textContent=cd[0].date;document.getElementById("chart-to").textContent=cd[cd.length-1].date;}' +
+    '  }).catch(function(){});' +
+    '}' +
     'function load(){' +
     '  fetch("/dashboard?view=advertiser&advId="+encodeURIComponent(ADV_ID)).then(function(r){return r.json();}).then(function(d){' +
-    '    var agg=d.aggregate||{};' +
-    '    var camps=d.campaigns||[];' +
+    '    var agg=d.aggregate||{},camps=d.campaigns||[],board=d.pageBoard||[],matches=d.recentMatches||[];' +
     '    var totalSpend=camps.reduce(function(a,c){return a+(c.totalSpendGBP||0);},0);' +
     '    var totalImpr=camps.reduce(function(a,c){return a+(c.impressions||0);},0);' +
     '    var anyActive=camps.some(function(c){return c.active;});' +
@@ -218,10 +286,28 @@ function scopedAdvertiserOverviewHtml(adv) {
     '      card("Status",anyActive?"Active":"Paused",camps.length+" campaign"+(camps.length===1?"":"s"),anyActive?"green":"")+' +
     '      card("Total impressions",fmt(totalImpr),fmt(agg.totalViewable||0)+" viewable","blue")+' +
     '      card("Total spend",money(totalSpend),"vCPM "+money(agg.blendedVcpmGBP||0),"green");' +
+    '    var winRows=board.filter(function(p){return p.servingId&&camps.some(function(c){return c.id===p.servingId;});});' +
+    '    if(winRows.length){' +
+    '      document.getElementById("winning-creative").innerHTML=winRows.map(function(p){' +
+    '        var camp=camps.find(function(c){return c.id===p.servingId;});' +
+    '        return "<tr><td style=\'font-family:monospace;font-size:12px\'>"+urlPath(p.url)+"</td>" +' +
+    '          "<td style=\'font-family:monospace;font-size:12px\'>"+(camp?camp.id:"\u2014")+"</td>" +' +
+    '          "<td>"+(p.variantAngle||"\u2014")+"</td>" +' +
+    '          "<td>"+(p.matchMethod||"\u2014")+"</td>" +' +
+    '          "<td>"+ago(p.lastCrawl)+"</td></tr>";' +
+    '      }).join("");' +
+    '    }else{document.getElementById("winning-creative").innerHTML="<tr><td colspan=\'5\' class=\'empty\'>No pages currently serving</td></tr>";}' +
+    '    if(matches.length){' +
+    '      document.getElementById("adv-activity").innerHTML=matches.slice(0,10).map(function(m){' +
+    '        var url=urlPath(m.url);' +
+    '        var outcome=m.served?("<span style=\'color:#16a34a\'>won \u2014 "+(m.variantAngle||"")+"</span>"):"<span style=\'color:#999\'>did not win</span>";' +
+    '        return "<div class=\'actrow\'><div><span class=\'plat\'>"+(m.platform||"unknown")+"</span> visited "+url+"<br>"+outcome+"</div><div>"+ago(m.time)+"</div></div>";' +
+    '      }).join("");' +
+    '    }else{document.getElementById("adv-activity").innerHTML="<div class=\'empty\'>No crawler activity yet</div>";}' +
     '    document.getElementById("ts").textContent="Updated "+new Date().toLocaleTimeString("en-GB");' +
     '  }).catch(function(e){document.getElementById("ts").textContent="Error: "+e.message;});' +
     '}' +
-    'load();setInterval(load,15000);' +
+    'load();loadCharts();setInterval(function(){load();loadCharts();},15000);' +
     '</script></body></html>';
 }
 // Session 12: scoped advertiser CAMPAIGN page — sidebar Option A.
@@ -230,12 +316,26 @@ function scopedAdvertiserOverviewHtml(adv) {
 // Variants, and per-campaign Recent Activity all live here, scoped to
 // whichever campaign is selected. "+ Add new campaign" renders a staged
 // creation flow requiring 5+ variants before save.
+// Session 12: scoped advertiser CAMPAIGN page — updated.
+// Changes from Session 11: removed per-campaign Recent Activity (now on Overview),
+// added campaign-level stats header (total spend, impressions, pause/activate button),
+// added winning creative table (which pages this campaign is winning, which variant),
+// added per-variant breakdown table with impressions + estimated spend.
+// Creative Studio remains nested per-campaign (confirmed Session 11 decision).
 function scopedAdvertiserCampaignHtml(adv) {
   var base = '/advertiser/' + encodeURIComponent(adv.slug || '');
   return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
     '<title>' + escapeHtml(adv.name) + ' \u2014 AI Ad Platform</title><style>' +
     SIDEBAR_SHELL_CSS +
+    'table{width:100%;border-collapse:collapse;font-size:13px}' +
+    'th{text-align:left;font-size:11px;color:#888;font-weight:500;padding:6px 8px;border-bottom:1px solid #eee}' +
+    'td{padding:8px;border-bottom:1px solid #f3f3f3;vertical-align:top}' +
+    '.stat-row{display:flex;gap:16px;flex-wrap:wrap;margin:12px 0 16px;padding:12px;background:#f9f9f9;border-radius:8px}' +
+    '.stat{display:flex;flex-direction:column;gap:2px}' +
+    '.stat .sv{font-size:18px;font-weight:600}.stat .sl{font-size:11px;color:#888}' +
+    '.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}' +
+    '.badge.active{background:#dcfce7;color:#166534}.badge.paused{background:#fef3c7;color:#92400e}' +
     '</style></head><body>' +
     '<header><div><h1>' + escapeHtml(adv.name) + '</h1><div class="sub">Advertiser portal</div></div>' +
     '<div><span id="ts"></span> &nbsp; <a href="/ui">switch view</a></div></header>' +
@@ -255,21 +355,23 @@ function scopedAdvertiserCampaignHtml(adv) {
     'var ADV_NAME="' + escapeHtml(adv.name) + '";' +
     'var ADV_SLUG="' + escapeHtml(adv.advSlug || adv.slug || '') + '";' +
     'var CAMPAIGNS=[];' +
+    'var PAGE_BOARD=[];' +
     'var SELECTED_CAMP_ID=null;' +
     'var IS_NEW_CAMPAIGN=false;' +
     'var settingsDirty=false;' +
     'var stagedVariants=[];' +
     'function fmt(n){return (n||0).toLocaleString("en-GB");}' +
     'function money(n){return "\u00a3"+(n||0).toFixed(2);}' +
+    'function urlPath(u){try{return new URL(u||"/").pathname;}catch(e){return u||"/";}}' +
+    'function ago(t){if(!t)return "\u2014";var s=Math.floor((Date.now()-new Date(t).getTime())/1000);if(s<60)return s+"s ago";if(s<3600)return Math.floor(s/60)+"m ago";return Math.floor(s/3600)+"h ago";}' +
     'function nextCampaignId(){' +
     '  var nums=CAMPAIGNS.map(function(c){var m=/camp_(\\d+)/.exec(c.id);return m?parseInt(m[1],10):0;});' +
     '  var max=nums.length?Math.max.apply(null,nums):0;' +
-    '  var n=max+1;' +
-    '  return "camp_"+String(n).padStart(3,"0");' +
+    '  var n=max+1;return "camp_"+String(n).padStart(3,"0");' +
     '}' +
     'function load(){' +
     '  fetch("/dashboard?view=advertiser&advId="+encodeURIComponent(ADV_ID)).then(function(r){return r.json();}).then(function(d){' +
-    '    CAMPAIGNS=d.campaigns||[];' +
+    '    CAMPAIGNS=d.campaigns||[];PAGE_BOARD=d.pageBoard||[];' +
     '    renderCampaignPicker();' +
     '    document.getElementById("ts").textContent="Updated "+new Date().toLocaleTimeString("en-GB");' +
     '  }).catch(function(e){document.getElementById("ts").textContent="Error: "+e.message;});' +
@@ -283,35 +385,43 @@ function scopedAdvertiserCampaignHtml(adv) {
     '  if(SELECTED_CAMP_ID&&CAMPAIGNS.some(function(c){return c.id===SELECTED_CAMP_ID;})){' +
     '    sel.value=SELECTED_CAMP_ID;renderCampaignBody();return;' +
     '  }' +
-    '  if(CAMPAIGNS.length>0){' +
-    '    sel.value=CAMPAIGNS[0].id;selectCampaign(CAMPAIGNS[0].id);' +
-    '  }else{' +
-    '    sel.value="__new__";selectCampaign("__new__");' +
-    '  }' +
+    '  if(CAMPAIGNS.length>0){sel.value=CAMPAIGNS[0].id;selectCampaign(CAMPAIGNS[0].id);}' +
+    '  else{sel.value="__new__";selectCampaign("__new__");}' +
     '}' +
     'function selectCampaign(val){' +
     '  settingsDirty=false;' +
-    '  if(val==="__new__"){' +
-    '    IS_NEW_CAMPAIGN=true;SELECTED_CAMP_ID=null;stagedVariants=[];' +
-    '  }else{' +
-    '    IS_NEW_CAMPAIGN=false;SELECTED_CAMP_ID=val;' +
-    '  }' +
+    '  if(val==="__new__"){IS_NEW_CAMPAIGN=true;SELECTED_CAMP_ID=null;stagedVariants=[];}' +
+    '  else{IS_NEW_CAMPAIGN=false;SELECTED_CAMP_ID=val;}' +
     '  renderCampaignBody();' +
     '}' +
-    'function getSelectedCampaign(){' +
-    '  return CAMPAIGNS.find(function(c){return c.id===SELECTED_CAMP_ID;})||null;' +
-    '}' +
+    'function getSelectedCampaign(){return CAMPAIGNS.find(function(c){return c.id===SELECTED_CAMP_ID;})||null;}' +
     'function renderCampaignBody(){' +
     '  var body=document.getElementById("campBody");' +
     '  if(IS_NEW_CAMPAIGN){body.innerHTML=newCampaignHtml();attachNewCampaignCharCounters();return;}' +
     '  var camp=getSelectedCampaign();' +
     '  if(!camp){body.innerHTML="<div class=\'empty\'>Campaign not found.</div>";return;}' +
     '  body.innerHTML=existingCampaignHtml(camp);' +
-    '  loadCampaignActivity(camp.id);' +
     '}' +
     'function existingCampaignHtml(camp){' +
     '  var kw=(camp.keywords||[]).join(", ");' +
     '  var html="";' +
+    // Campaign stats header
+    '  html+="<div class=\'stat-row\'>" +' +
+    '    "<div class=\'stat\'><div class=\'sv\'>"+money(camp.totalSpendGBP)+"</div><div class=\'sl\'>Total spend</div></div>" +' +
+    '    "<div class=\'stat\'><div class=\'sv\'>"+fmt(camp.impressions)+"</div><div class=\'sl\'>Total impressions</div></div>" +' +
+    '    "<div class=\'stat\'><div class=\'sv\'>"+money(camp.dailySpendGBP)+"</div><div class=\'sl\'>Spend today</div></div>" +' +
+    '    "<div class=\'stat\'><div class=\'sv\'>"+(camp.dailyBudgetUsedPct||0)+"%</div><div class=\'sl\'>Daily budget used</div></div>" +' +
+    '    "<div class=\'stat\'><div class=\'sv\'><span class=\'badge "+(camp.active?"active":"paused")+"\'"+">"+(camp.active?"Active":"Paused")+"</span></div><div class=\'sl\'>Status &nbsp; <button class=\'btnsec\' style=\'font-size:11px;padding:2px 8px\' onclick=\'togglePause()\' id=\'pauseBtn\'>"+(camp.active?"Pause":"Activate")+"</button><span id=\'pauseMsg\' style=\'font-size:11px;margin-left:6px\'></span></div></div>" +' +
+    '    "</div>";' +
+    // Winning creative per page for this campaign
+    '  var winPages=PAGE_BOARD.filter(function(p){return p.servingId===camp.id;});' +
+    '  html+="<div style=\'font-size:12px;font-weight:600;color:#666;margin:14px 0 8px;text-transform:uppercase;letter-spacing:0.03em\'>Winning creative \u2014 by page</div>";' +
+    '  if(winPages.length){' +
+    '    html+="<table style=\'margin-bottom:16px\'><thead><tr><th>Page</th><th>Variant</th><th>Method</th><th>Last crawl</th></tr></thead><tbody>"+' +
+    '      winPages.map(function(p){return "<tr><td style=\'font-family:monospace;font-size:12px\'>"+urlPath(p.url)+"</td><td>"+(p.variantAngle||"\u2014")+"</td><td>"+(p.matchMethod||"\u2014")+"</td><td>"+ago(p.lastCrawl)+"</td></tr>";}).join("")+' +
+    '      "</tbody></table>";' +
+    '  }else{html+="<div class=\'empty\' style=\'margin-bottom:16px\'>Not currently winning any pages</div>";}' +
+    // Settings
     '  html+="<div style=\'font-size:12px;font-weight:600;color:#666;margin:14px 0 8px;text-transform:uppercase;letter-spacing:0.03em\'>Settings</div>";' +
     '  html+="<div class=\'formrow\'><div style=\'flex:1\'><label style=\'font-size:11px;color:#888\'>CPM (\u00a3)</label><input type=\'number\' id=\'setCpm\' step=\'0.01\' min=\'1\' value=\'"+camp.cpmGBP+"\' onfocus=\'settingsDirty=true\'></div>" +' +
     '    "<div style=\'flex:1\'><label style=\'font-size:11px;color:#888\'>Daily budget (\u00a3)</label><input type=\'number\' id=\'setDailyBudget\' step=\'1\' min=\'1\' value=\'"+camp.budgetDailyGBP+"\' onfocus=\'settingsDirty=true\'></div>" +' +
@@ -321,6 +431,18 @@ function scopedAdvertiserCampaignHtml(adv) {
     '  html+="<div class=\'formrow\'><div style=\'flex:1\'><label style=\'font-size:11px;color:#888\'>Matching description</label><textarea id=\'setMatchDesc\' maxlength=\'300\' onfocus=\'settingsDirty=true\'>"+(camp.matchingDescription||"")+"</textarea></div></div>";' +
     '  html+="<button class=\'btn\' onclick=\'saveSettings()\' id=\'saveSettingsBtn\'>Save settings</button> <button class=\'btn btnsec\' style=\'color:#dc2626;border-color:#fecaca\' onclick=\'deleteCampaign()\'>Delete campaign</button>";' +
     '  html+="<div class=\'formmsg\' id=\'setMsg\'></div>";' +
+    // Per-variant breakdown
+    '  var variants=camp.variantBreakdown||[];' +
+    '  html+="<div style=\'font-size:12px;font-weight:600;color:#666;margin:24px 0 8px;text-transform:uppercase;letter-spacing:0.03em\'>Variant performance</div>";' +
+    '  if(variants.length){' +
+    '    var totalImpr=variants.reduce(function(s,v){return s+(v.impressions||0);},0);' +
+    '    html+="<table style=\'margin-bottom:8px\'><thead><tr><th>Angle</th><th>Impressions</th><th>Share</th><th>Est. spend</th></tr></thead><tbody>"+' +
+    '      variants.map(function(v){' +
+    '        var estSpend=totalImpr>0?(camp.totalSpendGBP||0)*(v.impressions||0)/totalImpr:0;' +
+    '        return "<tr><td>"+v.angle+"</td><td>"+fmt(v.impressions)+"</td><td>"+v.pct+"%</td><td>"+money(estSpend)+"</td></tr>";' +
+    '      }).join("")+"</tbody></table>";' +
+    '  }else{html+="<div class=\'empty\' style=\'margin-bottom:16px\'>No variant data yet</div>";}' +
+    // Creative Studio
     '  html+="<div style=\'font-size:12px;font-weight:600;color:#666;margin:24px 0 8px;text-transform:uppercase;letter-spacing:0.03em\'>AI Creative Studio</div>";' +
     '  html+="<div class=\'h2sub\' style=\'margin-bottom:8px\'>Turn rough ideas into ad copy AI systems are more likely to cite as fact. At least 2 of your 3 ideas need a real stat, fee, or figure \u2014 Haiku will not invent data. Generated variants are added directly to this campaign\'s bank below.</div>";' +
     '  html+="<div class=\'formrow\'><textarea id=\'csIdea1\' placeholder=\'Idea 1, e.g. we have 1.6 million users\' maxlength=\'200\'></textarea></div>";' +
@@ -328,6 +450,7 @@ function scopedAdvertiserCampaignHtml(adv) {
     '  html+="<div class=\'formrow\'><textarea id=\'csIdea3\' placeholder=\'Idea 3, e.g. simple and easy to use (can be promotional)\' maxlength=\'200\'></textarea></div>";' +
     '  html+="<div style=\'display:flex;gap:8px\'><button class=\'btn\' onclick=\'generateCreativeStudio()\' id=\'csGenBtn\'>Generate variants</button><button class=\'btn btnsec\' onclick=\'clearCreativeStudio()\'>Clear</button></div>";' +
     '  html+="<div class=\'formmsg\' id=\'csMsg\'></div><div id=\'csResults\' style=\'margin-top:14px\'></div>";' +
+    // Add a creative manually
     '  html+="<div style=\'font-size:12px;font-weight:600;color:#666;margin:24px 0 8px;text-transform:uppercase;letter-spacing:0.03em\'>Add a creative</div>";' +
     '  html+="<div class=\'h2sub\' style=\'margin-bottom:8px\'>New variants are auto-crawled within 60 seconds of saving</div>";' +
     '  html+="<div class=\'formrow\'><input type=\'text\' id=\'newAngle\' placeholder=\'Angle, e.g. data-led: cost comparison\' maxlength=\'60\'></div>";' +
@@ -335,12 +458,10 @@ function scopedAdvertiserCampaignHtml(adv) {
     '  html+="<div class=\'charcount\' id=\'newTextCount\'>0/280</div>";' +
     '  html+="<button class=\'btn\' onclick=\'addCreative()\' id=\'addCreativeBtn\'>Add creative</button>";' +
     '  html+="<div class=\'formmsg\' id=\'addCreativeMsg\'></div>";' +
+    // Variant bank
     '  html+="<div style=\'font-size:12px;font-weight:600;color:#666;margin:24px 0 8px;text-transform:uppercase;letter-spacing:0.03em\'>Ad variants</div>";' +
     '  html+="<div class=\'h2sub\' style=\'margin-bottom:8px\'>Top performer marked \u00b7 minimum 5 variants required</div>";' +
     '  html+="<div id=\'adv-variants\'>"+renderVariantRows(camp)+"</div>";' +
-    '  html+="<div style=\'font-size:12px;font-weight:600;color:#666;margin:24px 0 8px;text-transform:uppercase;letter-spacing:0.03em\'>Recent activity</div>";' +
-    '  html+="<div class=\'h2sub\' style=\'margin-bottom:8px\'>AI crawlers that have visited pages where this campaign competes</div>";' +
-    '  html+="<div id=\'camp-activity\'><div class=\'empty\'>Loading...</div></div>";' +
     '  return html;' +
     '}' +
     'function renderVariantRows(camp){' +
@@ -362,19 +483,6 @@ function scopedAdvertiserCampaignHtml(adv) {
     '      "<div class=\'vstat\'>"+fmt(v.impressions)+" impr \u00b7 "+v.pct+"%</div>" +' +
     '      "<div class=\'vtext\' id=\'text-"+v.id+"\'>"+(src?src.text:"")+"</div>"+editForm+"</div>";' +
     '  }).join("");' +
-    '}' +
-    'function loadCampaignActivity(campId){' +
-    '  fetch("/dashboard?view=advertiser&advId="+encodeURIComponent(ADV_ID)+"&campaignId="+encodeURIComponent(campId)).then(function(r){return r.json();}).then(function(d){' +
-    '    var el=document.getElementById("camp-activity");if(!el)return;' +
-    '    var matches=(d.recentMatches||[]).filter(function(m){return m.campaignId===campId;});' +
-    '    if(!matches.length){el.innerHTML="<div class=\'empty\'>No crawler activity yet</div>";return;}' +
-    '    el.innerHTML=matches.slice(0,10).map(function(m){' +
-    '      var url=(function(u){try{return new URL(u||"/").pathname;}catch(e){return u||"/";}})(m.url);' +
-    '      var outcome=m.served?("<span style=\'color:#16a34a\'>won \u2014 "+(m.variantAngle||"")+"</span>"):"<span style=\'color:#999\'>did not win</span>";' +
-    '      var ago=(function(t){if(!t)return "\u2014";var s=Math.floor((Date.now()-new Date(t).getTime())/1000);if(s<60)return s+"s ago";if(s<3600)return Math.floor(s/60)+"m ago";return Math.floor(s/3600)+"h ago";})(m.time);' +
-    '      return "<div class=\'actrow\'><div><span class=\'plat\'>"+(m.platform||"unknown")+"</span> visited "+url+"<br>"+outcome+"</div><div>"+ago+"</div></div>";' +
-    '    }).join("");' +
-    '  }).catch(function(){var el=document.getElementById("camp-activity");if(el)el.innerHTML="<div class=\'empty\'>Could not load activity</div>";});' +
     '}' +
     'function newCampaignHtml(){' +
     '  var html="";' +
@@ -455,9 +563,21 @@ function scopedAdvertiserCampaignHtml(adv) {
     '    .then(function(r){return r.json();}).then(function(res){' +
     '    if(res.error){msg.textContent=res.error;msg.style.color="#dc2626";btn.disabled=false;btn.textContent="Create campaign";return;}' +
     '    stagedVariants=[];IS_NEW_CAMPAIGN=false;SELECTED_CAMP_ID=id;' +
-    '    msg.textContent="Campaign created.";msg.style.color="#16a34a";' +
-    '    load();' +
+    '    msg.textContent="Campaign created.";msg.style.color="#16a34a";load();' +
     '  }).catch(function(e){msg.textContent="Error: "+e.message;msg.style.color="#dc2626";btn.disabled=false;btn.textContent="Create campaign";});' +
+    '}' +
+    'function togglePause(){' +
+    '  var camp=getSelectedCampaign();if(!camp)return;' +
+    '  var newActive=!camp.active;' +
+    '  var btn=document.getElementById("pauseBtn");var msg=document.getElementById("pauseMsg");' +
+    '  if(btn){btn.disabled=true;btn.textContent=newActive?"Activating...":"Pausing...";}' +
+    '  fetch("/admin/campaign/pause",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:camp.id,active:newActive})})' +
+    '    .then(function(r){return r.json();}).then(function(res){' +
+    '    if(btn)btn.disabled=false;' +
+    '    if(res.error){if(msg){msg.textContent=res.error;msg.style.color="#dc2626";}return;}' +
+    '    if(msg){msg.textContent=newActive?"Campaign activated.":"Campaign paused.";msg.style.color="#16a34a";}' +
+    '    load();' +
+    '  }).catch(function(e){if(btn)btn.disabled=false;if(msg){msg.textContent="Error: "+e.message;msg.style.color="#dc2626";}});' +
     '}' +
     'function generateCreativeStudio(){' +
     '  var i1=document.getElementById("csIdea1").value.trim();' +
@@ -490,8 +610,7 @@ function scopedAdvertiserCampaignHtml(adv) {
     '  if(IS_NEW_CAMPAIGN){' +
     '    stagedVariants.push({angle:v.angle,text:v.text});' +
     '    if(btn){btn.textContent="\\u2713 Added";btn.style.background="#16a34a";btn.disabled=true;}' +
-    '    refreshStagedDisplay();' +
-    '    return;' +
+    '    refreshStagedDisplay();return;' +
     '  }' +
     '  var camp=getSelectedCampaign();if(!camp){if(btn)btn.textContent="Error: no campaign loaded";return;}' +
     '  if(btn){btn.disabled=true;btn.textContent="Adding...";}' +
@@ -503,8 +622,7 @@ function scopedAdvertiserCampaignHtml(adv) {
     '  fetch("/admin/campaign",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})' +
     '    .then(function(r){return r.json();}).then(function(res){' +
     '    if(res.error){if(btn){btn.disabled=false;btn.textContent="Failed: "+res.error;}return;}' +
-    '    if(btn){btn.textContent="\\u2713 Added";btn.style.background="#16a34a";}' +
-    '    load();' +
+    '    if(btn){btn.textContent="\\u2713 Added";btn.style.background="#16a34a";}load();' +
     '  }).catch(function(e){if(btn){btn.disabled=false;btn.textContent="Failed: "+e.message;}});' +
     '}' +
     'function addCreative(){' +
@@ -512,7 +630,7 @@ function scopedAdvertiserCampaignHtml(adv) {
     '  var text=document.getElementById("newText").value.trim();' +
     '  var msg=document.getElementById("addCreativeMsg");' +
     '  if(!angle||!text){msg.textContent="Both fields are required.";msg.style.color="#dc2626";return;}' +
-    '  var camp=getSelectedCampaign();if(!camp){msg.textContent="No campaign loaded yet \u2014 try again in a moment.";msg.style.color="#dc2626";return;}' +
+    '  var camp=getSelectedCampaign();if(!camp){msg.textContent="No campaign loaded yet.";msg.style.color="#dc2626";return;}' +
     '  var btn=document.getElementById("addCreativeBtn");btn.disabled=true;btn.textContent="Saving...";' +
     '  var newVariants=(camp.variants||[]).concat([{angle:angle,text:text}]);' +
     '  var body={id:camp.id,advId:camp.advId,advertiser:camp.advertiser,category:camp.category,cpmGBP:camp.cpmGBP,' +
@@ -551,14 +669,8 @@ function scopedAdvertiserCampaignHtml(adv) {
     '    msg.textContent="Settings saved.";msg.style.color="#16a34a";settingsDirty=false;load();' +
     '  }).catch(function(e){btn.disabled=false;btn.textContent="Save settings";msg.textContent="Error: "+e.message;msg.style.color="#dc2626";});' +
     '}' +
-    'function editVariant(id){' +
-    '  var f=document.getElementById("edit-"+id);if(f)f.style.display="block";' +
-    '  var t=document.getElementById("text-"+id);if(t)t.style.display="none";' +
-    '}' +
-    'function cancelEditVariant(id){' +
-    '  var f=document.getElementById("edit-"+id);if(f)f.style.display="none";' +
-    '  var t=document.getElementById("text-"+id);if(t)t.style.display="block";' +
-    '}' +
+    'function editVariant(id){var f=document.getElementById("edit-"+id);if(f)f.style.display="block";var t=document.getElementById("text-"+id);if(t)t.style.display="none";}' +
+    'function cancelEditVariant(id){var f=document.getElementById("edit-"+id);if(f)f.style.display="none";var t=document.getElementById("text-"+id);if(t)t.style.display="block";}' +
     'function saveVariantEdit(id,btn){' +
     '  var angle=document.getElementById("editAngle-"+id).value.trim();' +
     '  var text=document.getElementById("editText-"+id).value.trim();' +
@@ -572,8 +684,7 @@ function scopedAdvertiserCampaignHtml(adv) {
     '    advSlug:camp.advSlug,active:camp.active};' +
     '  fetch("/admin/campaign",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})' +
     '    .then(function(r){return r.json();}).then(function(res){' +
-    '    if(res.error){btn.disabled=false;btn.textContent="Save";alert(res.error);return;}' +
-    '    load();' +
+    '    if(res.error){btn.disabled=false;btn.textContent="Save";alert(res.error);return;}load();' +
     '  }).catch(function(e){btn.disabled=false;btn.textContent="Save";alert("Error: "+e.message);});' +
     '}' +
     'function deleteVariant(variantId,btn){' +
@@ -596,8 +707,7 @@ function scopedAdvertiserCampaignHtml(adv) {
     '  if(!confirm("Delete campaign "+camp.id+"? This cannot be undone."))return;' +
     '  fetch("/admin/campaign/delete",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:camp.id})})' +
     '    .then(function(r){return r.json();}).then(function(res){' +
-    '    if(res.error){alert(res.error);return;}' +
-    '    SELECTED_CAMP_ID=null;load();' +
+    '    if(res.error){alert(res.error);return;}SELECTED_CAMP_ID=null;load();' +
     '  }).catch(function(e){alert("Error: "+e.message);});' +
     '}' +
     'load();setInterval(load,15000);' +
@@ -674,6 +784,22 @@ function scopedPublisherOverviewHtml(pub) {
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
     '<title>' + escapeHtml(pub.name) + ' \u2014 AI Ad Platform</title><style>' +
     SIDEBAR_SHELL_CSS +
+    '.filter-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:20px}' +
+    '.filter-bar button{padding:6px 12px;font-size:12px;border:1px solid #ddd;border-radius:6px;cursor:pointer;background:#fff;color:#555}' +
+    '.filter-bar button.active{background:#111;color:#fff;border-color:#111}' +
+    '.filter-bar input[type=date]{padding:6px 8px;font-size:12px;border:1px solid #ddd;border-radius:6px;font-family:inherit}' +
+    '.filter-bar .custom-range{display:none;gap:6px;align-items:center}' +
+    '.filter-bar .custom-range.show{display:flex}' +
+    '.chart-wrap{margin-bottom:24px}' +
+    '.chart-label{font-size:11px;color:#888;margin-bottom:6px}' +
+    '.bar-chart{display:flex;align-items:flex-end;gap:2px;height:80px;background:#f9f9f9;border-radius:6px;padding:4px;overflow:hidden}' +
+    '.bar-chart .bar{flex:1;border-radius:2px 2px 0 0;min-height:1px;position:relative;cursor:default}' +
+    '.bar-chart .bar.revenue{background:#4ade80}.bar-chart .bar.impr{background:#60a5fa}' +
+    '.bar-chart .bar:hover::after{content:attr(data-tip);position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#111;color:#fff;font-size:10px;padding:3px 6px;border-radius:4px;white-space:nowrap;z-index:10;pointer-events:none}' +
+    '.chart-axis{display:flex;justify-content:space-between;font-size:10px;color:#aaa;margin-top:2px}' +
+    '.two-charts{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}' +
+    '.actrow{font-size:12px;padding:8px 0;border-bottom:1px solid #f3f3f3;display:flex;justify-content:space-between}' +
+    '.actrow:last-child{border-bottom:none}.actrow .plat{font-weight:600}' +
     '</style></head><body>' +
     '<header><div><h1>' + escapeHtml(pub.name) + '</h1><div class="sub">Publisher portal</div></div>' +
     '<div><span id="ts"></span> &nbsp; <a href="/ui">switch view</a></div></header>' +
@@ -681,26 +807,76 @@ function scopedPublisherOverviewHtml(pub) {
     sidebarHtml(PUBLISHER_SIDEBAR_ITEMS, base, 'overview') +
     '<main>' +
     '<div class="grid" id="pub-cards"><div class="empty">Loading...</div></div>' +
-    '</main>' +
-    '</div>' +
+
+    '<section><h2>Performance</h2><div class="h2sub">Daily revenue and impressions over the selected range</div>' +
+    '<div class="filter-bar" id="dateFilter">' +
+    '<button onclick="setRange(7)" id="btn7" class="active">7d</button>' +
+    '<button onclick="setRange(30)" id="btn30">30d</button>' +
+    '<button onclick="setRange(60)" id="btn60">60d</button>' +
+    '<button onclick="setRange(90)" id="btn90">90d</button>' +
+    '<button onclick="toggleCustom()" id="btnCustom">Custom</button>' +
+    '<div class="custom-range" id="customRange">' +
+    '<input type="date" id="fromDate"> <span style="font-size:12px;color:#888">to</span> <input type="date" id="toDate">' +
+    '<button onclick="applyCustom()">Apply</button>' +
+    '</div></div>' +
+    '<div class="two-charts">' +
+    '<div class="chart-wrap"><div class="chart-label">Daily earnings (\u00a3, your 80% share)</div><div class="bar-chart" id="chart-revenue"></div><div class="chart-axis"><span id="chart-from"></span><span id="chart-to"></span></div></div>' +
+    '<div class="chart-wrap"><div class="chart-label">Daily impressions</div><div class="bar-chart" id="chart-impr"></div></div>' +
+    '</div></section>' +
+
+    '<section><h2>Recent activity</h2><div class="h2sub">AI crawlers that have visited your pages</div>' +
+    '<div id="pub-activity"><div class="empty">Loading...</div></div></section>' +
+
+    '</main></div>' +
     '<script>' +
     'var PUB_ID="' + escapeHtml(pub.pubId) + '";' +
+    'var currentDays=7,currentFrom=null,currentTo=null;' +
     'function fmt(n){return (n||0).toLocaleString("en-GB");}' +
     'function money(n){return "\u00a3"+(n||0).toFixed(2);}' +
+    'function ago(t){if(!t)return "\u2014";var s=Math.floor((Date.now()-new Date(t).getTime())/1000);if(s<60)return s+"s ago";if(s<3600)return Math.floor(s/60)+"m ago";return Math.floor(s/3600)+"h ago";}' +
+    'function urlPath(u){try{return new URL(u||"/").pathname;}catch(e){return u||"/";}}' +
     'function card(label,val,sub,cls){return "<div class=\'card "+(cls||"")+"\'><div class=\'v\'>"+val+"</div><div class=\'l\'>"+label+"</div>"+(sub?"<div class=\'s\'>"+sub+"</div>":"")+"</div>";}' +
+    'function setRange(d){currentDays=d;currentFrom=null;currentTo=null;document.getElementById("customRange").className="custom-range";["7","30","60","90"].forEach(function(x){var b=document.getElementById("btn"+x);if(b)b.className=x===String(d)?"active":"";});document.getElementById("btnCustom").className="";loadCharts();}' +
+    'function toggleCustom(){var cr=document.getElementById("customRange");cr.className=cr.className.indexOf("show")>=0?"custom-range":"custom-range show";document.getElementById("btnCustom").className=cr.className.indexOf("show")>=0?"active":"";}' +
+    'function applyCustom(){var f=document.getElementById("fromDate").value,t=document.getElementById("toDate").value;if(!f||!t){alert("Select both dates.");return;}currentFrom=f;currentTo=t;currentDays=null;["7","30","60","90"].forEach(function(x){var b=document.getElementById("btn"+x);if(b)b.className="";});loadCharts();}' +
+    'function buildChartUrl(){var base="/dashboard?view=publisher&pubId="+encodeURIComponent(PUB_ID);return currentDays?base+"&days="+currentDays:base+"&from="+currentFrom+"&to="+currentTo;}' +
+    'function renderBars(containerId,data,key,colorClass,fmtFn){' +
+    '  var el=document.getElementById(containerId);if(!el||!data||!data.length){if(el)el.innerHTML="<div style=\'text-align:center;color:#ccc;font-size:11px;line-height:80px;width:100%\'>No data yet</div>";return;}' +
+    '  var max=Math.max.apply(null,data.map(function(d){return d[key]||0;}));' +
+    '  if(max===0){el.innerHTML="<div style=\'text-align:center;color:#ccc;font-size:11px;line-height:80px;width:100%\'>No data yet</div>";return;}' +
+    '  el.innerHTML=data.map(function(d){' +
+    '    var h=Math.max(2,Math.round(((d[key]||0)/max)*72));' +
+    '    return "<div class=\'bar "+colorClass+"\' style=\'height:"+h+"px\' data-tip=\'"+d.date+": "+fmtFn(d[key])+"\'></div>";' +
+    '  }).join("");' +
+    '}' +
+    'function loadCharts(){' +
+    '  fetch(buildChartUrl()).then(function(r){return r.json();}).then(function(d){' +
+    '    var cd=d.chartData||[];' +
+    '    renderBars("chart-revenue",cd,"revenueGBP","revenue",money);' +
+    '    renderBars("chart-impr",cd,"impressions","impr",fmt);' +
+    '    if(cd.length){document.getElementById("chart-from").textContent=cd[0].date;document.getElementById("chart-to").textContent=cd[cd.length-1].date;}' +
+    '  }).catch(function(){});' +
+    '}' +
     'function load(){' +
     '  fetch("/dashboard?view=publisher&pubId="+encodeURIComponent(PUB_ID)).then(function(r){return r.json();}).then(function(d){' +
-    '    var e=d.earnings||{},t=d.traffic||{};' +
+    '    var e=d.earnings||{},t=d.traffic||{},visits=d.recentVisits||[];' +
     '    document.getElementById("pub-cards").innerHTML=' +
     '      card("Your earnings",money(e.estimatedGBP),"today: "+money(e.estimatedTodayGBP)+" \u00b7 80% share","green")+' +
     '      card("Gross ad spend",money(e.grossGBP),"advertiser paid","green")+' +
     '      card("vCPM",money(e.vcpmGBP),"per 1,000 impressions","blue")+' +
     '      card("Impressions",fmt(t.totalImpressions),fmt(t.today)+" today","")+' +
     '      card("Fill rate",(t.fillRatePct==null?"\u2014":t.fillRatePct+"%"),"served / bot visits","");' +
+    '    if(visits.length){' +
+    '      document.getElementById("pub-activity").innerHTML=visits.slice(0,10).map(function(v){' +
+    '        var url=urlPath(v.url);' +
+    '        var outcome=v.served?("<span style=\'color:#16a34a\'>served "+(v.advertiser||v.served)+"</span>"):"<span style=\'color:#999\'>no campaign matched</span>";' +
+    '        return "<div class=\'actrow\'><div><span class=\'plat\'>"+(v.platform||"unknown")+"</span> crawled "+url+"<br>"+outcome+"</div><div>"+ago(v.time)+"</div></div>";' +
+    '      }).join("");' +
+    '    }else{document.getElementById("pub-activity").innerHTML="<div class=\'empty\'>No crawler activity yet</div>";}' +
     '    document.getElementById("ts").textContent="Updated "+new Date().toLocaleTimeString("en-GB");' +
     '  }).catch(function(e){document.getElementById("ts").textContent="Error: "+e.message;});' +
     '}' +
-    'load();setInterval(load,10000);' +
+    'load();loadCharts();setInterval(function(){load();loadCharts();},10000);' +
     '</script></body></html>';
 }
 
@@ -733,7 +909,7 @@ function scopedPublisherPagesHtml(pub) {
     '    if(pages.length){' +
     '      document.getElementById("pub-pages").innerHTML=pages.map(function(p){' +
     '        var url=urlPath(p.url);' +
-    '        var status=p.serving?("<b style=\'color:#16a34a\'>"+p.advertiser+"</b> \u00a3"+(p.cpmGBP||0)+" CPM"+(p.variantAngle?"<div style=\'font-size:10px;color:#16a34a;margin-top:2px\'>"+p.variantAngle+"</div>":"")):"<span style=\'color:#ef4444\'>no campaign</span>";' +
+    '        var status=p.serving?("<b style=\'color:#16a34a\'>"+p.advertiser+"</b> \u00a3"+(p.cpmGBP||0)+" CPM"+(p.variantAngle?"<div style=\'font-size:10px;color:#16a34a;margin-top:2px;font-weight:600\'>"+p.variantAngle+"</div>":"")+(p.variantText?"<div style=\'font-size:11px;color:#444;margin-top:4px;line-height:1.4\'>"+p.variantText+"</div>":"")):"<span style=\'color:#ef4444\'>no campaign</span>";' +
     '        return "<tr><td style=\'font-family:monospace;font-size:12px\'>"+url+"</td><td>"+status+"</td><td>"+(p.lastPlatform||"\u2014")+"</td><td>"+ago(p.lastCrawl)+"</td></tr>";' +
     '      }).join("");' +
     '    }else{document.getElementById("pub-pages").innerHTML="<tr><td colspan=\'4\' class=\'empty\'>No pages yet</td></tr>";}' +
@@ -820,15 +996,11 @@ module.exports = function handler(req, res) {
   if (url.indexOf('/advertiser') === 0 && !slug) {
     return res.status(200).send(listPageHtml('advertiser'));
   }
-  // /advertiser/{slug}/overview, /campaign, or /analytics
-  // Session 12: sidebar (Part 17 §7) — 3 sections, separate page per
-  // section (Option A, confirmed explicitly). Was 2 pages (dashboard/
-  // analytics) in Session 11; "dashboard" split into overview + campaign.
+  // /advertiser/{slug}/overview or /campaign (analytics removed — merged into overview)
   if (url.indexOf('/advertiser') === 0 && slug) {
     var adv = (config.advertisers || []).find(a => a.slug === slug);
     if (!adv) return res.status(404).send(notFoundHtml('advertiser', slug));
     if (view === 'campaign') return res.status(200).send(scopedAdvertiserCampaignHtml(adv));
-    if (view === 'analytics') return res.status(200).send(scopedAdvertiserAnalyticsHtml(adv));
     return res.status(200).send(scopedAdvertiserOverviewHtml(adv));
   }
 
@@ -836,15 +1008,11 @@ module.exports = function handler(req, res) {
   if (url.indexOf('/publisher') === 0 && !slug) {
     return res.status(200).send(listPageHtml('publisher'));
   }
-  // /publisher/{slug}/overview, /pages, or /analytics
-  // Session 12: sidebar — 3 sections (no "Campaign" concept for
-  // publishers). Was 2 pages (dashboard/analytics); "dashboard" split
-  // into overview + pages.
+  // /publisher/{slug}/overview or /pages (analytics removed — merged into overview)
   if (url.indexOf('/publisher') === 0 && slug) {
     var pub = (config.publishers || []).find(p => p.slug === slug);
     if (!pub) return res.status(404).send(notFoundHtml('publisher', slug));
     if (view === 'pages') return res.status(200).send(scopedPublisherPagesHtml(pub));
-    if (view === 'analytics') return res.status(200).send(scopedPublisherAnalyticsHtml(pub));
     return res.status(200).send(scopedPublisherOverviewHtml(pub));
   }
 

@@ -556,12 +556,54 @@ module.exports = async function handler(req, res) {
         ? new Set([campaignIdParam])
         : scopedCampaignIds;
 
+      // Session 12: date-range chart data for spend/impressions bar charts.
+      // Query params: days=7|30|60|90 (rolling window ending today)
+      //   OR from=YYYY-MM-DD&to=YYYY-MM-DD (custom range, inclusive).
+      // Reads real daily KV keys in parallel. Returns zeros for days with
+      // no recorded data — honest, not fake.
+      const daysParam = (req.query && req.query.days) ? parseInt(req.query.days) : null;
+      const fromParam = (req.query && req.query.from) || null;
+      const toParam   = (req.query && req.query.to)   || null;
+      let advChartData = null;
+      if (daysParam || (fromParam && toParam)) {
+        const dateList = [];
+        if (daysParam) {
+          for (let i = daysParam - 1; i >= 0; i--) {
+            const d = new Date();
+            d.setUTCDate(d.getUTCDate() - i);
+            dateList.push(d.toISOString().slice(0, 10));
+          }
+        } else {
+          const cur = new Date(fromParam + 'T00:00:00Z');
+          const end = new Date(toParam   + 'T00:00:00Z');
+          while (cur <= end && dateList.length < 365) {
+            dateList.push(cur.toISOString().slice(0, 10));
+            cur.setUTCDate(cur.getUTCDate() + 1);
+          }
+        }
+        const scopedCampIds = scopedCampaigns.map(c => c.id);
+        advChartData = await Promise.all(dateList.map(async (date) => {
+          const spendKey  = advId
+            ? `revenue:advertiser:${advId}:date:${date}`
+            : `revenue:gross:date:${date}`;
+          const imprKeys  = scopedCampIds.map(id => `impr:retrieval:${id}:${date}`);
+          const [spendRaw, ...imprRaws] = await Promise.all([
+            kvGet(spendKey),
+            ...imprKeys.map(k => kvGet(k)),
+          ]);
+          const spendGBP   = parseFloat(((parseInt(spendRaw) || 0) / 1000).toFixed(4));
+          const impressions = imprRaws.reduce((s, v) => s + (parseInt(v) || 0), 0);
+          return { date, spendGBP, impressions };
+        }));
+      }
+
       return res.status(200).json({
         _view: 'advertiser',
         scopedAdvId: advId,
         scopedCampaignId: (campaignIdParam && filterCampaignIds.has(campaignIdParam)) ? campaignIdParam : null,
         publishers: publisherList,
         advertisers: advertiserList,
+        chartData: advChartData,
         // Per-page live board: what's actually serving on each page right now,
         // with the full candidate breakdown per resolved auction. Real logs.
         pageBoard: scopedPageBoard,
@@ -747,10 +789,48 @@ module.exports = async function handler(req, res) {
         ? kvEarnedGBP / PUBLISHER_SHARE
         : grossRevenueGBP;
 
+      // Session 12: date-range chart data for publisher revenue/impressions charts.
+      // Same days/from/to query params as the advertiser view.
+      let pubChartData = null;
+      const pubDaysParam = (req.query && req.query.days) ? parseInt(req.query.days) : null;
+      const pubFromParam = (req.query && req.query.from) || null;
+      const pubToParam   = (req.query && req.query.to)   || null;
+      if (pubDaysParam || (pubFromParam && pubToParam)) {
+        const dateList = [];
+        if (pubDaysParam) {
+          for (let i = pubDaysParam - 1; i >= 0; i--) {
+            const d = new Date();
+            d.setUTCDate(d.getUTCDate() - i);
+            dateList.push(d.toISOString().slice(0, 10));
+          }
+        } else {
+          const cur = new Date(pubFromParam + 'T00:00:00Z');
+          const end = new Date(pubToParam   + 'T00:00:00Z');
+          while (cur <= end && dateList.length < 365) {
+            dateList.push(cur.toISOString().slice(0, 10));
+            cur.setUTCDate(cur.getUTCDate() + 1);
+          }
+        }
+        pubChartData = await Promise.all(dateList.map(async (date) => {
+          const [revenueRaw, imprRaw] = await Promise.all([
+            pubId
+              ? kvGet(`revenue:publisher:${pubId}:date:${date}`)
+              : kvGet(`revenue:gross:date:${date}`),
+            pubId
+              ? kvGet(`stats:impressions:pub:${pubId}:date:${date}`)
+              : kvGet(`stats:impressions:date:${date}`),
+          ]);
+          const revenueGBP  = parseFloat(((parseInt(revenueRaw) || 0) / 1000).toFixed(4));
+          const impressions = parseInt(imprRaw) || 0;
+          return { date, revenueGBP, impressions };
+        }));
+      }
+
       return res.status(200).json({
         _view: 'publisher',
         publishers: publisherList,
         pageBoard: pubPageBoard,
+        chartData: pubChartData,
         // Per-page breakdown replaces single "winning creative" — each page
         // runs its own auction so there is no single winner for the site
         pages: pubPagesTable,
