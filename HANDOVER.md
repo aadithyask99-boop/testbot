@@ -80,7 +80,12 @@ FREE (2/12):
 
 ## Planned Work — Next Session(s)
 
-### Priority 1: Left-side persistent sidebar (raised mid-Session 11, NOT YET BUILT)
+### Priority 1: Left-side persistent sidebar — ✅ DONE (Session 12)
+See SESSION_LOG.md Session 12 for full detail. 2-section sidebars live on both
+portals. Overview+Analytics merged. Bar charts with date filter. Pause/activate
+button. Variant breakdown. Winning creative displays throughout.
+
+### Priority 2 (was Priority 3): Publisher-side Ad Unit / Placement formalization (Part 17 §2)
 Real requirement, confirmed with Aadi, no prior written record found anywhere
 before this session — see PLATFORM_STRUCTURE_SPEC.md Part 17 §7 for full
 context and the open layout-choice decision (separate page per section vs.
@@ -90,7 +95,6 @@ Analytics. **Important:** Creative Studio is a sub-item WITHIN Campaign, not
 a sibling section — don't conflate the sidebar nav label with a routing
 boundary.
 
-### Priority 2: "Analytics is slow" — ✅ ROOT CAUSE FOUND AND FIXED (same session)
 Aadi clarified it was specifically the campaign dropdown (and admin page's
 publisher/advertiser picker) that was slow, not page-load in general. Traced
 to `api/dashboard.js`: `campaignList` construction looped over every campaign

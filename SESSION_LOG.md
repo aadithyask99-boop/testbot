@@ -765,3 +765,82 @@ Windows and the previous bash-only commands didn't work for him).
 - Ready to continue: get live verification from Aadi on the multi-campaign
   work, then either the left-sidebar layout (once the page-vs-scroll
   decision is made) or §2/§4/§5 in original order
+
+---
+
+## Session 12 — Portal Redesign: Sidebar, Charts, Pause/Activate, Variant Breakdown
+**Date:** 2026-06-22
+**Chat:** Claude.ai (claude.ai chat)
+**Goal:** Build the left-side persistent sidebar (Part 17 §7), merge Overview+Analytics,
+add bar charts with date filter, pause/activate toggle, per-variant breakdown,
+and winning creative displays. Also fixed the "insanely slow" dropdown (pre-existing
+sequential KV bug) before starting the sidebar work.
+
+**What was built:**
+
+**Perf fix (dashboard.js):**
+- Parallelized the campaignList construction loop — was sequential (4 awaited KV
+  round-trips per campaign, one at a time), now Promise.all across all campaigns.
+  Also parallelized variantLookup, pubRevenueMap, advRevenueMap loops.
+  16.7x speedup verified with synthetic timing test (jsdom + mocked KV at 15ms/call).
+  Root cause: pre-existing since Session 5, got worse as campaign count grew to 15.
+
+**Sidebar (Part 17 §7):**
+- Option A confirmed (separate page per section, own URL) over Option B (one page
+  scrolling) — explicitly chosen for the same reason as the perf fix: keeps each
+  page's fetch lighter.
+- Advertiser portal: [Overview, Campaign] (2 sections)
+- Publisher portal: [Overview, Pages] (2 sections)
+- Shared SIDEBAR_SHELL_CSS and sidebarHtml() helper replacing navTabsHtml()
+- Shell layout: 200px left sidebar, flex body
+
+**Routing cleanup:**
+- /ui prefix fully retired except the chooser itself
+- /admin/analytics removed (hard cutover confirmed)
+- /advertiser/{slug}/analytics removed (merged into overview)
+- /publisher/{slug}/analytics removed (merged into overview)
+- Final routes: /advertiser/{slug}/overview, /campaign; /publisher/{slug}/overview, /pages
+- Route shadowing bug caught pre-deploy: /dashboard was unanchored, would have
+  substring-matched all /dashboard-suffixed routes
+
+**Overview pages (merged Overview + Analytics):**
+- Summary cards
+- Date range filter: 7d / 30d / 60d / 90d / Custom (date picker)
+- Two bar charts side by side: spend/revenue + impressions
+- Real daily KV data (zeros where none exists — no simulation)
+- Winning creative by page table (advertiser)
+- Recent Activity feed (moved from Campaign to here)
+- Charts and cards fetch independently (loadCharts() separate from load())
+
+**Campaign page updates:**
+- Campaign stats header: total spend, today's spend, impressions, daily budget %,
+  status badge + Pause/Activate button (calls /admin/campaign/pause directly)
+- Winning creative table: pages this campaign is currently winning + which variant
+- Variant performance table: Angle / Impressions / Share % / Est. spend
+- Recent Activity REMOVED (now on Overview)
+
+**Publisher Pages updates:**
+- Serving cell now shows advertiser, CPM, variant angle label AND variant text
+  (the actual injected ad copy) — full winning creative visible per page
+
+**Backend chart data (dashboard.js):**
+- New days=N or from=YYYY-MM-DD&to=YYYY-MM-DD query params on advertiser + publisher views
+- Returns chartData array of {date, spendGBP/revenueGBP, impressions} per day
+- All per-day KV fetches parallelized (Promise.all per date, concurrent across dates)
+- Keys: revenue:advertiser:{advId}:date:{D}, impr:retrieval:{campId}:{D},
+         revenue:publisher:{pubId}:date:{D}, stats:impressions:pub:{pubId}:date:{D}
+
+**Verified live (Aadi ran PowerShell commands):**
+- All 6 checks True or expected 404
+- chart-spend, setRange on advertiser overview
+- togglePause, Variant performance on campaign
+- chart-revenue on publisher overview
+- /analytics route correctly 404s
+
+**Where we stopped:**
+- All portal redesign work from Part 17 §7 shipped and verified live
+- Still pending: Part 17 §2 (Ad Unit/Placement), §4 (variant focus tag), §5 (Creative Studio quality)
+- Admin portal content split (Part 6) still deferred
+- Historical chart data will be empty until the platform accumulates daily KV records
+- PAT still active in this chat — Aadi confirmed he'll rotate it after the session
+- Function count: 10/12 (unchanged throughout all Session 12 work)
