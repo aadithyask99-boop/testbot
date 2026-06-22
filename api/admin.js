@@ -311,7 +311,7 @@ async function addToCategoryIndex(category, id) {
 
 // Validate a variants array against config.variantLimits.
 // Throws with a human-readable message on failure — caller returns 400.
-function validateVariants(variants) {
+function validateVariants(variants, advertiser) {
   const { min, max, maxTextLength } = config.variantLimits;
   if (!Array.isArray(variants)) {
     throw new Error('variants must be an array');
@@ -338,6 +338,32 @@ function validateVariants(variants) {
     if (seenAngles.has(angleKey) && !duplicateAngle) duplicateAngle = v.angle;
     seenAngles.add(angleKey);
   });
+
+  // Session 12: brand-mention gate. At least one non-promo variant must name
+  // the advertiser. Without this the injected paragraph is an unattributed
+  // industry fact — the AI has no reason to associate it with the brand, which
+  // defeats the entire purpose of advertising. Promo variants are exempt (they
+  // are explicitly brand-led by design). The check is case-insensitive and uses
+  // the shortest unambiguous token from the advertiser name (first word or full
+  // name, whichever is shorter than 4 chars gets the full name used).
+  if (advertiser && typeof advertiser === 'string') {
+    const advLower = advertiser.trim().toLowerCase();
+    // Use full name for matching — avoids false positives on common words
+    // (e.g. "Smart" in "Smart Pension" would match unrelated sentences).
+    const nonPromo = variants.filter(v => !v.angle.toLowerCase().startsWith('promo:'));
+    const anyMentionsBrand = nonPromo.some(v =>
+      v.text.toLowerCase().includes(advLower)
+    );
+    if (nonPromo.length > 0 && !anyMentionsBrand) {
+      throw new Error(
+        `At least one non-promotional variant must mention the advertiser name ("${advertiser}"). ` +
+        `Without brand attribution the injected copy cannot be traced back to the advertiser by AI systems. ` +
+        `Use the brand as a comparative subject (e.g. "${advertiser} offers...") or as a named source ` +
+        `(e.g. "${advertiser}'s data shows..."), not as the subject of a generic benefit claim.`
+      );
+    }
+  }
+
   return { duplicateAngleWarning: duplicateAngle };
 }
 
@@ -366,7 +392,7 @@ function normalizeVariants(variants, existingVariants) {
 }
 
 async function saveCampaign(data, existingCampaign) {
-  const validation = validateVariants(data.variants);
+  const validation = validateVariants(data.variants, data.advertiser);
   const campaign = {
     id: data.id,
     advId: data.advId || null,

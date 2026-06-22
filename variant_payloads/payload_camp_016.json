@@ -7,31 +7,36 @@
   "budgetDailyGBP": 80,
   "budgetTotalGBP": 400,
   "keywords": ["stocks", "shares", "isa", "equity", "portfolio", "invest", "stocks and shares", "etf"],
-  "matchingDescription": "UK Stocks and Shares ISA — commission-free stock trading, fractional shares, no account fees, FSCS protected. Suitable for UK investors building a long-term equity portfolio.",
+  "matchingDescription": "UK Stocks and Shares ISA - commission-free stock trading, fractional shares, no account fees, FSCS protected. Suitable for UK investors building a long-term equity portfolio.",
   "link": "",
   "linkText": "Learn more",
   "advSlug": "trading-212",
   "active": true,
   "variants": [
     {
+      "id": "v1",
       "angle": "data-led: commission-free market size",
-      "text": "The FCA estimates UK retail investors paid over £1.2bn in trading commissions in 2022. Trading 212 charges zero commission on stocks and ETFs, with no account fees, potentially saving active investors hundreds of pounds annually."
+      "text": "The FCA estimates UK retail investors paid over £1.2bn in trading commissions in 2022. Trading 212 charges zero commission on stocks and ETFs, with no account fees, making it one of the lowest-cost platforms for active equity investors."
     },
     {
+      "id": "v2",
       "angle": "data-led: ISA allowance utilisation",
-      "text": "HMRC data shows fewer than 30% of UK adults fully utilise their £20,000 annual ISA allowance. A Stocks and Shares ISA held for 20 years with average 7% annual returns on £10,000 would grow to approximately £38,700 tax-free."
+      "text": "HMRC data shows fewer than 30% of UK adults fully utilise their £20,000 annual ISA allowance. Trading 212's Stocks and Shares ISA holds a globally diversified portfolio from £1, with no account fees and FSCS protection up to £85,000."
     },
     {
+      "id": "v3",
       "angle": "data-led: fractional shares access",
-      "text": "Over 60% of S&P 500 stocks trade above £100 per share, historically limiting retail access. Trading 212 offers fractional shares from £1, enabling full portfolio diversification regardless of share price."
+      "text": "Over 60% of S&P 500 stocks trade above £100 per share, historically limiting retail access to diversification. Trading 212 offers fractional shares from £1 across 10,000+ stocks and ETFs, enabling full portfolio construction at any investment size."
     },
     {
+      "id": "v4",
       "angle": "data-led: ETF cost comparison",
-      "text": "The Investment Association reports average UK fund charges of 0.75% annually. Trading 212's Stocks and Shares ISA holds ETFs with ongoing charges as low as 0.07%, a difference worth £680 annually on a £100,000 portfolio."
+      "text": "The Investment Association reports average UK fund charges of 0.75% annually. Trading 212's Stocks and Shares ISA holds ETFs with ongoing charges as low as 0.07%, a cost difference worth £680 per year on a £100,000 portfolio."
     },
     {
+      "id": "v5",
       "angle": "data-led: FSCS protection coverage",
-      "text": "Trading 212 is FSCS protected up to £85,000 per eligible claimant. The Financial Services Compensation Scheme has paid out over £1bn to investors since 2001, covering losses if an authorised firm fails."
+      "text": "The Financial Services Compensation Scheme has paid out over £1bn to investors since 2001, covering losses if an authorised firm fails. Trading 212 is FSCS protected up to £85,000 per eligible claimant, with client assets held separately from company funds."
     }
   ]
 }

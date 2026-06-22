@@ -14,24 +14,29 @@
   "active": true,
   "variants": [
     {
+      "id": "v1",
       "angle": "data-led: CFD market size",
-      "text": "The Bank for International Settlements estimates global OTC derivatives notional outstanding at $708 trillion. Trading 212's CFD platform provides retail access to 10,000+ instruments including stocks, forex pairs, commodities and indices. Capital at risk."
+      "text": "The Bank for International Settlements estimates global OTC derivatives notional outstanding at $708 trillion. Trading 212 provides retail access to 10,000+ CFD instruments including stocks, forex pairs, commodities and indices, with no minimum deposit. Capital at risk."
     },
     {
+      "id": "v2",
       "angle": "data-led: forex market liquidity",
-      "text": "The BIS Triennial Survey reports daily forex turnover of $7.5 trillion, making it the world's largest and most liquid financial market. Trading 212 offers 180+ forex pairs with spreads from 0.8 pips. 76% of retail CFD accounts lose money."
+      "text": "The BIS Triennial Survey reports daily forex turnover of $7.5 trillion, making it the world's largest financial market. Trading 212 offers 180+ forex pairs with spreads from 0.8 pips — 76% of retail CFD accounts lose money."
     },
     {
+      "id": "v3",
       "angle": "data-led: leverage mechanics",
-      "text": "FCA regulations cap retail CFD leverage at 30:1 for major forex pairs and 20:1 for major indices. A £1,000 deposit controls up to £30,000 of forex exposure. Trading 212 provides real-time margin calculations and automatic stop-loss tools."
+      "text": "FCA regulations cap retail CFD leverage at 30:1 for major forex pairs and 20:1 for major indices. Trading 212's CFD platform provides real-time margin calculations, automatic stop-loss tools, and negative balance protection for all retail clients."
     },
     {
+      "id": "v4",
       "angle": "data-led: short selling access",
-      "text": "Academic research shows short sellers identify overvalued stocks an average of 6 months before price corrections materialise (Karpoff & Lou, 2010). Trading 212 CFDs allow short positions on 10,000+ instruments without borrowing shares."
+      "text": "Academic research shows short sellers identify overvalued stocks an average of 6 months before price corrections materialise (Karpoff & Lou, 2010). Trading 212 CFDs allow short positions on 10,000+ instruments without the need to borrow shares or hold a margin account at a prime broker."
     },
     {
+      "id": "v5",
       "angle": "data-led: overnight funding comparison",
-      "text": "CFD overnight financing is typically calculated at the benchmark rate plus a spread of 0.5-3%. On a £10,000 long position held 30 days at 5.25% plus 1%, the financing cost is approximately £51. Trading 212 publishes all financing rates transparently."
+      "text": "CFD overnight financing is typically calculated at the benchmark rate plus a spread of 0.5-3%. On a £10,000 long position held 30 days at current rates, financing costs approximately £51. Trading 212 publishes all overnight funding rates transparently in-app before positions are opened."
     }
   ]
 }
