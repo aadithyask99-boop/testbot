@@ -59,7 +59,7 @@ function listPageHtml(kind) {
   var rows = items.map(function (it) {
     var slug = it.slug || '';
     var name = it.name || '';
-    return '<a class="opt" href="' + base + encodeURIComponent(slug) + '/dashboard">' +
+    return '<a class="opt" href="' + base + encodeURIComponent(slug) + '/overview">' +
       '<div class="t">' + escapeHtml(name) + '</div></a>';
   }).join('');
   return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">' +
@@ -84,16 +84,93 @@ function listPageHtml(kind) {
     '</div></body></html>';
 }
 
-// Session 11: shared Dashboard/Analytics tab nav for scoped portal pages.
-// base = '/advertiser/{slug}' or '/publisher/{slug}'. active = 'dashboard' or 'analytics'.
-function navTabsHtml(base, active) {
-  var dashClass = active === 'dashboard' ? 'navtab active' : 'navtab';
-  var analyticsClass = active === 'analytics' ? 'navtab active' : 'navtab';
-  return '<div class="navtabs">' +
-    '<a class="' + dashClass + '" href="' + base + '/dashboard">Dashboard</a>' +
-    '<a class="' + analyticsClass + '" href="' + base + '/analytics">Analytics</a>' +
-    '</div>';
+// ============================================================
+// Session 12: Left-side persistent sidebar (Part 17 §7).
+// Shared CSS + sidebar markup for all scoped advertiser/publisher pages.
+// Layout choice: Option A — separate page per section (own URL, each
+// page does its own scoped fetch). Confirmed explicitly over Option B
+// (one page, sidebar scrolls) specifically BECAUSE Option A keeps each
+// page's fetch lighter — same principle as the Session 11 perf fix to
+// the campaign dropdown (sequential KV calls were the dominant cost
+// there; per-page scoping here is the analogous discipline at the
+// routing level, even though the underlying /dashboard endpoint itself
+// is shared and unscoped per-section for now — see CONTINUE.md for the
+// full reasoning on why a deeper backend split (per-section endpoints)
+// was assessed and deliberately deferred this session).
+// ============================================================
+
+var SIDEBAR_SHELL_CSS =
+  '*{box-sizing:border-box;margin:0;padding:0}' +
+  'body{font-family:system-ui,-apple-system,sans-serif;background:#f9f9f9;color:#111;font-size:14px}' +
+  'header{background:#fff;border-bottom:1px solid #e5e5e5;padding:14px 24px;display:flex;align-items:center;justify-content:space-between}' +
+  'header h1{font-size:14px;font-weight:600}header .sub{font-size:11px;color:#999}' +
+  'header a{font-size:11px;color:#888;text-decoration:none}' +
+  '#ts{font-size:11px;color:#aaa}' +
+  '.shell{display:flex;min-height:calc(100vh - 49px)}' +
+  '.sidebar{width:200px;flex-shrink:0;background:#fff;border-right:1px solid #e5e5e5;padding:16px 0}' +
+  '.sidebar a{display:block;padding:10px 20px;font-size:13px;color:#666;text-decoration:none;border-left:2px solid transparent}' +
+  '.sidebar a:hover{background:#f5f5f5;color:#111}' +
+  '.sidebar a.active{color:#111;font-weight:600;border-left-color:#111;background:#f5f5f5}' +
+  'main{flex:1;padding:24px;max-width:900px}' +
+  '.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:24px}' +
+  '.card{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:16px}' +
+  '.card .v{font-size:22px;font-weight:600}.card .l{font-size:11px;color:#888;margin-top:2px}.card .s{font-size:11px;color:#aaa;margin-top:4px}' +
+  '.card.green .v{color:#16a34a}.card.blue .v{color:#2563eb}.card.warn{border-color:#f59e0b}.card.warn .v{color:#d97706}' +
+  'section{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:20px;margin-bottom:20px}' +
+  'section h2{font-size:14px;font-weight:600;margin-bottom:4px}' +
+  'section .h2sub{font-size:11px;color:#999;margin-bottom:12px}' +
+  'table{width:100%;border-collapse:collapse;font-size:13px}' +
+  'th{text-align:left;font-size:11px;color:#888;font-weight:500;padding:6px 8px;border-bottom:1px solid #eee}' +
+  'td{padding:8px;border-bottom:1px solid #f3f3f3;vertical-align:top}' +
+  '.empty{color:#aaa;font-size:12px;padding:16px;text-align:center}' +
+  '.vrow{padding:10px 0;border-bottom:1px solid #f3f3f3;position:relative}.vrow:last-child{border-bottom:none}' +
+  '.vangle{font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:6px}' +
+  '.vstat{font-size:11px;color:#888}.vtext{font-size:12px;color:#444;margin-top:4px}' +
+  '.topbadge{font-size:10px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:3px;font-weight:600}' +
+  '.formrow{display:flex;gap:10px;margin-bottom:10px}' +
+  '.formrow input,.formrow textarea,.formrow select{flex:1;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:inherit}' +
+  '.formrow textarea{resize:vertical;min-height:50px}' +
+  'button.btn{background:#111;color:#fff;border:none;padding:8px 16px;border-radius:6px;font-size:13px;cursor:pointer}' +
+  'button.btn:hover{background:#333}button.btn:disabled{background:#ccc;cursor:not-allowed}' +
+  'button.btnsec{background:#fff;color:#111;border:1px solid #ddd}' +
+  'button.btnsec:hover{background:#f5f5f5}' +
+  '.charcount{font-size:11px;color:#aaa;text-align:right;margin-top:-6px;margin-bottom:8px}' +
+  '.formmsg{font-size:12px;margin-top:8px}' +
+  '.rec{border:1px solid #e5e5e5;border-radius:8px;padding:14px;margin-bottom:10px}' +
+  '.rec .rtext{font-size:12px;color:#444;margin:6px 0}' +
+  '.rec .rreason{font-size:11px;color:#888;font-style:italic}' +
+  '.rec .ractions{margin-top:10px;display:flex;gap:8px}' +
+  '.rec .ractions button{padding:5px 12px;font-size:12px}' +
+  '.rec.approved{border-color:#16a34a;background:#f0fdf4}' +
+  '.rec.rejected{opacity:0.4}' +
+  '.tag-approved{font-size:10px;background:#dcfce7;color:#166534;padding:1px 6px;border-radius:3px;font-weight:600}' +
+  '.campsel{padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;font-family:inherit;width:100%;max-width:360px;background:#fff}' +
+  '.actrow{font-size:12px;padding:8px 0;border-bottom:1px solid #f3f3f3;display:flex;justify-content:space-between}' +
+  '.actrow:last-child{border-bottom:none}' +
+  '.actrow .plat{font-weight:600}' +
+  '.newbadge{font-size:10px;background:#e0e7ff;color:#3730a3;padding:1px 6px;border-radius:3px;font-weight:600;margin-left:6px}' +
+  '.spark{display:flex;align-items:flex-end;gap:3px;height:40px;margin-top:8px}' +
+  '.spark .bar{flex:1;background:#bbf7d0;border-radius:2px 2px 0 0;min-height:2px}';
+
+// items: [{key:'overview', label:'Overview'}, ...]. base: '/advertiser/{slug}' or '/publisher/{slug}'. active: matching key.
+function sidebarHtml(items, base, active) {
+  return '<div class="sidebar">' + items.map(function (it) {
+    var cls = it.key === active ? 'active' : '';
+    return '<a class="' + cls + '" href="' + base + '/' + it.key + '">' + it.label + '</a>';
+  }).join('') + '</div>';
 }
+
+var ADVERTISER_SIDEBAR_ITEMS = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'campaign', label: 'Campaign' },
+  { key: 'analytics', label: 'Analytics' },
+];
+var PUBLISHER_SIDEBAR_ITEMS = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'pages', label: 'Pages' },
+  { key: 'analytics', label: 'Analytics' },
+];
+
 
 // Session 10 Batch 3: scoped advertiser portal.
 // A self-contained, dedicated page for ONE advertiser — fetches
@@ -106,71 +183,73 @@ function navTabsHtml(base, active) {
 // Studio, and variant bank). Supports multiple campaigns per advertiser —
 // previously every render path hardcoded campaigns[0], which silently
 // hid any campaign beyond the first. Fetches /dashboard?view=advertiser&advId=X.
-function scopedAdvertiserDashboardHtml(adv) {
+// Session 12: scoped advertiser OVERVIEW page — sidebar Option A.
+// Lightest page: just the 3 summary cards. Own scoped fetch, independent
+// of Campaign/Analytics — switching to this page does NOT pay for
+// campaign-detail or performance-table rendering work.
+function scopedAdvertiserOverviewHtml(adv) {
   var base = '/advertiser/' + encodeURIComponent(adv.slug || '');
   return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
     '<title>' + escapeHtml(adv.name) + ' \u2014 AI Ad Platform</title><style>' +
-    '*{box-sizing:border-box;margin:0;padding:0}' +
-    'body{font-family:system-ui,-apple-system,sans-serif;background:#f9f9f9;color:#111;font-size:14px}' +
-    'header{background:#fff;border-bottom:1px solid #e5e5e5;padding:14px 24px;display:flex;align-items:center;justify-content:space-between}' +
-    'header h1{font-size:14px;font-weight:600}header .sub{font-size:11px;color:#999}' +
-    'header a{font-size:11px;color:#888;text-decoration:none}' +
-    '#ts{font-size:11px;color:#aaa}' +
-    'main{padding:24px;max-width:1100px;margin:0 auto}' +
-    '.navtabs{display:flex;gap:4px;border-bottom:1px solid #e5e5e5;margin-bottom:20px}' +
-    '.navtab{font-size:13px;color:#888;text-decoration:none;padding:8px 14px;border-bottom:2px solid transparent;margin-bottom:-1px}' +
-    '.navtab.active{color:#111;font-weight:600;border-bottom-color:#111}' +
-    '.navtab:hover{color:#111}' +
-    '.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:24px}' +
-    '.card{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:16px}' +
-    '.card .v{font-size:22px;font-weight:600}.card .l{font-size:11px;color:#888;margin-top:2px}.card .s{font-size:11px;color:#aaa;margin-top:4px}' +
-    '.card.green .v{color:#16a34a}.card.blue .v{color:#2563eb}.card.warn{border-color:#f59e0b}.card.warn .v{color:#d97706}' +
-    'section{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:20px;margin-bottom:20px}' +
-    'section h2{font-size:14px;font-weight:600;margin-bottom:4px}' +
-    'section .h2sub{font-size:11px;color:#999;margin-bottom:12px}' +
-    '.empty{color:#aaa;font-size:12px;padding:16px;text-align:center}' +
-    '.vrow{padding:10px 0;border-bottom:1px solid #f3f3f3;position:relative}.vrow:last-child{border-bottom:none}' +
-    '.vangle{font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:6px}' +
-    '.vstat{font-size:11px;color:#888}.vtext{font-size:12px;color:#444;margin-top:4px}' +
-    '.topbadge{font-size:10px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:3px;font-weight:600}' +
-    '.formrow{display:flex;gap:10px;margin-bottom:10px}' +
-    '.formrow input,.formrow textarea,.formrow select{flex:1;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:inherit}' +
-    '.formrow textarea{resize:vertical;min-height:50px}' +
-    'button.btn{background:#111;color:#fff;border:none;padding:8px 16px;border-radius:6px;font-size:13px;cursor:pointer}' +
-    'button.btn:hover{background:#333}button.btn:disabled{background:#ccc;cursor:not-allowed}' +
-    'button.btnsec{background:#fff;color:#111;border:1px solid #ddd}' +
-    'button.btnsec:hover{background:#f5f5f5}' +
-    '.charcount{font-size:11px;color:#aaa;text-align:right;margin-top:-6px;margin-bottom:8px}' +
-    '.formmsg{font-size:12px;margin-top:8px}' +
-    '.rec{border:1px solid #e5e5e5;border-radius:8px;padding:14px;margin-bottom:10px}' +
-    '.rec .rtext{font-size:12px;color:#444;margin:6px 0}' +
-    '.rec .rreason{font-size:11px;color:#888;font-style:italic}' +
-    '.rec .ractions{margin-top:10px;display:flex;gap:8px}' +
-    '.rec .ractions button{padding:5px 12px;font-size:12px}' +
-    '.rec.approved{border-color:#16a34a;background:#f0fdf4}' +
-    '.rec.rejected{opacity:0.4}' +
-    '.tag-approved{font-size:10px;background:#dcfce7;color:#166534;padding:1px 6px;border-radius:3px;font-weight:600}' +
-    '.campsel{padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;font-family:inherit;width:100%;max-width:360px;background:#fff}' +
-    '.actrow{font-size:12px;padding:8px 0;border-bottom:1px solid #f3f3f3;display:flex;justify-content:space-between}' +
-    '.actrow:last-child{border-bottom:none}' +
-    '.actrow .plat{font-weight:600}' +
-    '.newbadge{font-size:10px;background:#e0e7ff;color:#3730a3;padding:1px 6px;border-radius:3px;font-weight:600;margin-left:6px}' +
+    SIDEBAR_SHELL_CSS +
     '</style></head><body>' +
     '<header><div><h1>' + escapeHtml(adv.name) + '</h1><div class="sub">Advertiser portal</div></div>' +
     '<div><span id="ts"></span> &nbsp; <a href="/ui">switch view</a></div></header>' +
+    '<div class="shell">' +
+    sidebarHtml(ADVERTISER_SIDEBAR_ITEMS, base, 'overview') +
     '<main>' +
-    navTabsHtml(base, 'dashboard') +
     '<div class="grid" id="adv-cards"><div class="empty">Loading...</div></div>' +
-
+    '</main>' +
+    '</div>' +
+    '<script>' +
+    'var ADV_ID="' + escapeHtml(adv.advId) + '";' +
+    'function fmt(n){return (n||0).toLocaleString("en-GB");}' +
+    'function money(n){return "\u00a3"+(n||0).toFixed(2);}' +
+    'function card(label,val,sub,cls){return "<div class=\'card "+(cls||"")+"\'><div class=\'v\'>"+val+"</div><div class=\'l\'>"+label+"</div>"+(sub?"<div class=\'s\'>"+sub+"</div>":"")+"</div>";}' +
+    'function load(){' +
+    '  fetch("/dashboard?view=advertiser&advId="+encodeURIComponent(ADV_ID)).then(function(r){return r.json();}).then(function(d){' +
+    '    var agg=d.aggregate||{};' +
+    '    var camps=d.campaigns||[];' +
+    '    var totalSpend=camps.reduce(function(a,c){return a+(c.totalSpendGBP||0);},0);' +
+    '    var totalImpr=camps.reduce(function(a,c){return a+(c.impressions||0);},0);' +
+    '    var anyActive=camps.some(function(c){return c.active;});' +
+    '    document.getElementById("adv-cards").innerHTML=' +
+    '      card("Status",anyActive?"Active":"Paused",camps.length+" campaign"+(camps.length===1?"":"s"),anyActive?"green":"")+' +
+    '      card("Total impressions",fmt(totalImpr),fmt(agg.totalViewable||0)+" viewable","blue")+' +
+    '      card("Total spend",money(totalSpend),"vCPM "+money(agg.blendedVcpmGBP||0),"green");' +
+    '    document.getElementById("ts").textContent="Updated "+new Date().toLocaleTimeString("en-GB");' +
+    '  }).catch(function(e){document.getElementById("ts").textContent="Error: "+e.message;});' +
+    '}' +
+    'load();setInterval(load,15000);' +
+    '</script></body></html>';
+}
+// Session 12: scoped advertiser CAMPAIGN page — sidebar Option A.
+// Dropdown switcher across all of this advertiser's campaigns. Settings,
+// AI Creative Studio (nested per-campaign, NOT a sibling section), Ad
+// Variants, and per-campaign Recent Activity all live here, scoped to
+// whichever campaign is selected. "+ Add new campaign" renders a staged
+// creation flow requiring 5+ variants before save.
+function scopedAdvertiserCampaignHtml(adv) {
+  var base = '/advertiser/' + encodeURIComponent(adv.slug || '');
+  return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>' + escapeHtml(adv.name) + ' \u2014 AI Ad Platform</title><style>' +
+    SIDEBAR_SHELL_CSS +
+    '</style></head><body>' +
+    '<header><div><h1>' + escapeHtml(adv.name) + '</h1><div class="sub">Advertiser portal</div></div>' +
+    '<div><span id="ts"></span> &nbsp; <a href="/ui">switch view</a></div></header>' +
+    '<div class="shell">' +
+    sidebarHtml(ADVERTISER_SIDEBAR_ITEMS, base, 'campaign') +
+    '<main>' +
     '<section><h2>Campaign</h2><div class="h2sub">Pick a campaign, or add a new one. Creative Studio, settings, and the variant bank are all scoped to the selected campaign.</div>' +
     '<div class="formrow" style="margin-bottom:16px"><div style="flex:1;max-width:360px">' +
     '<select id="campSelect" class="campsel" onchange="selectCampaign(this.value)"><option value="">Loading campaigns...</option></select>' +
     '</div></div>' +
     '<div id="campBody"><div class="empty">Loading...</div></div>' +
     '</section>' +
-
     '</main>' +
+    '</div>' +
     '<script>' +
     'var ADV_ID="' + escapeHtml(adv.advId) + '";' +
     'var ADV_NAME="' + escapeHtml(adv.name) + '";' +
@@ -182,7 +261,6 @@ function scopedAdvertiserDashboardHtml(adv) {
     'var stagedVariants=[];' +
     'function fmt(n){return (n||0).toLocaleString("en-GB");}' +
     'function money(n){return "\u00a3"+(n||0).toFixed(2);}' +
-    'function card(label,val,sub,cls){return "<div class=\'card "+(cls||"")+"\'><div class=\'v\'>"+val+"</div><div class=\'l\'>"+label+"</div>"+(sub?"<div class=\'s\'>"+sub+"</div>":"")+"</div>";}' +
     'function nextCampaignId(){' +
     '  var nums=CAMPAIGNS.map(function(c){var m=/camp_(\\d+)/.exec(c.id);return m?parseInt(m[1],10):0;});' +
     '  var max=nums.length?Math.max.apply(null,nums):0;' +
@@ -191,22 +269,13 @@ function scopedAdvertiserDashboardHtml(adv) {
     '}' +
     'function load(){' +
     '  fetch("/dashboard?view=advertiser&advId="+encodeURIComponent(ADV_ID)).then(function(r){return r.json();}).then(function(d){' +
-    '    var agg=d.aggregate||{};' +
     '    CAMPAIGNS=d.campaigns||[];' +
-    '    var totalSpend=CAMPAIGNS.reduce(function(a,c){return a+(c.totalSpendGBP||0);},0);' +
-    '    var totalImpr=CAMPAIGNS.reduce(function(a,c){return a+(c.impressions||0);},0);' +
-    '    var anyActive=CAMPAIGNS.some(function(c){return c.active;});' +
-    '    document.getElementById("adv-cards").innerHTML=' +
-    '      card("Status",anyActive?"Active":"Paused",CAMPAIGNS.length+" campaign"+(CAMPAIGNS.length===1?"":"s"),anyActive?"green":"")+' +
-    '      card("Total impressions",fmt(totalImpr),fmt(agg.totalViewable||0)+" viewable","blue")+' +
-    '      card("Total spend",money(totalSpend),"vCPM "+money(agg.blendedVcpmGBP||0),"green");' +
     '    renderCampaignPicker();' +
     '    document.getElementById("ts").textContent="Updated "+new Date().toLocaleTimeString("en-GB");' +
     '  }).catch(function(e){document.getElementById("ts").textContent="Error: "+e.message;});' +
     '}' +
     'function renderCampaignPicker(){' +
     '  var sel=document.getElementById("campSelect");' +
-    '  var prevValue=sel.value;' +
     '  var html=CAMPAIGNS.map(function(c){return "<option value=\'"+c.id+"\'>"+(c.id)+" \u2014 "+(c.category||"")+" \u00b7 \u00a3"+c.cpmGBP+" CPM"+(c.active?"":" (paused)")+"</option>";}).join("");' +
     '  html+="<option value=\'__new__\'>+ Add new campaign</option>";' +
     '  sel.innerHTML=html;' +
@@ -534,43 +603,21 @@ function scopedAdvertiserDashboardHtml(adv) {
     'load();setInterval(load,15000);' +
     '</script></body></html>';
 }
-
-// Session 11: scoped advertiser ANALYTICS page — performance view.
-// Spend sparkline, campaign performance table, recent activity.
-// Fetches /dashboard?view=advertiser&advId=X, no picker, no cross-advertiser data.
+// Session 11 (content), Session 12 (sidebar shell): scoped advertiser
+// ANALYTICS page. Spend sparkline, campaign performance table (with
+// Campaign column), advertiser-wide recent activity.
 function scopedAdvertiserAnalyticsHtml(adv) {
   var base = '/advertiser/' + encodeURIComponent(adv.slug || '');
   return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
     '<title>' + escapeHtml(adv.name) + ' \u2014 AI Ad Platform</title><style>' +
-    '*{box-sizing:border-box;margin:0;padding:0}' +
-    'body{font-family:system-ui,-apple-system,sans-serif;background:#f9f9f9;color:#111;font-size:14px}' +
-    'header{background:#fff;border-bottom:1px solid #e5e5e5;padding:14px 24px;display:flex;align-items:center;justify-content:space-between}' +
-    'header h1{font-size:14px;font-weight:600}header .sub{font-size:11px;color:#999}' +
-    'header a{font-size:11px;color:#888;text-decoration:none}' +
-    '#ts{font-size:11px;color:#aaa}' +
-    'main{padding:24px;max-width:1100px;margin:0 auto}' +
-    '.navtabs{display:flex;gap:4px;border-bottom:1px solid #e5e5e5;margin-bottom:20px}' +
-    '.navtab{font-size:13px;color:#888;text-decoration:none;padding:8px 14px;border-bottom:2px solid transparent;margin-bottom:-1px}' +
-    '.navtab.active{color:#111;font-weight:600;border-bottom-color:#111}' +
-    '.navtab:hover{color:#111}' +
-    'section{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:20px;margin-bottom:20px}' +
-    'section h2{font-size:14px;font-weight:600;margin-bottom:4px}' +
-    'section .h2sub{font-size:11px;color:#999;margin-bottom:12px}' +
-    'table{width:100%;border-collapse:collapse;font-size:13px}' +
-    'th{text-align:left;font-size:11px;color:#888;font-weight:500;padding:6px 8px;border-bottom:1px solid #eee}' +
-    'td{padding:8px;border-bottom:1px solid #f3f3f3;vertical-align:top}' +
-    '.empty{color:#aaa;font-size:12px;padding:16px;text-align:center}' +
-    '.actrow{font-size:12px;padding:8px 0;border-bottom:1px solid #f3f3f3;display:flex;justify-content:space-between}' +
-    '.actrow:last-child{border-bottom:none}' +
-    '.actrow .plat{font-weight:600}' +
-    '.spark{display:flex;align-items:flex-end;gap:3px;height:40px;margin-top:8px}' +
-    '.spark .bar{flex:1;background:#bbf7d0;border-radius:2px 2px 0 0;min-height:2px}' +
+    SIDEBAR_SHELL_CSS +
     '</style></head><body>' +
     '<header><div><h1>' + escapeHtml(adv.name) + '</h1><div class="sub">Advertiser portal</div></div>' +
     '<div><span id="ts"></span> &nbsp; <a href="/ui">switch view</a></div></header>' +
+    '<div class="shell">' +
+    sidebarHtml(ADVERTISER_SIDEBAR_ITEMS, base, 'analytics') +
     '<main>' +
-    navTabsHtml(base, 'analytics') +
 
     '<section><h2>Spend, last 7 days</h2><div class="h2sub">Daily spend trend</div>' +
     '<div class="spark" id="adv-spark"></div></section>' +
@@ -583,6 +630,7 @@ function scopedAdvertiserAnalyticsHtml(adv) {
     '<div id="adv-activity"><div class="empty">Loading...</div></div></section>' +
 
     '</main>' +
+    '</div>' +
     '<script>' +
     'var ADV_ID="' + escapeHtml(adv.advId) + '";' +
     'function fmt(n){return (n||0).toLocaleString("en-GB");}' +
@@ -618,65 +666,70 @@ function scopedAdvertiserAnalyticsHtml(adv) {
     'load();setInterval(load,15000);' +
     '</script></body></html>';
 }
-// Session 10 Batch 3: scoped publisher portal.
-// A self-contained, dedicated page for ONE publisher — fetches
-// /dashboard?view=publisher&pubId=X, no picker, no cross-publisher data.
-// Session 11: scoped publisher DASHBOARD page — operational view.
-// Earnings/traffic cards, ad serving by page.
-// Fetches /dashboard?view=publisher&pubId=X, no picker, no cross-publisher data.
-function scopedPublisherDashboardHtml(pub) {
+// Session 12: scoped publisher OVERVIEW page — sidebar Option A.
+// Lightest page: just the 5 earnings/traffic cards.
+function scopedPublisherOverviewHtml(pub) {
   var base = '/publisher/' + encodeURIComponent(pub.slug || '');
   return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
     '<title>' + escapeHtml(pub.name) + ' \u2014 AI Ad Platform</title><style>' +
-    '*{box-sizing:border-box;margin:0;padding:0}' +
-    'body{font-family:system-ui,-apple-system,sans-serif;background:#f9f9f9;color:#111;font-size:14px}' +
-    'header{background:#fff;border-bottom:1px solid #e5e5e5;padding:14px 24px;display:flex;align-items:center;justify-content:space-between}' +
-    'header h1{font-size:14px;font-weight:600}header .sub{font-size:11px;color:#999}' +
-    'header a{font-size:11px;color:#888;text-decoration:none}' +
-    '#ts{font-size:11px;color:#aaa}' +
-    'main{padding:24px;max-width:1100px;margin:0 auto}' +
-    '.navtabs{display:flex;gap:4px;border-bottom:1px solid #e5e5e5;margin-bottom:20px}' +
-    '.navtab{font-size:13px;color:#888;text-decoration:none;padding:8px 14px;border-bottom:2px solid transparent;margin-bottom:-1px}' +
-    '.navtab.active{color:#111;font-weight:600;border-bottom-color:#111}' +
-    '.navtab:hover{color:#111}' +
-    '.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:24px}' +
-    '.card{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:16px}' +
-    '.card .v{font-size:22px;font-weight:600}.card .l{font-size:11px;color:#888;margin-top:2px}.card .s{font-size:11px;color:#aaa;margin-top:4px}' +
-    '.card.green .v{color:#16a34a}.card.blue .v{color:#2563eb}' +
-    'section{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:20px;margin-bottom:20px}' +
-    'section h2{font-size:14px;font-weight:600;margin-bottom:4px}' +
-    'section .h2sub{font-size:11px;color:#999;margin-bottom:12px}' +
-    'table{width:100%;border-collapse:collapse;font-size:13px}' +
-    'th{text-align:left;font-size:11px;color:#888;font-weight:500;padding:6px 8px;border-bottom:1px solid #eee}' +
-    'td{padding:8px;border-bottom:1px solid #f3f3f3;vertical-align:top}' +
-    '.empty{color:#aaa;font-size:12px;padding:16px;text-align:center}' +
+    SIDEBAR_SHELL_CSS +
     '</style></head><body>' +
     '<header><div><h1>' + escapeHtml(pub.name) + '</h1><div class="sub">Publisher portal</div></div>' +
     '<div><span id="ts"></span> &nbsp; <a href="/ui">switch view</a></div></header>' +
+    '<div class="shell">' +
+    sidebarHtml(PUBLISHER_SIDEBAR_ITEMS, base, 'overview') +
     '<main>' +
-    navTabsHtml(base, 'dashboard') +
     '<div class="grid" id="pub-cards"><div class="empty">Loading...</div></div>' +
-    '<section><h2>Ad serving \u2014 by page</h2><div class="h2sub">What is currently injected on each of your pages</div>' +
-    '<table><thead><tr><th>Page</th><th>Serving</th><th>Platform</th><th>Last crawl</th></tr></thead>' +
-    '<tbody id="pub-pages"><tr><td colspan="4" class="empty">Loading...</td></tr></tbody></table></section>' +
     '</main>' +
+    '</div>' +
     '<script>' +
     'var PUB_ID="' + escapeHtml(pub.pubId) + '";' +
     'function fmt(n){return (n||0).toLocaleString("en-GB");}' +
     'function money(n){return "\u00a3"+(n||0).toFixed(2);}' +
-    'function ago(t){if(!t)return "\u2014";var s=Math.floor((Date.now()-new Date(t).getTime())/1000);if(s<60)return s+"s ago";if(s<3600)return Math.floor(s/60)+"m ago";return Math.floor(s/3600)+"h ago";}' +
-    'function urlPath(u){try{return new URL(u||"/").pathname;}catch(e){return u||"/";}}' +
     'function card(label,val,sub,cls){return "<div class=\'card "+(cls||"")+"\'><div class=\'v\'>"+val+"</div><div class=\'l\'>"+label+"</div>"+(sub?"<div class=\'s\'>"+sub+"</div>":"")+"</div>";}' +
     'function load(){' +
     '  fetch("/dashboard?view=publisher&pubId="+encodeURIComponent(PUB_ID)).then(function(r){return r.json();}).then(function(d){' +
-    '    var e=d.earnings||{},t=d.traffic||{},pages=d.pages||[];' +
+    '    var e=d.earnings||{},t=d.traffic||{};' +
     '    document.getElementById("pub-cards").innerHTML=' +
     '      card("Your earnings",money(e.estimatedGBP),"today: "+money(e.estimatedTodayGBP)+" \u00b7 80% share","green")+' +
     '      card("Gross ad spend",money(e.grossGBP),"advertiser paid","green")+' +
     '      card("vCPM",money(e.vcpmGBP),"per 1,000 impressions","blue")+' +
     '      card("Impressions",fmt(t.totalImpressions),fmt(t.today)+" today","")+' +
     '      card("Fill rate",(t.fillRatePct==null?"\u2014":t.fillRatePct+"%"),"served / bot visits","");' +
+    '    document.getElementById("ts").textContent="Updated "+new Date().toLocaleTimeString("en-GB");' +
+    '  }).catch(function(e){document.getElementById("ts").textContent="Error: "+e.message;});' +
+    '}' +
+    'load();setInterval(load,10000);' +
+    '</script></body></html>';
+}
+
+// Session 12: scoped publisher PAGES page — sidebar Option A.
+// The per-page serving table, on its own (was bundled with cards before).
+function scopedPublisherPagesHtml(pub) {
+  var base = '/publisher/' + encodeURIComponent(pub.slug || '');
+  return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>' + escapeHtml(pub.name) + ' \u2014 AI Ad Platform</title><style>' +
+    SIDEBAR_SHELL_CSS +
+    '</style></head><body>' +
+    '<header><div><h1>' + escapeHtml(pub.name) + '</h1><div class="sub">Publisher portal</div></div>' +
+    '<div><span id="ts"></span> &nbsp; <a href="/ui">switch view</a></div></header>' +
+    '<div class="shell">' +
+    sidebarHtml(PUBLISHER_SIDEBAR_ITEMS, base, 'pages') +
+    '<main>' +
+    '<section><h2>Ad serving \u2014 by page</h2><div class="h2sub">What is currently injected on each of your pages</div>' +
+    '<table><thead><tr><th>Page</th><th>Serving</th><th>Platform</th><th>Last crawl</th></tr></thead>' +
+    '<tbody id="pub-pages"><tr><td colspan="4" class="empty">Loading...</td></tr></tbody></table></section>' +
+    '</main>' +
+    '</div>' +
+    '<script>' +
+    'var PUB_ID="' + escapeHtml(pub.pubId) + '";' +
+    'function ago(t){if(!t)return "\u2014";var s=Math.floor((Date.now()-new Date(t).getTime())/1000);if(s<60)return s+"s ago";if(s<3600)return Math.floor(s/60)+"m ago";return Math.floor(s/3600)+"h ago";}' +
+    'function urlPath(u){try{return new URL(u||"/").pathname;}catch(e){return u||"/";}}' +
+    'function load(){' +
+    '  fetch("/dashboard?view=publisher&pubId="+encodeURIComponent(PUB_ID)).then(function(r){return r.json();}).then(function(d){' +
+    '    var pages=d.pages||[];' +
     '    if(pages.length){' +
     '      document.getElementById("pub-pages").innerHTML=pages.map(function(p){' +
     '        var url=urlPath(p.url);' +
@@ -691,40 +744,25 @@ function scopedPublisherDashboardHtml(pub) {
     '</script></body></html>';
 }
 
-// Session 11: scoped publisher ANALYTICS page — performance view.
-// Recent activity only for now — thin until Ad Unit/Placement (Part 17 §2) lands.
-// Fetches /dashboard?view=publisher&pubId=X, no picker, no cross-publisher data.
+// Session 11 (content), Session 12 (sidebar shell): scoped publisher
+// ANALYTICS page. Recent activity only for now — thin until Ad Unit/
+// Placement (Part 17 §2) lands.
 function scopedPublisherAnalyticsHtml(pub) {
   var base = '/publisher/' + encodeURIComponent(pub.slug || '');
   return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
     '<title>' + escapeHtml(pub.name) + ' \u2014 AI Ad Platform</title><style>' +
-    '*{box-sizing:border-box;margin:0;padding:0}' +
-    'body{font-family:system-ui,-apple-system,sans-serif;background:#f9f9f9;color:#111;font-size:14px}' +
-    'header{background:#fff;border-bottom:1px solid #e5e5e5;padding:14px 24px;display:flex;align-items:center;justify-content:space-between}' +
-    'header h1{font-size:14px;font-weight:600}header .sub{font-size:11px;color:#999}' +
-    'header a{font-size:11px;color:#888;text-decoration:none}' +
-    '#ts{font-size:11px;color:#aaa}' +
-    'main{padding:24px;max-width:1100px;margin:0 auto}' +
-    '.navtabs{display:flex;gap:4px;border-bottom:1px solid #e5e5e5;margin-bottom:20px}' +
-    '.navtab{font-size:13px;color:#888;text-decoration:none;padding:8px 14px;border-bottom:2px solid transparent;margin-bottom:-1px}' +
-    '.navtab.active{color:#111;font-weight:600;border-bottom-color:#111}' +
-    '.navtab:hover{color:#111}' +
-    'section{background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:20px;margin-bottom:20px}' +
-    'section h2{font-size:14px;font-weight:600;margin-bottom:4px}' +
-    'section .h2sub{font-size:11px;color:#999;margin-bottom:12px}' +
-    '.empty{color:#aaa;font-size:12px;padding:16px;text-align:center}' +
-    '.actrow{font-size:12px;padding:8px 0;border-bottom:1px solid #f3f3f3;display:flex;justify-content:space-between}' +
-    '.actrow:last-child{border-bottom:none}' +
-    '.actrow .plat{font-weight:600}' +
+    SIDEBAR_SHELL_CSS +
     '</style></head><body>' +
     '<header><div><h1>' + escapeHtml(pub.name) + '</h1><div class="sub">Publisher portal</div></div>' +
     '<div><span id="ts"></span> &nbsp; <a href="/ui">switch view</a></div></header>' +
+    '<div class="shell">' +
+    sidebarHtml(PUBLISHER_SIDEBAR_ITEMS, base, 'analytics') +
     '<main>' +
-    navTabsHtml(base, 'analytics') +
     '<section><h2>Recent activity</h2><div class="h2sub">AI crawlers that have visited your pages</div>' +
     '<div id="pub-activity"><div class="empty">Loading...</div></div></section>' +
     '</main>' +
+    '</div>' +
     '<script>' +
     'var PUB_ID="' + escapeHtml(pub.pubId) + '";' +
     'function ago(t){if(!t)return "\u2014";var s=Math.floor((Date.now()-new Date(t).getTime())/1000);if(s<60)return s+"s ago";if(s<3600)return Math.floor(s/60)+"m ago";return Math.floor(s/3600)+"h ago";}' +
@@ -766,7 +804,7 @@ module.exports = function handler(req, res) {
 
   var url = (req.url || '/ui').split('?')[0];
   var slug = (req.query && req.query.slug) || null;
-  var view = (req.query && req.query.view) || 'dashboard';
+  var view = (req.query && req.query.view) || 'overview';
 
   // /ui — chooser ONLY (everything else under /ui is retired, see Part 17 §1)
   if (url === '/ui' || url === '/ui/') {
@@ -782,24 +820,32 @@ module.exports = function handler(req, res) {
   if (url.indexOf('/advertiser') === 0 && !slug) {
     return res.status(200).send(listPageHtml('advertiser'));
   }
-  // /advertiser/{slug}/dashboard or /advertiser/{slug}/analytics
+  // /advertiser/{slug}/overview, /campaign, or /analytics
+  // Session 12: sidebar (Part 17 §7) — 3 sections, separate page per
+  // section (Option A, confirmed explicitly). Was 2 pages (dashboard/
+  // analytics) in Session 11; "dashboard" split into overview + campaign.
   if (url.indexOf('/advertiser') === 0 && slug) {
     var adv = (config.advertisers || []).find(a => a.slug === slug);
     if (!adv) return res.status(404).send(notFoundHtml('advertiser', slug));
+    if (view === 'campaign') return res.status(200).send(scopedAdvertiserCampaignHtml(adv));
     if (view === 'analytics') return res.status(200).send(scopedAdvertiserAnalyticsHtml(adv));
-    return res.status(200).send(scopedAdvertiserDashboardHtml(adv));
+    return res.status(200).send(scopedAdvertiserOverviewHtml(adv));
   }
 
   // /publisher — directory list
   if (url.indexOf('/publisher') === 0 && !slug) {
     return res.status(200).send(listPageHtml('publisher'));
   }
-  // /publisher/{slug}/dashboard or /publisher/{slug}/analytics
+  // /publisher/{slug}/overview, /pages, or /analytics
+  // Session 12: sidebar — 3 sections (no "Campaign" concept for
+  // publishers). Was 2 pages (dashboard/analytics); "dashboard" split
+  // into overview + pages.
   if (url.indexOf('/publisher') === 0 && slug) {
     var pub = (config.publishers || []).find(p => p.slug === slug);
     if (!pub) return res.status(404).send(notFoundHtml('publisher', slug));
+    if (view === 'pages') return res.status(200).send(scopedPublisherPagesHtml(pub));
     if (view === 'analytics') return res.status(200).send(scopedPublisherAnalyticsHtml(pub));
-    return res.status(200).send(scopedPublisherDashboardHtml(pub));
+    return res.status(200).send(scopedPublisherOverviewHtml(pub));
   }
 
   // Fallback — unrecognised path, show chooser
