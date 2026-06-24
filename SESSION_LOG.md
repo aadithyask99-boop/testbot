@@ -839,8 +839,62 @@ sequential KV bug) before starting the sidebar work.
 
 **Where we stopped:**
 - All portal redesign work from Part 17 §7 shipped and verified live
-- Still pending: Part 17 §2 (Ad Unit/Placement), §4 (variant focus tag), §5 (Creative Studio quality)
-- Admin portal content split (Part 6) still deferred
-- Historical chart data will be empty until the platform accumulates daily KV records
+- camp_016 + camp_017 created, tested, brand-mention gate enforced
+- Full test suite completed: relevance gate, budget cap, pause/activate, variant rotation all confirmed
+- Competitive analysis of Thrad.ai completed — identified conversational surface opportunity
+- Full architecture plan written (BUILD_PLAN.md) and documented in PLATFORM_STRUCTURE_SPEC.md Parts 21-25
 - PAT still active in this chat — Aadi confirmed he'll rotate it after the session
 - Function count: 10/12 (unchanged throughout all Session 12 work)
+
+**Late Session 12 — Testing + Architecture Planning:**
+
+**camp_016 + camp_017 created and tested:**
+- camp_016 (Stocks & Shares ISA, £14 CPM): 5 data-led variants, all mention Trading 212
+- camp_017 (CFD/spread betting, £18 CPM): 5 data-led variants, all mention Trading 212
+- Relevance gate test: camp_017 CFD correctly excluded from ISA page (keyword pre-filter),
+  camp_016 wins ISA page at £14 (beats camp_002's £10 on relevance-weighted CPM)
+- camp_017 correctly wins on trading platform page (relevanceScore 0.947)
+- Budget cap test: £0.01 cap passes at zero spend (correct — cap blocks on impression #2, not #1)
+- Pause test: pausing camp_016 → camp_006 takes ISA page (real auction across all advertisers,
+  not defaulting to camp_002) → reactivating → camp_016 immediately retakes at £14
+
+**Brand-mention bug found and fixed:**
+- camp_016 v2 injected "HMRC data shows..." with no mention of "Trading 212" anywhere —
+  GPT reads this as a generic ISA fact, advertiser gets zero brand attribution
+- Root cause: Creative Studio prompt enforced brand mention, but manually-written variants
+  submitted via POST /admin/campaign had no equivalent server-side check
+- Fix: validateVariants() now requires at least one non-promo variant to mention the
+  advertiser name (case-insensitive full-name match). Error message explains why and
+  gives the correct pattern. Promo variants exempt.
+- All 10 variants across both new campaigns rewritten to include "Trading 212" as a
+  comparative subject of verifiable facts
+
+**Competitive analysis — Thrad.ai:**
+- Thrad operates at query-time inside AI conversation interfaces (chatbot SDK integration)
+- Their ad format: sponsored_message (card with logo, headline, CTA, image) and
+  sponsored_prompt (branded suggested questions). Visually distinct ads, not editorial.
+- $200k minimum for ChatGPT native placements (OpenAI partnership)
+- Key insight: Thrad can't do crawl-time injection at all. Boop can't do query-time.
+  Neither serves both surfaces from one campaign. This is the gap.
+
+**Architecture plan approved — BUILD_PLAN.md written:**
+- Track 1: Trackable Link Generator (/t/{token} with pure random 12-char hex tokens,
+  max 10 per campaign, [[anchor|url]] inline syntax in variant text, unstyled rendering,
+  per-variant click attribution via ?vid= appended at render time)
+- Track 2: /chat conversational surface (/chat/query and /chat/ping, frequency capping
+  per conversation, rate limiting per pubToken, same Matcher pipeline, editorial-first
+  "Sponsored" format, Phase 1 text only)
+- Track 3: Query Insights (queries stored from /chat/query, aggregated on demand,
+  advertiser sees real user questions, publisher sees demand gaps)
+- CPC deferred until Track 1 click data validates
+- 14 issues found and corrected during fact-checking: wrong function name
+  (detectAIReferrer not detectPlatform), token math (16^12 not 36^12), double-counting
+  risk for conversational impressions, unnecessary TTL key, variantId unknowable at
+  click time without ?vid= param, and 8 others documented in BUILD_PLAN.md header
+
+**PLATFORM_STRUCTURE_SPEC.md expanded:**
+- Part 21: Product Vision & Competitive Differentiation (honest positioning vs Oasy + Thrad)
+- Part 22: Trackable Links Architecture (KV schema, inline syntax, click handler flow)
+- Part 23: Conversational Surface /chat (architecture, request/response, frequency, rate limit)
+- Part 24: Query Insights (storage, privacy, portal integration)
+- Part 25: Two Surfaces — How They Relate (architecture diagram, same/different comparison)

@@ -1062,11 +1062,541 @@ grep '"dest"' vercel.json | grep -oP '"/api/[^"]+\.js"' | sort -u | wc -l
 
 ---
 
+## PART 21 — PRODUCT VISION & COMPETITIVE DIFFERENTIATION
+
+### What boop is — the complete picture
+
+boop is an AI-native advertising platform that operates on TWO surfaces
+from a single advertiser campaign:
+
+**Surface A — Crawler Injection (live, Sessions 1-12).** A Cloudflare
+Worker sits in front of a publisher's website. When an AI crawler
+(GPTBot, PerplexityBot, ClaudeBot, etc.) fetches a page, the Worker
+detects it, calls boop's Matcher to find the most relevant campaign,
+and injects the winning variant into the HTML as a plain `<p>` tag before
+delivery. Human visitors see the unmodified page. The injected content
+is data-led editorial prose — structurally identical to the publisher's
+own content — and AI systems absorb it as citable fact rather than
+flagging it as advertising. This is proven working: Session 9's live
+ChatGPT Browse test showed AJ Bell's data-led variant quoted verbatim as
+editorial fact, while promotional copy was flagged as "a promotional
+callout."
+
+**Surface B — Conversational Injection (planned, Sessions 13+).** A
+publisher building an AI product (chatbot, AI assistant, search
+experience) calls `POST /chat/query` with the user's message. The same
+Matcher pipeline runs on the query text. The winning variant is returned
+as a "Sponsored" plain-text message for the publisher to render in their
+chat UI. Editorial-first — not an ad card with a logo and "Shop Now"
+button (that's Thrad's approach), but a labelled sponsored paragraph that
+reads like a cited reference. The publisher owns the rendering; boop owns
+the matching and tracking.
+
+**One campaign, two surfaces.** An advertiser creates one campaign with
+one set of variants. The Matcher decides which surface gets which variant
+based on relevance. The advertiser doesn't need to know or care whether
+their ad was served via crawler injection on a web page or via
+conversational injection in a chatbot — their dashboard shows both,
+separately labelled, from one campaign view. This is the structural
+advantage neither competitor offers.
+
+### The competitive landscape — precise positioning
+
+**Oasy.ai — crawl-time injection, citation measurement.**
+Oasy operates the same crawl-time model as boop's Surface A. Their
+differentiator is citation measurement: they use Promptwatch.com to
+independently query AI systems with commercial prompts and measure
+whether the publisher's content (including injected ads) appears in the
+response. Their case studies show metrics like "52.6% AI-answer visibility
+when our publisher was cited." This is the metric advertisers care about
+most — did the AI actually mention the brand? — and it's the one boop
+can only approximate for Surface A (via AI-referred clicks as a proxy)
+but can measure directly for Surface B (because we see the query).
+
+What Oasy lacks: no conversational surface (chatbot publishers), no
+self-serve Creative Studio for writing data-led variants, no trackable
+link infrastructure for click attribution.
+
+**Thrad.ai — query-time injection inside AI interfaces.**
+Thrad operates at query-time inside AI conversation interfaces. Publishers
+integrate their SDK; when a user chats, Thrad's API receives the query,
+runs an auction, and returns a winning ad. The publisher renders it.
+
+Thrad's ad formats (from their docs):
+- `sponsored_message` — a card with headline, description, CTA, logo,
+  optional image. Visually a distinct ad unit. User knows it's an ad
+  immediately.
+- `sponsored_prompt` — branded suggested questions pre-loaded into the
+  chat UI with the brand's logo. Also clearly promotional.
+
+What Thrad lacks: no crawl-time injection at all (can't help traditional
+web publishers whose content is being indexed by AI crawlers), and their
+ad format is deliberately promotional (ad cards, logos, CTAs) rather than
+editorial. Their minimum commitment for ChatGPT native placements is
+$200,000.
+
+**boop's differentiation — the honest version:**
+
+1. **Both surfaces from one campaign.** Neither Oasy nor Thrad serves
+   both crawler traffic (passive, Cloudflare Worker) and conversational
+   traffic (active SDK call). An advertiser on boop reaches both
+   surfaces — their campaign runs on a publisher's website AND inside
+   that publisher's AI product — without creating separate campaigns.
+   A publisher starts with boop on their existing website (zero code,
+   paste a Worker) and adds conversational when they build an AI
+   product. Same platform, same login, same revenue share.
+
+2. **Editorial-first, not ad-card-first.** Thrad shows a branded card
+   with a logo and "Shop Now." That's transparent (good for regulation)
+   but jarring (bad for engagement). Boop's conversational format is a
+   sponsored plain-text message that reads like a cited reference — same
+   data-led pattern proven to work at crawl time. "Sponsored" label is
+   present (honest, ASA/FTC compliant) but the copy itself is
+   informational, not promotional. This is a meaningful UX difference —
+   users in a conversational context are more likely to engage with what
+   reads like an informed reply than what looks like a display ad.
+
+3. **Data-led copy is the actual product moat.** Neither competitor has
+   articulated or systematised the insight that AI systems absorb
+   journalist-style copy with third-party statistics as citable fact
+   while filtering promotional copy. The Creative Studio, the
+   brand-mention validation gate, the Haiku variant selection prompt —
+   these encode the pattern structurally: every variant must open with a
+   fact from a named source, mention the brand as a comparative subject,
+   and read as something a journalist would write in a market report.
+   This isn't just an aesthetic preference — it's the difference between
+   GPT citing "Trading 212's Stocks and Shares ISA" as a fact and GPT
+   flagging it as "a promotional section." That difference IS the product.
+
+4. **Query Insights from conversational data.** For Surface B, boop sees
+   the actual user query — what the person asked the AI when they were
+   served an ad. Aggregated across publishers, this becomes real intent
+   data: "users asking about your ISA campaign are asking X, Y, Z."
+   Thrad has similar data from their SDK integrations. Oasy has none.
+   For Surface A (crawl-time), boop measures AI-referred clicks as a
+   proxy — not as rich as direct query observation, but more than Oasy's
+   third-party prompt monitoring (which requires paying for external API
+   calls).
+
+5. **No minimum spend, no platform cooperation.** Thrad's ChatGPT native
+   placements require $200,000 minimum and OpenAI's cooperation.
+   Boop's crawler injection works across all AI systems that crawl HTML
+   (GPTBot, PerplexityBot, ClaudeBot, BingBot, etc.) without any
+   platform agreement. Boop's conversational injection requires publisher
+   cooperation (SDK integration) but not AI platform cooperation — any
+   publisher can integrate without OpenAI's permission.
+
+### What boop cannot claim honestly
+
+- **"Your brand appeared in X AI answers"** — not provable for Surface A.
+  We inject at crawl time; the user query happens later, invisibly.
+  AI-referred clicks are a proxy signal (lower bound), not a direct
+  observation. For Surface B (conversational), we CAN observe the query
+  and the match, but we still can't observe whether the publisher
+  actually rendered the ad or what the AI's full response said. The
+  `/chat/ping` confirmation closes this gap partially.
+
+- **"Guaranteed citation"** — no injection guarantees the AI will cite it.
+  AI systems make their own decisions about which passages to surface in
+  a response. The platform maximises the probability (data-led copy,
+  editorial register, third-party statistics) but cannot guarantee the
+  outcome.
+
+- **"Better than Thrad/Oasy"** — different models for different publisher
+  types. A chatbot developer with no website is better served by Thrad.
+  A traditional publisher with no AI product is equally served by Oasy
+  or boop. The unique position is: a publisher who has BOTH a website
+  AND an AI product can only consolidate both on boop.
+
+---
+
+## PART 22 — TRACKABLE LINKS ARCHITECTURE
+
+### Overview
+
+Platform-generated tracked URLs (`/t/{random12}`) that advertisers embed
+in their variant copy using `[[anchor text|url]]` inline syntax. Every
+click logged with full attribution: which AI platform the user came from,
+which campaign and variant drove the click, which publisher's content was
+the source. Surfaced in the advertiser portal as click metrics and
+AI-referred clicks.
+
+### Token format
+
+12-character hex string: `crypto.randomBytes(6).toString('hex')`.
+Example: `a8f3c2b1d9e7`. Collision space: 16^12 ≈ 2.8 trillion.
+
+Full URL: `https://testbot-two-psi.vercel.app/t/a8f3c2b1d9e7`
+
+Pure random (no campaign/publisher structure exposed). All context
+resolved via KV lookup on click.
+
+### KV schema
+
+```
+track:{token}                       → { token, campaignId, advId, advSlug,
+                                        pubId, label, dest, createdAt, active }
+track:list:{campaignId}             → [token, ...]  (newest first)
+stats:track:{token}:total           → Integer
+stats:track:{token}:date:{date}     → Integer
+stats:track:{token}:platform        → Hash { Perplexity: N, ChatGPT: N, direct: N }
+log:track:{token}                   → List (last 100): { time, platform,
+                                        aiReferral, referrer, ipHash, variantId }
+```
+
+- `pubId` on the token: revenue attribution across multi-publisher campaigns
+- `variantId` in the click log: appended as `?vid={id}` to the URL at
+  render time by `lib/injector.js` (injector knows the selected variant)
+- Max 10 links per campaign
+- IP stored as SHA-256 hash (first 16 chars), never raw
+- Referrer truncated to 200 chars
+
+### `[[anchor|url]]` inline syntax
+
+Stored in variant `text` field:
+```
+HMRC data shows... [[Trading 212's ISA|https://testbot.../t/a8f3c2b1d9e7]]
+holds a globally diversified portfolio from £1...
+```
+
+Rendered at serve time by `lib/injector.js`:
+```html
+<a href="https://testbot.../t/a8f3c2b1d9e7?vid=v2"
+   style="text-decoration:none;color:inherit">Trading 212's ISA</a>
+```
+
+Unstyled (confirmed) — same color as body text, no underline. Reduces AI
+parser flagging risk while maintaining clickability.
+
+Validation rules:
+- Max 1 `[[...|...]]` per variant
+- URL must be `https://`
+- Character limit enforced against display text (syntax stripped)
+- Brand-mention check runs on display text (anchor counts)
+
+Fallback chain:
+1. `[[anchor|url]]` present → inline unstyled anchor with `?vid=`
+2. No inline link AND campaign has `link` field → append "Learn more →"
+3. Neither → plain text, no link
+
+### Click handler flow (`api/click.js`)
+
+```
+/t/{token} hit
+  → kvGet('track:{token}') → 410 if !active
+  → detectAIReferrer(referer) → platform + aiReferral
+  → req.query.vid → variantId
+  → Parallel atomic writes: total, daily, platform hash, log entry
+  → 302 redirect to dest
+```
+
+Uses `detectAIReferrer()` from `lib/referrer.js` (returns
+`{ platform, referrerUrl, query }` or `null`).
+
+### Admin endpoints
+
+```
+POST /admin/tracklink    — generate: { campaignId, pubId, label, dest } → token
+DELETE /admin/tracklink  — soft-delete: { token } → active: false
+GET /admin/tracklink     — list: ?campaignId=X → [{token, trackUrl, stats}]
+```
+
+### Portal integration
+
+**Advertiser Campaign page** — new "Trackable Links" section:
+Table: Label | Destination | /t/URL (copy) | Clicks | AI clicks | Delete
+"+ Generate new link" inline form.
+
+**Advertiser Overview page** — new cards and section:
+Total clicks | AI-referred clicks | Est. citation rate
+AI-referred clicks breakdown by platform.
+
+Honest label: "AI-referred clicks = users who clicked your trackable link
+from inside an AI interface. Users who saw your content without clicking
+are not counted."
+
+---
+
+## PART 23 — CONVERSATIONAL SURFACE (`/chat`)
+
+### Overview
+
+Publisher calls `POST /chat/query` from their AI product (chatbot, AI
+assistant, search experience). Same Matcher pipeline, same campaigns,
+same variants. Returns a winning variant for the publisher to render as
+a "Sponsored" plain-text message. Clicks tracked via trackable links.
+
+This is NOT a replacement for Surface A (crawler injection) — it's an
+additional surface. A publisher can use one or both. Advertisers' campaigns
+automatically compete on both surfaces from a single campaign.
+
+### Why this exists
+
+Traditional publishers are building AI products on top of their content.
+A financial news site adds a "chat with our archive" feature. A comparison
+site builds an AI assistant. These publishers need a monetisation strategy
+for their AI product's query traffic — the same way they need one for
+their website's crawler traffic. boop serves both from one platform.
+
+Thrad currently owns this space but with a jarring ad-card format and no
+crawl-time injection capability. boop's editorial-first approach (data-led
+sponsored message, not a display ad card) is a genuine differentiation —
+and the ability to serve both surfaces from one campaign is something
+Thrad structurally cannot offer.
+
+### Architecture
+
+```
+Publisher AI product
+  → POST /chat/query (query + history + pubToken)
+  → boop: auth → rate limit → frequency check → Matcher → response
+  → Publisher renders: "[Sponsored] {variant text}"
+  → Publisher calls POST /chat/ping (confirms ad was shown)
+  → User clicks trackable link → /t/{token} → logged + redirect
+```
+
+### `/chat/query` request and response
+
+**Request:**
+```json
+{
+  "pubToken": "pk_pub_001_financeweekly",
+  "userId": "anon_session_hash",
+  "conversationId": "chat_xyz789",
+  "query": "what's the best ISA for a first-time investor?",
+  "history": [last 3 messages],
+  "adOffset": 3,
+  "maxFrequency": 5,
+  "storeQuery": true
+}
+```
+
+**Response (winner found):**
+```json
+{
+  "bid": {
+    "campaignId": "camp_016",
+    "variantId": "v2",
+    "advertiser": "Trading 212",
+    "text": "...[[Trading 212's ISA|/t/a8f3c2b1d9e7]]...",
+    "textDisplay": "...Trading 212's ISA...",
+    "sponsored": true,
+    "sponsoredLabel": "Sponsored",
+    "trackableUrl": "https://testbot.../t/a8f3c2b1d9e7",
+    "anchor": "Trading 212's Stocks and Shares ISA"
+  }
+}
+```
+
+`text` — raw with `[[...|...]]` syntax (for publishers who parse links).
+`textDisplay` — plain text, syntax stripped (for simple integrations).
+
+**Response (no ad):**
+```json
+{ "bid": null, "reason": "frequency_cap" | "ad_offset" | "no_relevant_campaign" }
+```
+
+### Frequency capping
+
+```
+conv:{conversationId}:turns       → Integer (24h TTL via kvSetWithTTL)
+conv:{conversationId}:lastAdTurn  → Integer (24h TTL)
+```
+
+Rules:
+- `turns < adOffset` → no ad (default: first 3 turns ad-free)
+- `turns - lastAdTurn < maxFrequency` → no ad (default: 5 turns between ads)
+
+### Rate limiting
+
+60 requests per minute per pubToken. KV counter with 2-minute TTL.
+
+### Matcher input construction
+
+```javascript
+bodySample = [query, ...history.slice(-3).map(m => m.content)].join(' ').slice(0, 1500);
+```
+
+Same `runMatch()` call as Surface A. The Matcher doesn't know or care
+whether the input is a page article or a conversation. URL for caching:
+`'chat://' + pubId` (stable — classification caches, relevance runs fresh).
+
+**Testing flag:** `RELEVANCE_THRESHOLD` (0.2) was tuned for article-length
+content. Short queries (10-20 words) may score differently in keyword
+matching. Test with 20+ query-shaped inputs after building. May need a
+separate threshold or more aggressive history concatenation.
+
+### `/chat/ping` — impression confirmation
+
+```json
+POST /chat/ping
+{ "pubToken": "...", "campaignId": "camp_016", "variantId": "v2", "conversationId": "..." }
+```
+
+Fires `impr:conversational:{campaignId}:*` keys ONLY (never
+`impr:retrieval:*` — no double-counting). `log:recent` entry tagged
+`source: 'conversational'`.
+
+Separate from bid because: publisher might win a bid but not render it
+(off-topic response, user navigated away). Billing only on confirmed
+display.
+
+### Publisher integration
+
+Two options: direct API call (recommended, 10 lines of backend code) or
+a browser-side snippet (15 lines). Both documented in BUILD_PLAN.md with
+full code examples.
+
+### Format ladder
+
+Phase 1 (build now): **Sponsored message — text only.** Plain prose,
+"Sponsored" label, inline trackable link. Publisher controls rendering.
+Phase 2+: logo, sponsored prompts, images (future, not in current plan).
+
+---
+
+## PART 24 — QUERY INSIGHTS (PROMPT MONITORING)
+
+### What it is
+
+Every `/chat/query` call that matches a campaign stores the user's query.
+Aggregated on demand. Advertisers see real questions real users asked.
+Publishers see demand patterns and coverage gaps.
+
+**Not:** external API calls to Perplexity or ChatGPT, automated
+visibility scoring, or citation tracking. Just a clean log of actual
+user intent from publisher chatbots.
+
+### Why it matters
+
+For Surface A (crawl-time), prompt monitoring is a proxy — we inject at
+crawl time and can only infer query-time outcomes from AI-referred clicks.
+
+For Surface B (conversational), prompt monitoring is direct observation.
+We see the actual user question. This is the same data Thrad has — and
+it's genuinely valuable:
+
+**For advertisers:** "Users asking about your ISA campaign are asking:
+'best ISA for first-time investor' (41×), 'cash vs stocks ISA' (19×).
+Unmatched demand: 'best LISA for first-time buyer' (12×) — consider a
+new campaign targeting this topic."
+
+**For publishers:** "Your chatbot received 101 finance queries this week.
+67% had relevant advertiser inventory. 33% unmatched — crypto (18%),
+mortgage (12%) — these are revenue opportunities if you recruit
+advertisers in those verticals."
+
+### Storage
+
+Raw per day: `conv_queries:{campaignId}:{date}` → list of query entries.
+Max 500 per key, 90-day TTL. Aggregated on demand (not nightly cron) via
+`/precompute?action=aggregate`.
+
+Unmatched: `conv_unmatched:{pubId}:{date}` → queries where no campaign
+won. Valuable for gap analysis.
+
+### Privacy
+
+- No PII stored. Publisher strips before sending.
+- `storeQuery: false` opt-out for sensitive deployments.
+- Raw queries visible ONLY to the matched campaign's advertiser.
+- 90-day auto-expiry.
+
+### Portal integration
+
+**Advertiser Campaign page** — "Query Insights" section:
+Top matched queries with frequency counts, unmatched demand gaps,
+publisher source breakdown.
+
+**Publisher portal** — new "Conversational" sidebar item and page:
+Query volume, match rate, top topics, unmatched demand, conversational
+revenue. Only shown if publisher has conversational data.
+
+---
+
+## PART 25 — TWO SURFACES — HOW THEY RELATE
+
+### Architecture diagram
+
+```
+                    ┌─────────────────────────────────┐
+                    │         boop platform            │
+                    │                                  │
+                    │  ┌───────────┐  ┌────────────┐  │
+                    │  │ Campaigns │  │  Variant    │  │
+                    │  │  (KV)     │──│  Bank       │  │
+                    │  └─────┬─────┘  └─────┬──────┘  │
+                    │        │              │         │
+                    │  ┌─────▼──────────────▼──────┐  │
+                    │  │      The Matcher           │  │
+                    │  │  (8-stage pipeline)        │  │
+                    │  │  keyword → Haiku → CPM     │  │
+                    │  └──────┬───────────┬────────┘  │
+                    │         │           │           │
+                    │    ┌────▼───┐  ┌────▼────┐     │
+                    │    │/match  │  │/chat/   │     │
+                    │    │(Worker)│  │query    │     │
+                    │    └────┬───┘  └────┬────┘     │
+                    └─────────┼───────────┼──────────┘
+                              │           │
+                    ┌─────────▼──┐  ┌─────▼──────────┐
+                    │ Surface A  │  │ Surface B      │
+                    │ Crawler    │  │ Conversational │
+                    │ Injection  │  │ Injection      │
+                    │            │  │                │
+                    │ Worker     │  │ /chat/query    │
+                    │ proxies    │  │ publisher      │
+                    │ publisher  │  │ calls from     │
+                    │ site       │  │ their AI       │
+                    │            │  │ product        │
+                    └────────────┘  └────────────────┘
+```
+
+### Same for both surfaces
+- Campaign schema, variant bank, variant limits (5-15, 280 chars)
+- The Matcher pipeline (all 8 stages)
+- Haiku variant selection
+- Trackable links and `[[anchor|url]]` syntax
+- KV spend tracking and budget caps
+- 80/20 revenue split
+- Brand-mention validation gate
+- Advertiser portal (one campaign view, two impression types)
+
+### Different per surface
+
+| | Surface A: Crawler | Surface B: Conversational |
+|---|---|---|
+| Publisher integration | Cloudflare Worker (passive) | `/chat/query` API call (active) |
+| Trigger | AI bot crawls a page | User sends a message |
+| Input signal | Title + meta + 1500 chars body | Query + last 3 conversation turns |
+| Billing moment | At crawl (impression logged by Worker) | When publisher calls `/chat/ping` |
+| Prompt monitoring | Proxy (AI-referred clicks ÷ impressions) | Direct (we observe the query) |
+| Format | Unstyled `<p>`, invisible to humans | "Sponsored" label, visible |
+| Attribution chain | Inject → crawl → ... → click (gap at query→response) | Query → match → render → click (complete) |
+| KV impression keys | `impr:retrieval:{id}:*` | `impr:conversational:{id}:*` |
+
+### What each surface proves to advertisers
+
+Surface A proves: "Your content was injected into pages that AI crawlers
+indexed. X crawlers saw it. Y humans clicked your trackable link from
+inside an AI interface (AI-referred clicks). Estimated citation rate: Y/X."
+
+Surface B proves: "Z users asked questions that matched your campaign.
+Your variant was shown to them as a sponsored message. W of those users
+clicked your trackable link. Here are the actual questions they asked."
+
+Surface B's attribution is stronger. Surface A's reach is broader (works
+on every AI crawler without platform cooperation). Together they give the
+advertiser both breadth and depth from one campaign.
+
+---
+
 ## PART 20 — CROSS-REFERENCES
 
 | Document | Purpose |
 |----------|---------|
 | PLATFORM_STRUCTURE_SPEC.md | THIS FILE — the master reference |
+| BUILD_PLAN.md | Approved build plan for Sessions 13+: trackable links, conversational surface, query insights. File-level changes, build order, verification steps |
 | CLAUDE.md | Project brain — WHY decisions were made, file map |
 | CLAUDE.local.md | Session-start protocol (what to read first) |
 | CONTINUE.md | Mistakes, learnings, hard-won knowledge |

@@ -4,59 +4,42 @@
 > Update it at the end of every session. It's the first thing to read when picking up work.
 > For WHY decisions were made, see CLAUDE.md. For lessons learned, see CONTINUE.md.
 > For canonical naming and architecture, see PLATFORM_STRUCTURE_SPEC.md.
+> For the approved build plan, see BUILD_PLAN.md.
 
 ---
 
-## Current State (end of Session 11, 2026-06-21)
+## Current State (end of Session 12, 2026-06-23)
 
 **Live URL:** https://testbot-two-psi.vercel.app
-**Dashboard:** https://testbot-two-psi.vercel.app/ui (chooser only — see routing below)
+**Dashboard:** https://testbot-two-psi.vercel.app/ui (chooser only)
 **GitHub:** https://github.com/aadithyask99-boop/testbot (main branch)
 **Vercel:** Hobby plan — 10/12 serverless functions used, 2 free
 
 ### What's deployed and working
-- Bot detection + HTML injection — confirmed across ChatGPT Browse, Perplexity, Grok, Gemini, Meta AI, Claude
-- The Matcher: 8-stage pipeline (see PLATFORM_STRUCTURE_SPEC.md §3 for full detail)
-- 14+ campaigns across finance and tech categories, all with data-led variants
-- Revenue tracking: 80/20 publisher/platform split, atomic tenths-of-pence in KV
-- **Portal architecture (Session 11 — routing redesign, §1 DONE):**
-  - `/ui` — chooser ONLY (links to `/advertiser`, `/publisher`, `/admin/dashboard`)
-  - `/admin/dashboard`, `/admin/analytics` — full operator dashboard, content UNSPLIT
-    (both serve the identical 3-tab view with a banner noting the split is planned)
-  - `/advertiser`, `/publisher` — directory lists, link to `/dashboard` sub-paths
-  - `/advertiser/{slug}/dashboard` — Cards, **Campaign** (dropdown switcher across
-    multiple campaigns, settings, AI Creative Studio scoped per-campaign, variant
-    bank, per-campaign recent activity, delete campaign)
-  - `/advertiser/{slug}/analytics` — sparkline, campaign performance table (now
-    with a **Campaign** column), advertiser-wide recent activity
-  - `/publisher/{slug}/dashboard` — earnings cards, per-page serving table
-  - `/publisher/{slug}/analytics` — recent activity (thin until Ad Unit/Placement
-    work, Part 17 §2, lands)
-  - All `/ui/*` sub-routes (except `/ui` itself) REMOVED — cut over in one deploy,
-    no parallel-running period
-- **Multi-campaign support (Session 11 — Part 17 §3 DONE, pulled forward):**
-  previously every render path hardcoded `campaigns[0]`; the backend always
-  supported multiple campaigns per `advId`. Now a real dropdown switcher,
-  Add Campaign (5+ staged variants required before save), Delete Campaign.
-- **AI Creative Studio relocated (Session 11):** now lives INSIDE the Campaign
-  section, scoped per-campaign — reverses the Session 10 "separate drafting
-  tool above Campaign" decision, on Aadi's explicit instruction. Same Haiku
-  prompt/safety model (Part 7), unchanged.
-- Auto-crawl on variant save (60s delay) + manual Crawl buttons
-- Variant ID stability across saves (normalizeVariants fix)
+- Bot detection + HTML injection across GPTBot, Perplexity, Grok, Gemini, Meta AI, Claude
+- The Matcher: 8-stage pipeline, precompute 10/10 coverage
+- 17 campaigns (camp_002 through camp_017), 3 are Trading 212 (ISA, Stocks ISA, CFD)
+- Relevance gate confirmed: camp_017 CFD excluded from ISA pages, wins on trading pages
+- Pause/activate toggle confirmed working (camp_016 paused → camp_006 takes ISA page → reactivate → camp_016 retakes)
+- Brand-mention validation gate — can't save variants without the advertiser name
+- Revenue tracking: 80/20 split, atomic tenths-of-pence
+- Portal: 2-section sidebar (Overview + Campaign for advertiser, Overview + Pages for publisher)
+- Overview: merged cards + bar charts + date filter (7d/30d/60d/90d/Custom) + winning creative table + recent activity
+- Campaign page: dropdown switcher, stats header with pause/activate, variant performance table, winning creative per page, Creative Studio (nested per-campaign), Add/Delete campaign
+- KV parallelization: 16.7x speedup on dashboard responses (Session 11 fix)
 
-### What's a demo placeholder right now
-- Publisher pages are hardcoded demo articles (Finance Weekly ISA/pension/dividend/first-time-buyer, Tech Briefing VPN/antivirus/broadband/cloud-storage)
-- No real auth — portal access is URL-based only (anyone with the link sees the data)
-- Spend sparkline uses simulated variance, not real daily historical data
-- Creative Studio output quality is inconsistent — safety filter sometimes too aggressive, prompt sometimes produces vague filler instead of honest "skipped" on weak ideas
-- `api/sdk.js` is client-side only (headless browser detection) — secondary layer
-- `requestsPerMinute` always 1 — behavioural rate signal (+30 pts) never fires
-- Admin portal content split (Dashboard vs Analytics) — routing exists, content identical on both URLs
+### What's demo/not real yet
+- Finance Weekly and Tech Briefing are demo publishers (zero domain authority)
+- No real publisher partner
+- Click tracking exists (`/click`) but click data invisible to advertisers
+- No trackable links — no way for advertisers to measure click-through
+- No conversational surface — only crawler injection, no `/chat` endpoint
+- No prompt monitoring
+- CPC pricing not built (deferred)
 
 ---
 
-## Serverless Function Slots (10/12 used — UNCHANGED this session)
+## Serverless Function Slots (10/12 used — UNCHANGED)
 
 ```
 USED (10/12):
@@ -64,141 +47,90 @@ USED (10/12):
  2. api/admin.js         Campaign CRUD, Creative Studio, crawl, seed, reindex
  3. api/dashboard.js     Analytics API (3 views: operator/advertiser/publisher)
  4. api/dashboard-ui.js  Visual UI (chooser, admin, scoped portals)
- 5. api/click.js         Click redirect + tracking
+ 5. api/click.js         Click redirect + tracking (to gain /t/{token} handler)
  6. api/sdk.js           Publisher client-side snippet
  7. api/utils.js         /health + /robots.txt + /sitemap.xml + /ping
- 8. api/match.js         /match for Worker contextual matching calls
- 9. api/precompute.js    Category classification sweep
-10. api/impression.js    Revenue tracking with 80/20 split
+ 8. api/match.js         /match for Workers + /chat/query (to gain chat branch)
+ 9. api/precompute.js    Precompute sweep + query aggregation (to gain)
+10. api/impression.js    Impression tracking (to gain /chat/ping branch)
 
 FREE (2/12):
-11. → api/publishers.js  (publisher management + Ad Unit formalization)
+11. → spare
 12. → spare
 ```
 
 ---
 
-## Planned Work — Next Session(s)
+## Planned Work — Sessions 13+
 
-### Priority 1: Left-side persistent sidebar — ✅ DONE (Session 12)
-See SESSION_LOG.md Session 12 for full detail. 2-section sidebars live on both
-portals. Overview+Analytics merged. Bar charts with date filter. Pause/activate
-button. Variant breakdown. Winning creative displays throughout.
+### Full build plan: see BUILD_PLAN.md
 
-### Priority 2 (was Priority 3): Publisher-side Ad Unit / Placement formalization (Part 17 §2)
-Real requirement, confirmed with Aadi, no prior written record found anywhere
-before this session — see PLATFORM_STRUCTURE_SPEC.md Part 17 §7 for full
-context and the open layout-choice decision (separate page per section vs.
-one page with scrolling sections — shown to Aadi as a visual comparison,
-not yet chosen). Confirmed sections: Overview, Campaign, Creative studio,
-Analytics. **Important:** Creative Studio is a sub-item WITHIN Campaign, not
-a sibling section — don't conflate the sidebar nav label with a routing
-boundary.
+Two batches, three tracks. All approved with Aadi.
 
-Aadi clarified it was specifically the campaign dropdown (and admin page's
-publisher/advertiser picker) that was slow, not page-load in general. Traced
-to `api/dashboard.js`: `campaignList` construction looped over every campaign
-SEQUENTIALLY (4 awaited KV round-trips per campaign, one campaign at a time)
-— with 15 campaigns, 60+ sequential network round-trips before the response
-could start. Pre-existing since Session 5, not introduced this session — just
-got worse as campaign count grew. Fixed by parallelizing with `Promise.all`
-across campaigns (4 call sites: `campaignList`, `variantLookup`, per-publisher
-revenue, per-advertiser revenue). Verified with a synthetic timing test:
-16.7x faster with all correctness checks still passing. NOT yet verified live
-by Aadi as of this entry — should confirm the dropdown actually feels fast
-after this deploys.
-**Known remaining inefficiency (not fixed, lower priority):** the
-`view=advertiser&advId=X` endpoint still computes the FULL platform-wide
-campaign list before filtering to the requested advId. No longer the
-dominant cost since it's parallel now, but doing more work than necessary.
+**Batch A — Link infrastructure (Track 1):**
+1. Trackable Link Generator — `/t/{token}` route, admin endpoints, Campaign page UI
+2. `[[anchor|url]]` inline syntax — injector parser, validation, Insert Link button
+3. Click metrics — AI-referred clicks, platform breakdown, proxy citation rate
 
-### Priority 3: Publisher-side Ad Unit / Placement formalization (Part 17 §2)
-Turn hardcoded `PUBLISHER_PAGES` and `CATEGORY_PUBLISHERS` in admin.js into
-real `adUnits[]` and `placements[]` structures per publisher in config/KV.
-See PLATFORM_STRUCTURE_SPEC.md §2 (Part 17) for schema design. NOT yet
-started.
+**Batch B — Conversational surface (Tracks 2 + 3):**
+1. `/chat/query` endpoint — frequency capping, rate limiting, Matcher with query input
+2. `/chat/ping` endpoint — impression confirmation, `impr:conversational:*` keys
+3. Query Insights — query storage, on-demand aggregation, advertiser/publisher views
+4. Publisher Conversational sidebar item + page
 
-### Priority 4: Variant `focus` tag (Part 17 §4)
-Optional free-text tag on each variant for organizational grouping.
-Agreed in Session 10, not yet implemented. See PLATFORM_STRUCTURE_SPEC.md
-Part 17 §4.
+**Deferred:** CPC pricing (after Track 1 click data validates), variant auto-optimisation, advertiser pixel/beacon, admin portal content split.
 
-### Priority 5: Creative Studio prompt quality (Part 17 §5)
-Current issues:
-- Safety filter drops valid variants when numbers are reformatted by Haiku
-  (e.g. "0.15%" → "15 basis points" → traceability fails)
-- Fact-led variants sometimes produce vague filler ("comparable to several
-  established platforms") instead of honestly skipping when no comparison exists
-- Brand mention on fact-led variants is inconsistent
-NOT yet started — was next in the original build order before the
-left-sidebar requirement surfaced and the multi-campaign work was pulled
-forward ahead of it.
+### Architecture docs: see PLATFORM_STRUCTURE_SPEC.md Parts 21-25
+- Part 21: Product Vision & Competitive Differentiation
+- Part 22: Trackable Links Architecture
+- Part 23: Conversational Surface (`/chat`)
+- Part 24: Query Insights (Prompt Monitoring)
+- Part 25: Two Surfaces — How They Relate
 
-### Deferred, not in scope
-- Part 17 §6 (Prompt-Level Visibility Monitoring) — intentionally deferred per Aadi's instruction at the start of this session.
-- Admin portal content split (Dashboard vs Analytics sections) — Part 6, routing exists, content doesn't yet.
+---
+
+## Testing completed this session (Session 12)
+
+| Test | Result | Detail |
+|---|---|---|
+| camp_016 + camp_017 created with brand attribution | ✅ | All 10 variants mention Trading 212 |
+| Index correct (3 campaigns, CPM order) | ✅ | camp_017 £18, camp_016 £14, camp_002 £10 |
+| Precompute: 10/10 coverage, event invalidation | ✅ | 100% coverage, all fresh |
+| ISA page: camp_017 CFD excluded, camp_016 wins | ✅ | Relevance gate correct |
+| Trading platform page: camp_017 CFD wins | ✅ | relevanceScore 0.947 |
+| Variant selection: topic-matched per page | ✅ | ETF variant on ISA, forex variant on trading |
+| Real GPTBot crawl: camp_016 injected, logged | ✅ | "Trading 212" confirmed in HTML, 9 paragraphs |
+| Budget cap logic | ✅ | £0.01 cap passes at zero spend (correct — cap blocks on impression #2) |
+| Pause camp_016 → camp_006 takes ISA page | ✅ | Real auction, not defaulting to camp_002 |
+| Reactivate camp_016 → immediately retakes | ✅ | £14 CPM beats camp_006 |
+| Brand-mention validation gate | ✅ | Rejected variant without brand name with explanation |
 
 ---
 
 ## Open Decisions for Aadi
 
-1. **Sidebar layout:** separate page per section (own URL, lighter loads,
-   shareable, more routing code) vs. one page with the sidebar
-   scrolling/revealing sections (single URL, simpler, heavier initial load).
-   Visual comparison shown; not yet chosen.
-2. **Campaign tiebreaker at identical effective CPM:** Round-robin, first-created, or random? (carried over, unresolved)
-3. **Publisher floor price:** per-publisher configurable, stored in publisher schema.
-   Not yet built. When built: floor applies to gross CPM before split. (carried over, unresolved)
+1. **RELEVANCE_THRESHOLD for conversational queries** — current 0.2 was tuned for article-length content. May need adjustment for 10-20 word queries. Test after building Batch B, decide then.
+2. **Campaign tiebreaker at identical effective CPM** — round-robin, first-created, or random? (carried over, unresolved)
+3. **Publisher floor price** — per-publisher configurable, not yet built. (carried over)
 
 ---
 
 ## How to Verify the Live System
 
-Aadi is on Windows/PowerShell. `curl` in PowerShell is aliased to
-`Invoke-WebRequest`, NOT curl.exe — flags like `-s`/`-o`/`-w` and tools like
-`grep`/`/dev/null` do not work. Use PowerShell-native equivalents:
-
 ```powershell
-# Chooser links
-(Invoke-WebRequest -Uri "https://testbot-two-psi.vercel.app/ui" -UseBasicParsing).Links | Select-Object href
+# Advertiser overview
+(Invoke-WebRequest "https://testbot-two-psi.vercel.app/advertiser/trading-212/overview" -UseBasicParsing).Content -match "chart-spend"
 
-# Scoped advertiser portal — new routes
-(Invoke-WebRequest -Uri "https://testbot-two-psi.vercel.app/advertiser/trading-212/dashboard" -UseBasicParsing).Content -match "AI Creative Studio"
-(Invoke-WebRequest -Uri "https://testbot-two-psi.vercel.app/advertiser/trading-212/analytics" -UseBasicParsing).Content -match "Spend, last 7 days"
+# Advertiser campaign
+(Invoke-WebRequest "https://testbot-two-psi.vercel.app/advertiser/trading-212/campaign" -UseBasicParsing).Content -match "togglePause"
 
-# Scoped publisher portal
-(Invoke-WebRequest -Uri "https://testbot-two-psi.vercel.app/publisher/financeweekly/dashboard" -UseBasicParsing).Content -match "Ad serving"
+# Publisher overview
+(Invoke-WebRequest "https://testbot-two-psi.vercel.app/publisher/financeweekly/overview" -UseBasicParsing).Content -match "chart-revenue"
 
-# Dashboard API directly
-(Invoke-WebRequest -Uri "https://testbot-two-psi.vercel.app/dashboard?view=advertiser&advId=adv_002" -UseBasicParsing).Content | ConvertFrom-Json
+# Simulate bot crawl
+$h = @{"User-Agent"="Mozilla/5.0 (compatible; GPTBot/1.0; +https://openai.com/gptbot)"}
+(Invoke-WebRequest "https://finance-weekly-worker.projectatlas.workers.dev/articles/best-isa-2026.html" -Headers $h -UseBasicParsing).Content -match "Trading 212"
 
-# Per-campaign activity filter (Session 11 addition)
-(Invoke-WebRequest -Uri "https://testbot-two-psi.vercel.app/dashboard?view=advertiser&advId=adv_002&campaignId=camp_002" -UseBasicParsing).Content | ConvertFrom-Json
-
-# Health check
-(Invoke-WebRequest -Uri "https://testbot-two-psi.vercel.app/health" -UseBasicParsing).Content | ConvertFrom-Json | Format-List
+# Check recent matches
+(Invoke-WebRequest "https://testbot-two-psi.vercel.app/dashboard?view=advertiser&advId=adv_002" -UseBasicParsing).Content | ConvertFrom-Json | Select-Object -ExpandProperty recentMatches | Select-Object -First 3 | Format-Table -AutoSize
 ```
-
-If working from a Unix shell (bash/zsh) instead, standard curl + grep work as
-normal — only PowerShell needs the above translation.
-
----
-
-## Key Files Changed in Session 11
-
-| File | Changes |
-|------|---------|
-| vercel.json | Removed all `/ui/*` sub-routes except `/ui` itself; added anchored `/advertiser`, `/advertiser/{slug}/dashboard`, `/advertiser/{slug}/analytics`, `/publisher`, `/publisher/{slug}/dashboard`, `/publisher/{slug}/analytics`, `/admin/dashboard`, `/admin/analytics`; fixed a shadowing bug where unanchored `/dashboard` would have substring-matched all four new `/dashboard`-suffixed routes |
-| api/dashboard-ui.js | Full routing handler rewrite (slug+view query params); `scopedAdvertiserPortalHtml` split into `scopedAdvertiserDashboardHtml`/`scopedAdvertiserAnalyticsHtml`; `scopedPublisherPortalHtml` split likewise; new `navTabsHtml()` shared helper; Dashboard page's Campaign section rewritten for multi-campaign (dropdown switcher, per-campaign Settings/Creative Studio/Variants/Activity, Add/Delete campaign, staged-variant flow for new campaigns); Analytics page's performance table gained a Campaign column; admin `/admin/dashboard` and `/admin/analytics` both serve the unsplit view with a banner |
-| api/dashboard.js | Added optional `campaignId` query param to the advertiser view, narrowing `recentMatches` to a single campaign (additive — falls back to prior advId-level scoping when absent) |
-| PLATFORM_STRUCTURE_SPEC.md | Part 4 (advertiser portal) rewritten for the Dashboard/Analytics split and multi-campaign Creative Studio relocation; Part 8 missing-operations list marked resolved; Part 13 (routing) marked built with the shadowing-bug note; Part 17 §1 and §3 marked DONE; new §7 documenting the left-sidebar requirement and its open layout decision |
-| CONTINUE.md | Session 11 learnings: jsdom behavioral testing approach, documenting decision reversals explicitly, handling "like we discussed" when no record exists, treating uploaded diagrams correctly, multi-campaign was already backend-supported |
-
-**Verification approach this session:** no live Vercel access from the build
-sandbox. Used `node --check` (parse gate, as before) PLUS a new technique —
-installed `jsdom`, rendered the actual page HTML, mocked `window.fetch` with
-a realistic payload, and ran real behavioral assertions (21 checks on the
-dashboard page's campaign-switching logic, 5 on the analytics page's new
-Campaign column) against the executing JS, not just its syntax. See
-CONTINUE.md #18 for the technique and its one gotcha (mock `fetch` before
-the auto-invoking `load()` call runs, not after).

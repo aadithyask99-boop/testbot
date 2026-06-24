@@ -14,7 +14,15 @@
 
 ## What This Is
 
-A server-side AI advertising platform that monetises AI crawler traffic to publisher websites. When an AI crawler (Perplexity, ChatGPT Browse, Grok, Gemini, etc.) visits a publisher's page, the platform detects it, runs a **per-page contextual auction** (keyword pre-filter → Haiku precision filter → CPM ranking among approved survivors), and injects the winning sponsored paragraph into the HTML before delivery. Human visitors see the original unmodified page. The platform monetises this on a CPM basis with an 80/20 publisher/platform split.
+A server-side AI advertising platform that monetises AI traffic to publisher content across TWO surfaces from a single advertiser campaign:
+
+**Surface A — Crawler Injection (live, Sessions 1-12).** When an AI crawler (Perplexity, ChatGPT Browse, Grok, Gemini, etc.) visits a publisher's page, the platform detects it, runs a **per-page contextual auction** (keyword pre-filter → Haiku precision filter → CPM ranking among approved survivors), and injects the winning sponsored paragraph into the HTML before delivery. Human visitors see the original unmodified page. The injected copy is data-led editorial prose — structurally identical to the publisher's content — that AI systems absorb as citable fact rather than flagging as advertising. Proven working: Session 9's ChatGPT Browse test showed data-led variants quoted verbatim as editorial fact.
+
+**Surface B — Conversational Injection (planned, Sessions 13+).** A publisher building an AI product (chatbot, AI assistant) calls `POST /chat/query` with the user's message. The same Matcher pipeline runs on the query text. Returns a winning variant for the publisher to render as a "Sponsored" plain-text message. Editorial-first, not an ad card. See PLATFORM_STRUCTURE_SPEC.md Parts 21-25 and BUILD_PLAN.md for full architecture.
+
+**Competitive positioning:** neither Oasy (crawl-time only) nor Thrad (query-time only) serves both surfaces from one campaign. This is boop's structural advantage. See PLATFORM_STRUCTURE_SPEC.md Part 21 for detailed competitive analysis.
+
+The platform monetises on a CPM basis (CPC planned but deferred) with an 80/20 publisher/platform split.
 
 **Live deployment:** https://testbot-two-psi.vercel.app  
 **GitHub:** https://github.com/aadithyask99-boop/testbot  
@@ -224,26 +232,33 @@ Publisher floor price: planned, not built (Session 7).
 
 ## What's Proven vs What's Demo
 
-**Proven:**
-- Bot detection across 40+ crawlers, including anonymous crawler path
-- HTML injection invisible to humans
-- Per-page contextual auction with hybrid relevance filter
-- Haiku correctly filters out cross-vertical mismatches (E*TRADE US-broker on UK ISA, smartphone ads on VPN articles)
-- Atomic impression + spend tracking under concurrent load
-- 80/20 revenue split
-- Multi-page demo with distinct article topics
-- Live Auction Board driven entirely off real served-event logs
-- Dynamic creative swap (live within seconds; AI propagation in 25min–72hr depending on platform)
-- /health endpoint reports env-var presence for fast diagnosis
+**Proven (with evidence):**
+- Bot detection across 40+ crawlers, including anonymous crawler path (DeepSeek)
+- HTML injection invisible to humans — confirmed across GPTBot, Perplexity, Grok, Gemini, Meta AI, Claude
+- Per-page contextual auction with hybrid relevance filter (keyword + Haiku)
+- Multi-campaign competition: 3 Trading 212 campaigns competing correctly (ISA £10, Stocks ISA £14, CFD £18), relevance gate correctly separates them by page topic
+- Haiku correctly filters cross-topic mismatches (CFD on ISA pages, smartphone on VPN articles, E*TRADE US-broker on UK ISA)
+- Pause/activate toggle: pausing camp_016 → camp_006 takes ISA page (real auction, not defaulting) → reactivating → camp_016 immediately retakes
+- Brand-mention validation gate (Session 12) — server-side enforcement that at least one non-promo variant names the advertiser
+- Data-led copy cited as editorial fact (Session 9: AJ Bell stats quoted verbatim by ChatGPT Browse; promotional copy flagged as "a promotional callout")
+- Variant selection: Haiku picks topic-matched variants per page (ETF variant on ISA page, forex variant on trading page), rotation across crawls
+- Atomic impression + spend tracking under concurrent load, 80/20 split
+- Precompute: 10/10 page coverage, event-based invalidation on campaign save/pause/delete
+- KV parallelization: 16.7x speedup on dashboard responses (Session 11)
+- Multi-campaign support in advertiser portal: dropdown switcher, Add/Delete campaign
+- AI Creative Studio: 3 ideas → 2 fact-led + 1 promo, input gate, output traceability
+- Budget cap logic correct (£0.01 cap passes at zero spend — blocks on impression #2)
 
 **Still demo/placeholder:**
-- Test pages (4 articles in `lib/demo-pages.js`) hardcoded — not a real publisher integration
-- `api/sdk.js` is client-side placeholder. Real publisher SDK = Cloudflare Worker (Session 7)
-- Single tenant — no `pubId` namespacing in KV yet
-- No publisher onboarding flow, no floor prices stored (Session 7)
-- Single creative per campaign — variant bank planned (Session 5)
-- Lazy relevance (at crawl time) — precompute architecture planned (Session 6)
-- Organic appearance probability cannot be measured on this zero-authority domain — needs real publisher partner
+- Publisher pages are demo articles (Finance Weekly, Tech Briefing — zero domain authority)
+- No real publisher partner — all testing via direct URL injection
+- Click tracking (`/click`) exists but click data invisible to advertisers
+- No trackable links — see BUILD_PLAN.md Track 1 (approved, next to build)
+- No conversational surface — see BUILD_PLAN.md Track 2 (approved, after Track 1)
+- No prompt monitoring — see BUILD_PLAN.md Track 3 (planned, after Track 2)
+- CPC pricing not built (deferred until click data validates)
+- Spend sparkline uses simulated variance, not real daily historical data (real chart infrastructure built, just no data yet)
+- No real auth — portal access is URL-based only
 
 ---
 
@@ -335,12 +350,16 @@ The Live Auction Board exists to make Step 2 visual. Step 2 is usually all you n
 
 ## Documents
 
-This project has five Markdown docs that act as memory across sessions:
+This project has six Markdown docs that act as memory across sessions:
 
 - **CLAUDE.md** (this file) — the project brain. What the system is, why decisions were made, current constraints.
 - **CONTINUE.md** — lessons, mistakes, hard-won knowledge. Read this BEFORE writing code.
 - **HANDOVER.md** — current state and next tasks. Read this FIRST when picking up work.
 - **SESSION_LOG.md** — historical record of what happened in each session.
+- **BUILD_PLAN.md** — approved build plan for Sessions 13+. Trackable links, conversational surface, query insights. File-level changes, build order, verification steps.
 - **CLAUDE.local.md** — session protocol for Claude Code. How to start/end sessions.
 
-These are the brain of the project. A new session reading all five should be able to (1) understand exactly what was built and why, (2) know what to work on next, (3) not repeat mistakes already made, (4) continue seamlessly. Keep them accurate. Keep them honest. The docs are only useful if they reflect reality.
+Architecture and naming:
+- **PLATFORM_STRUCTURE_SPEC.md** — canonical naming, architecture, portal structure, KV schema, competitive differentiation (Parts 21-25 added Session 12).
+
+These are the brain of the project. A new session reading all of them should be able to (1) understand exactly what was built and why, (2) know what to work on next, (3) not repeat mistakes already made, (4) continue seamlessly. Keep them accurate. Keep them honest. The docs are only useful if they reflect reality.

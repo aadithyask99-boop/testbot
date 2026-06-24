@@ -820,3 +820,55 @@ When camp_017 v4 errored for exceeding 280 chars, I fixed only v4 and regenerate
 
 ### 27. Character counts must be verified from the parsed string, not the JSON source
 The variant_payloads JSON files contain Unicode escapes like \u00a3 (£) which are 6 chars in the source but 1 char when parsed. The server validates against the PARSED length (1 char per symbol). Always run json.load() first and check len(v['text']) on the parsed result, not the raw JSON string — otherwise you'll undercount by the number of escaped characters.
+
+### 28. Thrad operates at query-time, boop operates at crawl-time — they're complements, not competitors
+Initial reaction to seeing thrad.ai was "direct competitor." After reading their docs and
+publisher page carefully: they sit inside AI conversation interfaces (chatbots, AI apps),
+serving ad cards (logo, headline, CTA) inside the chat response. Requires publisher SDK
+integration AND sometimes AI platform cooperation (ChatGPT native ads: $200k minimum).
+Boop sits in front of publisher web pages via a Cloudflare Worker proxy, injecting data-led
+editorial prose that AI crawlers index and cite. No platform cooperation needed. These
+address different publisher types (AI product builders vs traditional web publishers) and
+different surfaces (query-time vs crawl-time). The real opportunity isn't "beat Thrad" —
+it's "serve both surfaces from one campaign, which neither can do alone."
+
+### 29. The conversational surface (/chat) is a natural extension, not a new product
+The Matcher already accepts free text in bodySample. It doesn't care whether that text
+came from a page article or a user query. The infrastructure for a publisher to call
+POST /chat/query with a user's message and get back a relevant variant is 80% already
+built. What's genuinely new: frequency capping (per-conversation turn counting), rate
+limiting (per pubToken), the impression-confirmation ping (separate from the bid to avoid
+billing unrendered ads), and the Query Insights storage. The Matcher pipeline, the auction,
+the variant selection — all unchanged. Resist the temptation to build a "new matching
+algorithm for conversations" — the existing one works on text input, period.
+
+### 30. Query Insights is just storing what /chat/query already sees — don't overcomplicate
+Original prompt monitoring plan involved: nightly jobs querying Perplexity with monitored
+prompts, parsing responses for brand mentions, scoring visibility. Aadi correctly pushed
+back: "we just store the queries from chatbot conversations." That's it. Every /chat/query
+call that matches a campaign stores the user's query. Aggregated on demand. Advertisers see
+real questions real users asked. No external API calls, no Perplexity queries, no visibility
+scoring. The external-query approach might be worth adding later as a supplement, but it's
+a separate, expensive, fragile system — not the foundation.
+
+### 31. "Both surfaces from one campaign" is the actual competitive moat
+Neither Oasy (crawl-time only, no conversational) nor Thrad (query-time only, no crawl-time)
+can offer a publisher who has both a website AND an AI product a single consolidated platform.
+An advertiser on boop creates one campaign, writes one set of variants, and their ads reach
+both surfaces automatically. This isn't just a convenience story — it's a data story: the
+conversational surface provides the query-level intent data that makes the crawl-time
+injection's outcomes measurable (AI-referred clicks traceable back to real queries). The
+two surfaces feed each other.
+
+### 32. Thrad's ad format is deliberately jarring — boop's is deliberately editorial
+Thrad's sponsored_message returns: headline, description, cta_text, logo_url, image_url.
+It renders as a distinct ad card inside the conversation with a "Shop Now" button. The user
+immediately knows it's an ad. This is the right regulatory approach (FTC/ASA disclosure)
+but the wrong UX approach for engagement. Boop's conversational format is a sponsored
+plain-text message — "Sponsored" label (honest, compliant), data-led editorial prose
+(same style as crawl-time injection), inline trackable link on the brand mention (unstyled,
+same color as body text). This is a meaningful UX difference worth protecting as a design
+principle. If future feature requests push toward "add a logo," "add a product image,"
+"add a CTA button" — resist until there's evidence the editorial format isn't working.
+The format ladder (text → logo → prompt → image) exists as a planned progression, but
+Phase 1 should be validated before advancing.
