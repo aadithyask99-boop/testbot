@@ -1326,135 +1326,98 @@ assistant, search experience). Same Matcher pipeline, same campaigns,
 same variants. Returns a winning variant for the publisher to render as
 a "Sponsored" plain-text message. Clicks tracked via trackable links.
 
-This is NOT a replacement for Surface A (crawler injection) — it's an
-additional surface. A publisher can use one or both. Advertisers' campaigns
-automatically compete on both surfaces from a single campaign.
+### Critical: does NOT mix with crawler injection
 
-### Why this exists
+The two surfaces are separated at three levels:
 
-Traditional publishers are building AI products on top of their content.
-A financial news site adds a "chat with our archive" feature. A comparison
-site builds an AI assistant. These publishers need a monetisation strategy
-for their AI product's query traffic — the same way they need one for
-their website's crawler traffic. boop serves both from one platform.
+1. **Routes:** `/chat/query` rewrites to `api/match.js?_route=chat`.
+   Handler checks `req.query._route` at the very top. Chat and crawler
+   code paths never execute together.
 
-Thrad currently owns this space but with a jarring ad-card format and no
-crawl-time injection capability. boop's editorial-first approach (data-led
-sponsored message, not a display ad card) is a genuine differentiation —
-and the ability to serve both surfaces from one campaign is something
-Thrad structurally cannot offer.
+2. **KV keys:** `/chat/ping` writes to `impr:conversational:{id}:*`
+   ONLY. Never writes to `impr:retrieval:{id}:*`. No double-counting,
+   no mixed spend tracking.
 
-### Architecture
+3. **log:recent:** both surfaces push here for a unified timeline. Every
+   conversational entry is tagged `source: 'conversational'`. Page-
+   specific dashboard queries filter this out. Publisher portal shows
+   only conversational entries. Admin and advertiser views show both,
+   labelled separately.
 
-```
-Publisher AI product
-  → POST /chat/query (query + history + pubToken)
-  → boop: auth → rate limit → frequency check → Matcher → response
-  → Publisher renders: "[Sponsored] {variant text}"
-  → Publisher calls POST /chat/ping (confirms ad was shown)
-  → User clicks trackable link → /t/{token} → logged + redirect
-```
+The publisher's LLM and boop's Haiku calls are completely independent.
+Two parallel API calls from the publisher's code, sharing only the
+user's message as read-only input. boop never touches the publisher's
+LLM prompt or conversation history.
 
-### `/chat/query` request and response
+### Key design decisions (all confirmed in Session 12)
 
-**Request:**
-```json
-{
-  "pubToken": "pk_pub_001_financeweekly",
-  "userId": "anon_session_hash",
-  "conversationId": "chat_xyz789",
-  "query": "what's the best ISA for a first-time investor?",
-  "history": [last 3 messages],
-  "adOffset": 3,
-  "maxFrequency": 5,
-  "storeQuery": true
-}
-```
+**5 messages of history.** `bodySample = query + last 5 history messages
+joined`. Without history a 10-word query gives too little signal. 5
+messages at ~50 words each adds ~250 words — within the 1500-char limit.
 
-**Response (winner found):**
+**Always run Haiku on chat path.** Short queries score artificially high
+on `raw/wordCount` normalization — "invest" in 5 words scores 1.2, above
+KEYWORD_CONFIDENT_SCORE (0.5) which normally skips Haiku. This causes
+misclassification. Fix: `forceHaiku: true` flag in the chat handler.
+
+**History relevance gate (threshold 0.15).** After Matcher finds a
+winner, score the last 5 messages against the winning campaign using
+`scoreCampaignRelevance()`. If below 0.15, return
+`{ bid: null, reason: 'history_not_relevant' }`. Prevents serving an ISA
+ad in a conversation that mentioned "ISA" once but is actually about
+something else. Threshold lower than the article threshold (0.2) because
+conversation messages contain fewer words than a full article.
+
+**Bridge phrase (3rd lightweight Haiku call, ~£0.000015).** Pre-written
+variant text reads as editorial prose — correct for a web page, but
+copy-paste in a chatbot. A bridge phrase (max 8 words) makes the entry
+conversational without modifying the approved copy. Only fires when
+`relevanceScore >= 0.5`. Below 0.5: generic "Worth knowing:" fallback.
+Bridge contains zero product claims, zero brand mentions, zero figures.
+FCA compliance: the approved variant text follows verbatim after the
+bridge. Example (user asked "what ISA should I open?"):
+> "That's exactly what this covers — HMRC data shows fewer than 30%
+> of UK adults use their full £20,000 ISA allowance. Trading 212's
+> Stocks and Shares ISA holds a globally diversified portfolio from £1."
+
+### Response schema
+
 ```json
 {
   "bid": {
-    "campaignId": "camp_016",
-    "variantId": "v2",
-    "advertiser": "Trading 212",
+    "campaignId": "camp_016", "variantId": "v2",
     "text": "...[[Trading 212's ISA|/t/a8f3c2b1d9e7]]...",
-    "textDisplay": "...Trading 212's ISA...",
-    "sponsored": true,
-    "sponsoredLabel": "Sponsored",
+    "textDisplay": "...Trading 212's ISA holds...",
+    "bridge": "That's exactly what this covers —",
+    "bridgeWithText": "That's exactly what this covers — HMRC data...",
+    "sponsored": true, "sponsoredLabel": "Sponsored",
     "trackableUrl": "https://testbot.../t/a8f3c2b1d9e7",
-    "anchor": "Trading 212's Stocks and Shares ISA"
+    "anchor": "Trading 212's Stocks and Shares ISA",
+    "category": "finance", "relevanceScore": 0.94
   }
 }
 ```
 
-`text` — raw with `[[...|...]]` syntax (for publishers who parse links).
-`textDisplay` — plain text, syntax stripped (for simple integrations).
+No winner: `{ "bid": null, "reason": "ad_offset" | "frequency_cap" |
+"history_not_relevant" | "no_relevant_campaign" | "rate_limit" }`
 
-**Response (no ad):**
-```json
-{ "bid": null, "reason": "frequency_cap" | "ad_offset" | "no_relevant_campaign" }
-```
-
-### Frequency capping
+### Frequency capping and rate limiting
 
 ```
-conv:{conversationId}:turns       → Integer (24h TTL via kvSetWithTTL)
+conv:{conversationId}:turns       → Integer (24h TTL)
 conv:{conversationId}:lastAdTurn  → Integer (24h TTL)
 ```
 
-Rules:
-- `turns < adOffset` → no ad (default: first 3 turns ad-free)
-- `turns - lastAdTurn < maxFrequency` → no ad (default: 5 turns between ads)
-
-### Rate limiting
-
-60 requests per minute per pubToken. KV counter with 2-minute TTL.
-
-### Matcher input construction
-
-```javascript
-bodySample = [query, ...history.slice(-3).map(m => m.content)].join(' ').slice(0, 1500);
-```
-
-Same `runMatch()` call as Surface A. The Matcher doesn't know or care
-whether the input is a page article or a conversation. URL for caching:
-`'chat://' + pubId` (stable — classification caches, relevance runs fresh).
-
-**Testing flag:** `RELEVANCE_THRESHOLD` (0.2) was tuned for article-length
-content. Short queries (10-20 words) may score differently in keyword
-matching. Test with 20+ query-shaped inputs after building. May need a
-separate threshold or more aggressive history concatenation.
-
-### `/chat/ping` — impression confirmation
-
-```json
-POST /chat/ping
-{ "pubToken": "...", "campaignId": "camp_016", "variantId": "v2", "conversationId": "..." }
-```
-
-Fires `impr:conversational:{campaignId}:*` keys ONLY (never
-`impr:retrieval:*` — no double-counting). `log:recent` entry tagged
-`source: 'conversational'`.
-
-Separate from bid because: publisher might win a bid but not render it
-(off-topic response, user navigated away). Billing only on confirmed
-display.
-
-### Publisher integration
-
-Two options: direct API call (recommended, 10 lines of backend code) or
-a browser-side snippet (15 lines). Both documented in BUILD_PLAN.md with
-full code examples.
+Defaults: adOffset 3, maxFrequency 5. Both configurable per request.
+Rate limiting: 60 req/min per pubToken. KV counter with 2-minute TTL.
 
 ### Format ladder
 
-Phase 1 (build now): **Sponsored message — text only.** Plain prose,
-"Sponsored" label, inline trackable link. Publisher controls rendering.
-Phase 2+: logo, sponsored prompts, images (future, not in current plan).
+Phase 1 (now): text + "Sponsored" label + bridge phrase. Publisher
+controls all rendering. Phase 2+: logo, prompts, images (future).
+Phase 1 must be validated before advancing.
 
 ---
-
 ## PART 24 — QUERY INSIGHTS (PROMPT MONITORING)
 
 ### What it is
