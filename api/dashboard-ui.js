@@ -167,6 +167,7 @@ var ADVERTISER_SIDEBAR_ITEMS = [
 var PUBLISHER_SIDEBAR_ITEMS = [
   { key: 'overview', label: 'Overview' },
   { key: 'pages', label: 'Pages' },
+  { key: 'chat', label: 'Conversational' },
 ];
 
 
@@ -281,11 +282,16 @@ function scopedAdvertiserOverviewHtml(adv) {
     '    var agg=d.aggregate||{},camps=d.campaigns||[],board=d.pageBoard||[],matches=d.recentMatches||[];' +
     '    var totalSpend=camps.reduce(function(a,c){return a+(c.totalSpendGBP||0);},0);' +
     '    var totalImpr=camps.reduce(function(a,c){return a+(c.impressions||0);},0);' +
+    '    var totalClicks=camps.reduce(function(a,c){return a+(c.totalClicks||0);},0);' +
+    '    var totalAiClicks=camps.reduce(function(a,c){return a+(c.aiClicks||0);},0);' +
+    '    var estCTR=totalImpr>0?((totalClicks/totalImpr)*100).toFixed(2):0;' +
     '    var anyActive=camps.some(function(c){return c.active;});' +
     '    document.getElementById("adv-cards").innerHTML=' +
     '      card("Status",anyActive?"Active":"Paused",camps.length+" campaign"+(camps.length===1?"":"s"),anyActive?"green":"")+' +
     '      card("Total impressions",fmt(totalImpr),fmt(agg.totalViewable||0)+" viewable","blue")+' +
-    '      card("Total spend",money(totalSpend),"vCPM "+money(agg.blendedVcpmGBP||0),"green");' +
+    '      card("Total spend",money(totalSpend),"vCPM "+money(agg.blendedVcpmGBP||0),"green")+' +
+    '      card("AI-referred clicks",fmt(totalAiClicks),fmt(totalClicks)+" total clicks","blue")+' +
+    '      card("Est. citation rate",estCTR+"%","AI clicks / impressions","");' +
     '    var winRows=board.filter(function(p){return p.servingId&&camps.some(function(c){return c.id===p.servingId;});});' +
     '    if(winRows.length){' +
     '      document.getElementById("winning-creative").innerHTML=winRows.map(function(p){' +
@@ -413,6 +419,21 @@ function scopedAdvertiserCampaignHtml(adv) {
     '    "<div class=\'stat\'><div class=\'sv\'>"+(camp.dailyBudgetUsedPct||0)+"%</div><div class=\'sl\'>Daily budget used</div></div>" +' +
     '    "<div class=\'stat\'><div class=\'sv\'><span class=\'badge "+(camp.active?"active":"paused")+"\'"+">"+(camp.active?"Active":"Paused")+"</span></div><div class=\'sl\'>Status &nbsp; <button class=\'btnsec\' style=\'font-size:11px;padding:2px 8px\' onclick=\'togglePause()\' id=\'pauseBtn\'>"+(camp.active?"Pause":"Activate")+"</button><span id=\'pauseMsg\' style=\'font-size:11px;margin-left:6px\'></span></div></div>" +' +
     '    "</div>";' +
+    '  var tlinks=camp.trackLinks||[];' +
+    '  html+="<div style=\'font-size:12px;font-weight:600;color:#666;margin:14px 0 8px;text-transform:uppercase;letter-spacing:0.03em\'>Trackable links</div>";' +
+    '  html+="<div class=\'h2sub\' style=\'margin-bottom:8px\'>Short tracked URLs for variant copy. Use [[anchor|url]] syntax in variants. Max 10.</div>";' +
+    '  if(tlinks.length){' +
+    '    window.__tlinks=tlinks;' +
+    '    html+="<table style=\'margin-bottom:8px\'><thead><tr><th>Label</th><th>Short URL</th><th>Clicks</th><th>AI</th><th></th></tr></thead><tbody>";' +
+    '    tlinks.forEach(function(tl,ti){var su="/t/"+tl.token;' +
+    '      html+="<tr><td>"+tl.label+"</td>" +' +
+    '        "<td style=\'font-family:monospace;font-size:11px\'>"+su+" <button class=\'btnsec\' style=\'font-size:10px;padding:1px 5px\' onclick=\'var l=window.__tlinks[" +ti+ "];if(l)navigator.clipboard.writeText(window.location.origin+\"/t/\"+l.token)\'>Copy</button></td>" +' +
+    '        "<td>"+tl.totalClicks+"</td><td>"+tl.aiClicks+"</td>" +' +
+    '        "<td><button class=\'btnsec\' style=\'font-size:10px;padding:2px 6px;color:#dc2626;border-color:#fecaca\' onclick=\'var l=window.__tlinks[" +ti+ "];if(l)deleteTrackLink(l.token,this)\'>Del</button></td></tr>";' +
+    '    });html+="</tbody></table>";' +
+    '  }else{html+="<div class=\'empty\' style=\'margin-bottom:8px\'>No trackable links yet</div>";}' +
+    '  html+="<div class=\'formrow\' style=\'gap:6px;align-items:flex-end\'><div style=\'flex:1\'><label style=\'font-size:11px;color:#888\'>Label</label><input type=\'text\' id=\'tlLabel\' placeholder=\'e.g. ISA landing\' maxlength=\'60\'></div><div style=\'flex:2\'><label style=\'font-size:11px;color:#888\'>Destination URL</label><input type=\'text\' id=\'tlDest\' placeholder=\'https://...\'></div><div><button class=\'btn\' onclick=\'genTrackLink()\' id=\'tlGenBtn\'>Generate link</button></div></div>";' +
+    '  html+="<div class=\'formmsg\' id=\'tlMsg\'></div>";' +
     // Winning creative per page for this campaign
     '  var winPages=PAGE_BOARD.filter(function(p){return p.servingId===camp.id;});' +
     '  html+="<div style=\'font-size:12px;font-weight:600;color:#666;margin:14px 0 8px;text-transform:uppercase;letter-spacing:0.03em\'>Winning creative \u2014 by page</div>";' +
@@ -443,6 +464,14 @@ function scopedAdvertiserCampaignHtml(adv) {
     '      }).join("")+"</tbody></table>";' +
     '  }else{html+="<div class=\'empty\' style=\'margin-bottom:16px\'>No variant data yet</div>";}' +
     // Creative Studio
+    '  html+="<div style=\'font-size:12px;font-weight:600;color:#666;margin:24px 0 8px;text-transform:uppercase;letter-spacing:0.03em\'>Query insights</div>";' +
+    '  html+="<div class=\'h2sub\' style=\'margin-bottom:8px\'>Real questions from publisher chatbots that matched this campaign. Updated on demand via /precompute?action=aggregate.</div>";' +
+    '  var qi=(camp.queryInsights||{});var qiTotal=qi.totalQueries||0;var qiTop=qi.topQueries||[];' +
+    '  if(qiTotal>0){' +
+    '    html+="<div class=\'h2sub\'>Total queries last 7 days: "+qiTotal+"</div>";' +
+    '    html+="<table style=\'margin-bottom:16px\'><thead><tr><th>Query</th><th>Count</th></tr></thead><tbody>"+' +
+    '      qiTop.slice(0,10).map(function(q){return "<tr><td style=\'font-size:12px\'>"+q.query+"</td><td>"+q.count+"</td></tr>";}).join("")+"</tbody></table>";' +
+    '  }else{html+="<div class=\'empty\' style=\'margin-bottom:16px\'>No query data yet. Publisher chatbots need to be integrated with /chat/query to generate insights.</div>";}' +
     '  html+="<div style=\'font-size:12px;font-weight:600;color:#666;margin:24px 0 8px;text-transform:uppercase;letter-spacing:0.03em\'>AI Creative Studio</div>";' +
     '  html+="<div class=\'h2sub\' style=\'margin-bottom:8px\'>Turn rough ideas into ad copy AI systems are more likely to cite as fact. At least 2 of your 3 ideas need a real stat, fee, or figure \u2014 Haiku will not invent data. Generated variants are added directly to this campaign\'s bank below.</div>";' +
     '  html+="<div class=\'formrow\'><textarea id=\'csIdea1\' placeholder=\'Idea 1, e.g. we have 1.6 million users\' maxlength=\'200\'></textarea></div>";' +
@@ -565,6 +594,28 @@ function scopedAdvertiserCampaignHtml(adv) {
     '    stagedVariants=[];IS_NEW_CAMPAIGN=false;SELECTED_CAMP_ID=id;' +
     '    msg.textContent="Campaign created.";msg.style.color="#16a34a";load();' +
     '  }).catch(function(e){msg.textContent="Error: "+e.message;msg.style.color="#dc2626";btn.disabled=false;btn.textContent="Create campaign";});' +
+    '}' +
+    'function copyLink(p){try{navigator.clipboard.writeText(window.location.origin+p);}catch(e){}}' +
+    'function genTrackLink(){' +
+    '  var camp=getSelectedCampaign();if(!camp)return;' +
+    '  var lbl=(document.getElementById("tlLabel")||{}).value||"";lbl=lbl.trim();' +
+    '  var dest=(document.getElementById("tlDest")||{}).value||"";dest=dest.trim();' +
+    '  var msg=document.getElementById("tlMsg");if(msg)msg.textContent="";' +
+    '  if(!lbl||!dest){if(msg){msg.textContent="Label and URL required.";msg.style.color="#dc2626";}return;}' +
+    '  var btn=document.getElementById("tlGenBtn");if(btn){btn.disabled=true;btn.textContent="Generating...";}' +
+    '  fetch("/admin/tracklink",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({campaignId:camp.id,label:lbl,dest:dest})})' +
+    '    .then(function(r){return r.json();}).then(function(res){' +
+    '    if(btn){btn.disabled=false;btn.textContent="Generate link";}' +
+    '    if(res.error){if(msg){msg.textContent=res.error;msg.style.color="#dc2626";}return;}' +
+    '    if(msg){msg.textContent="Created: "+res.trackUrl;msg.style.color="#16a34a";}' +
+    '    load();' +
+    '  }).catch(function(e){if(btn){btn.disabled=false;btn.textContent="Generate link";}if(msg){msg.textContent="Error: "+e.message;msg.style.color="#dc2626";}});' +
+    '}' +
+    'function deleteTrackLink(tok,b){' +
+    '  if(!confirm("Deactivate this link? Click logs are preserved."))return;' +
+    '  if(b)b.disabled=true;' +
+    '  fetch("/admin/tracklink",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:tok})})' +
+    '    .then(function(r){return r.json();}).then(function(){load();}).catch(function(){if(b)b.disabled=false;});' +
     '}' +
     'function togglePause(){' +
     '  var camp=getSelectedCampaign();if(!camp)return;' +
@@ -920,9 +971,74 @@ function scopedPublisherPagesHtml(pub) {
     '</script></body></html>';
 }
 
-// Session 11 (content), Session 12 (sidebar shell): scoped publisher
-// ANALYTICS page. Recent activity only for now — thin until Ad Unit/
-// Placement (Part 17 §2) lands.
+// Session 13: publisher CONVERSATIONAL page — /chat/query surface (Track 2+3).
+// Shows query volume, match rate, top topics, and unmatched demand gaps.
+// Only populated once publisher has integrated /chat/query; shows a
+// "Get started" prompt if no conversational data exists yet.
+function scopedPublisherChatHtml(pub) {
+  var base = '/publisher/' + encodeURIComponent(pub.slug || '');
+  return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>' + escapeHtml(pub.name) + ' \u2014 Conversational</title><style>' +
+    SIDEBAR_SHELL_CSS +
+    '</style></head><body>' +
+    '<header><div><h1>' + escapeHtml(pub.name) + '</h1><div class="sub">Publisher portal</div></div>' +
+    '<div><span id="ts"></span> &nbsp; <a href="/ui">switch view</a></div></header>' +
+    '<div class="shell">' +
+    sidebarHtml(PUBLISHER_SIDEBAR_ITEMS, base, 'chat') +
+    '<main>' +
+    '<section><h2>Conversational surface</h2>' +
+    '<div class="h2sub">Queries received from your AI chatbot via POST /chat/query</div>' +
+    '<div class="grid" id="chat-cards"><div class="card"><div class="lbl">Queries</div><div class="val" id="c-total">-</div></div>' +
+    '<div class="card"><div class="lbl">Match rate</div><div class="val" id="c-rate">-</div></div>' +
+    '<div class="card"><div class="lbl">Revenue (7d)</div><div class="val" id="c-rev">-</div></div></div>' +
+    '<div id="chat-content"><div class="empty">Loading...</div></div></section>' +
+    '</main></div>' +
+    '<script>' +
+    'var PUB_ID="' + escapeHtml(pub.pubId) + '";' +
+    'function money(n){return "\u00a3"+(n||0).toFixed(2);}' +
+    'function load(){' +
+    '  fetch("/dashboard?view=publisher&pubId="+encodeURIComponent(PUB_ID)+"&includeChat=1").then(function(r){return r.json();}).then(function(d){' +
+    '    var ci=d.chatInsights||{};' +
+    '    var total=ci.totalQueries||0;' +
+    '    var matched=ci.matchedQueries||0;' +
+    '    var rate=total>0?Math.round((matched/total)*100):0;' +
+    '    document.getElementById("c-total").textContent=total;' +
+    '    document.getElementById("c-rate").textContent=rate+"%";' +
+    '    document.getElementById("c-rev").textContent=money(ci.revenueGBP||0);' +
+    '    if(total===0){' +
+    '      document.getElementById("chat-content").innerHTML=' +
+    '        "<div style=\'margin-top:20px\'><h3 style=\'margin-bottom:10px\'>Get started with the conversational surface</h3>" +' +
+    '        "<p style=\'color:#666;margin-bottom:10px\'>Integrate POST /chat/query into your AI chatbot or assistant to monetise user queries.</p>" +' +
+    '        "<pre style=\'background:#f4f4f4;padding:12px;border-radius:6px;font-size:11px;overflow:auto\'>" +' +
+    '        "const ad = await fetch(\'https://testbot-two-psi.vercel.app/chat/query\', {\\n" +' +
+    '        "  method: \'POST\',\\n  body: JSON.stringify({\\n" +' +
+    '        "    pubToken: \'YOUR_TOKEN\',\\n    conversationId: chatId,\\n" +' +
+    '        "    query: userMessage,\\n    history: last5Messages\\n  })\\n}).then(r => r.json());\\n" +' +
+    '        "if (ad.bid) renderSponsored(ad.bid.bridgeWithText);" +' +
+    '        "</pre></div>";' +
+    '    } else {' +
+    '      var tq=ci.topQueries||[];var uq=ci.unmatchedQueries||[];' +
+    '      var html="<div style=\'margin-top:16px\'>";' +
+    '      html+="<div style=\'font-size:12px;font-weight:600;color:#666;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.03em\'>Top matched queries</div>";' +
+    '      if(tq.length){html+="<table style=\'margin-bottom:16px\'><thead><tr><th>Query</th><th>Count</th></tr></thead><tbody>"+tq.slice(0,10).map(function(q){return "<tr><td style=\'font-size:12px\'>"+q.query+"</td><td>"+q.count+"</td></tr>";}).join("")+"</tbody></table>";}' +
+    '      else{html+="<div class=\'empty\' style=\'margin-bottom:16px\'>No matched queries yet</div>";}' +
+    '      if(uq.length){' +
+    '        html+="<div style=\'font-size:12px;font-weight:600;color:#666;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.03em\'>Unmatched demand \u2014 revenue gaps</div>";' +
+    '        html+="<div class=\'h2sub\' style=\'margin-bottom:8px\'>Queries with no matching campaign \u2014 potential revenue if advertisers covered these topics</div>";' +
+    '        html+="<table style=\'margin-bottom:16px\'><thead><tr><th>Query</th></tr></thead><tbody>"+uq.slice(0,10).map(function(q){return "<tr><td style=\'font-size:12px\'>"+(q.query||q)+"</td></tr>";}).join("")+"</tbody></table>";' +
+    '      }' +
+    '      html+="</div>";' +
+    '      document.getElementById("chat-content").innerHTML=html;' +
+    '    }' +
+    '    document.getElementById("ts").textContent="Updated "+new Date().toLocaleTimeString("en-GB");' +
+    '  }).catch(function(e){document.getElementById("ts").textContent="Error: "+e.message;});' +
+    '}' +
+    'load();setInterval(load,15000);' +
+    '</script></body></html>';
+}
+
+
 function scopedPublisherAnalyticsHtml(pub) {
   var base = '/publisher/' + encodeURIComponent(pub.slug || '');
   return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">' +
@@ -1008,11 +1124,12 @@ module.exports = function handler(req, res) {
   if (url.indexOf('/publisher') === 0 && !slug) {
     return res.status(200).send(listPageHtml('publisher'));
   }
-  // /publisher/{slug}/overview or /pages (analytics removed — merged into overview)
+  // /publisher/{slug}/overview, /pages, or /chat
   if (url.indexOf('/publisher') === 0 && slug) {
     var pub = (config.publishers || []).find(p => p.slug === slug);
     if (!pub) return res.status(404).send(notFoundHtml('publisher', slug));
     if (view === 'pages') return res.status(200).send(scopedPublisherPagesHtml(pub));
+    if (view === 'chat') return res.status(200).send(scopedPublisherChatHtml(pub));
     return res.status(200).send(scopedPublisherOverviewHtml(pub));
   }
 

@@ -898,3 +898,6 @@ sequential KV bug) before starting the sidebar work.
 - Part 23: Conversational Surface /chat (architecture, request/response, frequency, rate limit)
 - Part 24: Query Insights (storage, privacy, portal integration)
 - Part 25: Two Surfaces — How They Relate (architecture diagram, same/different comparison)
+## Session 13 — Conversational and Trackable Link Build
+**Date:** 2026-07-01
+**Goal:** Build Batch A (Trackable Links) and Batch B (Conversational Surface + Query Insights)

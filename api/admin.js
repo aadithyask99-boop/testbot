@@ -11,8 +11,9 @@
 // so this is safe. NEVER use this pattern for counters.
 // ============================================================
 
+const crypto = require('crypto');
 const config = require('../lib/config');
-const { kvGet, kvSet, kvDel } = require('../lib/kv');
+const { kvGet, kvSet, kvDel, kvIncr, kvListPush } = require('../lib/kv');
 const { runAuction, getCampaignSpend } = require('../lib/auction');
 
 // ============================================================
@@ -321,6 +322,7 @@ function validateVariants(variants, advertiser) {
   }
   const seenAngles = new Set();
   let duplicateAngle = null;
+  const inlineLinkRe = /\[\[([^\]|]+)\|([^\]]+)\]\]/g;
   variants.forEach((v, i) => {
     if (!v || typeof v !== 'object') {
       throw new Error(`variant ${i + 1} is invalid`);
@@ -328,8 +330,21 @@ function validateVariants(variants, advertiser) {
     if (!v.text || typeof v.text !== 'string' || !v.text.trim()) {
       throw new Error(`variant ${i + 1} is missing text`);
     }
-    if (v.text.length > maxTextLength) {
-      throw new Error(`variant ${i + 1} text exceeds ${maxTextLength} characters (got ${v.text.length})`);
+    // Inline link validation — [[anchor|url]] syntax
+    const links = [...v.text.matchAll(inlineLinkRe)];
+    if (links.length > 1) {
+      throw new Error(`variant ${i + 1} has ${links.length} inline links — maximum is 1 per variant`);
+    }
+    if (links.length === 1) {
+      const linkUrl = links[0][2].trim();
+      if (!linkUrl.startsWith('https://')) {
+        throw new Error(`variant ${i + 1} inline link URL must start with https:// (got: ${linkUrl.slice(0, 60)})`);
+      }
+    }
+    // Character limit against display text (strip [[anchor|url]] to keep anchor only)
+    const displayText = v.text.replace(inlineLinkRe, '$1');
+    if (displayText.length > maxTextLength) {
+      throw new Error(`variant ${i + 1} display text exceeds ${maxTextLength} characters (got ${displayText.length})`);
     }
     if (!v.angle || typeof v.angle !== 'string' || !v.angle.trim()) {
       throw new Error(`variant ${i + 1} is missing angle`);
@@ -675,6 +690,104 @@ module.exports = async function handler(req, res) {
       droppedForSafety: result.droppedForSafety || 0,
     });
   }
+
+  // ============================================================
+  // TRACKABLE LINKS — /admin/tracklink
+  // POST   /admin/tracklink              — generate new link
+  // DELETE /admin/tracklink              — soft delete link
+  // GET    /admin/tracklink?campaignId=X — list with stats
+  // ============================================================
+
+  if (url.includes('/admin/tracklink')) {
+    const PLATFORM_URL = process.env.PLATFORM_URL || 'https://testbot-two-psi.vercel.app';
+    const MAX_LINKS_PER_CAMPAIGN = 10;
+
+    // GET — list links + stats for a campaign
+    if (req.method === 'GET') {
+      const campaignId = req.query && req.query.campaignId;
+      if (!campaignId) return res.status(400).json({ error: 'campaignId required' });
+      const tokens = (await kvGet('track:list:' + campaignId)) || [];
+      const today = new Date().toISOString().slice(0, 10);
+      const links = await Promise.all(tokens.map(async token => {
+        const link = await kvGet('track:' + token);
+        if (!link) return null;
+        const totalClicks = (await kvGet('stats:track:' + token + ':total')) || 0;
+        const todayClicks = (await kvGet('stats:track:' + token + ':date:' + today)) || 0;
+        const platformHash = (await kvGet('stats:track:' + token + ':platform')) || {};
+        const aiPlatforms = ['Perplexity', 'ChatGPT', 'Grok', 'Claude', 'Gemini', 'Meta AI', 'Copilot'];
+        const aiClicks = aiPlatforms.reduce((s, p) => s + (parseInt(platformHash[p]) || 0), 0);
+        return {
+          token,
+          trackUrl: PLATFORM_URL + '/t/' + token,
+          label: link.label,
+          dest: link.dest,
+          active: link.active,
+          createdAt: link.createdAt,
+          totalClicks: parseInt(totalClicks) || 0,
+          todayClicks: parseInt(todayClicks) || 0,
+          aiClicks,
+          platformBreakdown: platformHash,
+        };
+      }));
+      return res.status(200).json({ links: links.filter(Boolean) });
+    }
+
+    // POST — generate new link
+    if (req.method === 'POST') {
+      const data = await readBody(req);
+      const { campaignId, pubId, label, dest } = data || {};
+      if (!campaignId || !label || !dest) {
+        return res.status(400).json({ error: 'campaignId, label, and dest are required' });
+      }
+      if (!dest.startsWith('https://')) {
+        return res.status(400).json({ error: 'dest must start with https://' });
+      }
+      const existingTokens = (await kvGet('track:list:' + campaignId)) || [];
+      const activeTokens = await Promise.all(existingTokens.map(t => kvGet('track:' + t)));
+      const activeCount = activeTokens.filter(t => t && t.active).length;
+      if (activeCount >= MAX_LINKS_PER_CAMPAIGN) {
+        return res.status(400).json({ error: 'Maximum ' + MAX_LINKS_PER_CAMPAIGN + ' active links per campaign' });
+      }
+      const campaign = await kvGet('campaign:' + campaignId);
+      if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+      const token = crypto.randomBytes(6).toString('hex');
+      const link = {
+        token, campaignId,
+        advId: campaign.advId || null,
+        advSlug: campaign.advSlug || null,
+        pubId: pubId || null,
+        label, dest,
+        active: true,
+        createdAt: new Date().toISOString(),
+      };
+      await kvSet('track:' + token, link);
+      const updatedTokens = [token, ...existingTokens];
+      await kvSet('track:list:' + campaignId, updatedTokens);
+      return res.status(200).json({
+        token,
+        trackUrl: PLATFORM_URL + '/t/' + token,
+        label, dest,
+        message: 'Trackable link created',
+      });
+    }
+
+    // DELETE — soft delete link
+    if (req.method === 'DELETE') {
+      const data = await readBody(req);
+      const { token } = data || {};
+      if (!token) return res.status(400).json({ error: 'token required' });
+      const link = await kvGet('track:' + token);
+      if (!link) return res.status(404).json({ error: 'Link not found' });
+      await kvSet('track:' + token, { ...link, active: false });
+      // Remove from list
+      const tokens = ((await kvGet('track:list:' + link.campaignId)) || []).filter(t => t !== token);
+      await kvSet('track:list:' + link.campaignId, tokens);
+      return res.status(200).json({ message: 'Link deactivated', token });
+    }
+
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
 
   // ---- CREATE / UPDATE campaign ----
   if (req.method === 'POST' && url.includes('/admin/campaign')) {

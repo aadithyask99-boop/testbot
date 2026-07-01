@@ -56,11 +56,12 @@ function todayStr() {
   return new Date().toISOString().split('T')[0];
 }
 
+
 module.exports = async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Pub-Token');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   if (req.method !== 'POST') {
@@ -72,6 +73,63 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ error: 'campaignId is required' });
   }
 
+  // ── Route: /chat/ping (Surface B — conversational) ────────────
+  // CRITICAL: writes ONLY to impr:conversational:* keys.
+  // NEVER writes to impr:retrieval:* — that would double-count billing.
+  if (req.query && req.query._route === 'chat') {
+    const { campaignId, variantId, conversationId } = data;
+    const pubId = await resolvePubId(data, req);
+    const today = todayStr();
+
+    // Spend tracking — same budget applies across both surfaces
+    const campaign = await kvGet('campaign:' + campaignId);
+    const cpm = campaign ? (parseFloat(campaign.cpmGBP) || 0) : 0;
+    const grossT = Math.round((cpm / 1000) * 1000); // retrieval rate (not 0.3x training)
+    const pubT   = Math.round(grossT * PUBLISHER_SHARE);
+    const platT  = Math.round(grossT * PLATFORM_SHARE);
+
+    try {
+      await Promise.all([
+        // Surface B impression counters — namespaced separately from Surface A
+        kvIncr('impr:conversational:' + campaignId + ':total'),
+        kvIncr('impr:conversational:' + campaignId + ':' + today),
+        kvIncr('stats:impressions:conversational:total'),
+        kvIncr('stats:impressions:conversational:date:' + today),
+
+        // Spend tracking (shared with Surface A — same campaign budget)
+        ...(grossT > 0 ? [
+          kvIncrBy('spend:daily:' + campaignId + ':' + today, grossT),
+          kvIncrBy('spend:total:' + campaignId, grossT),
+          kvIncrBy('revenue:gross:total', grossT),
+          kvIncrBy('revenue:gross:date:' + today, grossT),
+          kvIncrBy('revenue:platform:total', platT),
+          kvIncrBy('revenue:platform:date:' + today, platT),
+          ...(pubId ? [
+            kvIncrBy('revenue:publisher:' + pubId + ':total', pubT),
+            kvIncrBy('revenue:publisher:' + pubId + ':date:' + today, pubT),
+          ] : []),
+        ] : []),
+
+        // log:recent entry — tagged source: 'conversational' so
+        // the Live Auction Board filters it out (it shows page URLs, not chat)
+        kvListPush('log:recent', {
+          time: new Date().toISOString(),
+          source: 'conversational',
+          campaignId,
+          advertiser: campaign ? campaign.advertiser : null,
+          variantId: variantId || null,
+          conversationId: conversationId || null,
+          pubId: pubId || null,
+          cpmGBP: cpm || null,
+        }, 100),
+      ]);
+    } catch (e) {
+      console.error('/chat/ping KV write error:', e.message);
+    }
+    return res.status(200).json({ message: 'Conversational impression logged', campaignId });
+  }
+
+  // ── Route: /impression (Surface A — crawler) ─────────────────
   const {
     campaignId, variantId, platform, crawlerType, url, advertiser, cpmGBP, source,
     matchMethod, matchCached, matchCategory, relevanceScore,

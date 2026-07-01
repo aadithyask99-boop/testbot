@@ -173,7 +173,7 @@ module.exports = async function handler(req, res) {
       ]);
     } catch (e) {}
 
-    const result = injectSponsoredContent(ORIGINAL_PAGE, sponsoredText, { strategy: 'auto', link: sponsoredLink, linkText: sponsoredLinkText, advSlug });
+    const result = injectSponsoredContent(ORIGINAL_PAGE, sponsoredText, { strategy: 'auto', variantId: matchResult.selectedVariantId || null, link: sponsoredLink, linkText: sponsoredLinkText, advSlug });
     res.setHeader('X-Bot-Detected', 'true');
     res.setHeader('X-Bot-Platform', detection.platform || 'unknown');
     res.status(200).send(result.html);

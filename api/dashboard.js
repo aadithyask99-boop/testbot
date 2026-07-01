@@ -309,24 +309,19 @@ module.exports = async function handler(req, res) {
     const campaignResults = await Promise.all(allCampaignIds.map(async (id) => {
       const c = await kvGet('campaign:' + id);
       if (!c) return null;
-      const [spend, platHash, variantHash] = await Promise.all([
+      const [spend, platHash, variantHash, trackTokens] = await Promise.all([
         getCampaignSpend(c),
         kvHashGetAll('stats:impr_by_camp_plat:' + c.id),
         kvHashGetAll('variant-impr:' + c.id),
+        kvGet('track:list:' + c.id),
       ]);
       const dailyBudgetUsedPct = c.budgetDailyGBP ? Math.min(100, (spend.dailySpendGBP / c.budgetDailyGBP) * 100) : 0;
-      // Viewable = retrieval impressions (reached a live retrieval crawler).
-      // vCPM = spend per 1000 viewable impressions. Runs slightly above CPM
-      // when training traffic exists (training billed but not viewable).
       const viewable = spend.retrievalTotal;
       const vcpm = viewable > 0 ? (spend.totalSpendGBP / viewable) * 1000 : 0;
-      // Per-campaign platform breakdown (which AI crawlers saw THIS specific ad)
       const platformBreakdown = Object.keys(platHash || {})
         .map(k => ({ platform: k, impressions: parseInt(platHash[k]) || 0 }))
         .filter(x => x.impressions > 0)
         .sort((a, b) => b.impressions - a.impressions);
-      // Session 5: per-variant impression breakdown — "your 'first-home'
-      // angle wins X% of the time" view in the campaign detail panel.
       const variantTotal = Object.values(variantHash || {}).reduce((sum, v) => sum + (parseInt(v) || 0), 0);
       const variantBreakdown = (c.variants || []).map(v => {
         const count = parseInt((variantHash || {})[v.id]) || 0;
@@ -337,6 +332,25 @@ module.exports = async function handler(req, res) {
           pct: variantTotal > 0 ? parseFloat(((count / variantTotal) * 100).toFixed(1)) : 0,
         };
       });
+
+      // Track 1: click stats across all trackable links for this campaign
+      const tokens = Array.isArray(trackTokens) ? trackTokens : [];
+      const AI_PLATFORMS = ['Perplexity', 'ChatGPT', 'Grok', 'Claude', 'Gemini', 'Meta AI', 'Copilot'];
+      let totalClicks = 0, aiClicks = 0;
+      const trackLinks = await Promise.all(tokens.map(async token => {
+        const [link, tot, platH] = await Promise.all([
+          kvGet('track:' + token),
+          kvGet('stats:track:' + token + ':total'),
+          kvHashGetAll('stats:track:' + token + ':platform'),
+        ]);
+        if (!link) return null;
+        const tc = parseInt(tot) || 0;
+        const ai = AI_PLATFORMS.reduce((s, p) => s + (parseInt((platH || {})[p]) || 0), 0);
+        totalClicks += tc;
+        aiClicks += ai;
+        return { token, label: link.label, dest: link.dest, active: link.active, totalClicks: tc, aiClicks: ai };
+      }));
+
       return {
         id: c.id, advId: c.advId || null, advertiser: c.advertiser, category: c.category,
         cpmGBP: c.cpmGBP, active: c.active === true,
@@ -356,6 +370,11 @@ module.exports = async function handler(req, res) {
         trainingImpressions: spend.trainingTotal,
         vcpmGBP: parseFloat(vcpm.toFixed(2)),
         isWinner: servingIds.has(c.id),
+        totalClicks,
+        aiClicks,
+        estimatedCTR: spend.totalImpressions > 0 ? parseFloat(((totalClicks / spend.totalImpressions) * 100).toFixed(2)) : 0,
+        trackLinks: trackLinks.filter(Boolean),
+        queryInsights: await kvGet('query_insights:' + c.id + ':' + new Date().toISOString().slice(0, 10)),
       };
     }));
     const campaignList = campaignResults.filter(Boolean);
@@ -865,6 +884,50 @@ module.exports = async function handler(req, res) {
           uniqueCTR:  uniqClicks > 0 ? pct(uniqClicks, pubImpressions) : null,
         },
         recentVisits: pubRecentVisits,
+        chatInsights: await (async () => {
+          // Track 3: Query Insights for this publisher
+          // Aggregate matched queries across all campaigns for this pub
+          const today = new Date().toISOString().slice(0, 10);
+          let totalQueries = 0, matchedQueries = 0;
+          const topQueriesMap = {};
+          const unmatchedRaw = [];
+          // Matched queries: from conv_queries:{campaignId}:{date} where pubId matches
+          for (const camp of campaignList) {
+            for (let i = 0; i < 7; i++) {
+              const d = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+              const entries = (await kvGet('conv_queries:' + camp.id + ':' + d)) || [];
+              if (!Array.isArray(entries)) continue;
+              const pubEntries = entries.filter(e => !pubId || e.pubId === pubId);
+              for (const e of pubEntries) {
+                totalQueries++;
+                matchedQueries++;
+                const q = (e.query || '').toLowerCase().trim();
+                if (q) topQueriesMap[q] = (topQueriesMap[q] || 0) + 1;
+              }
+            }
+          }
+          // Unmatched queries for this publisher
+          for (let i = 0; i < 7; i++) {
+            const d = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+            const entries = (await kvGet('conv_unmatched:' + pubId + ':' + d)) || [];
+            if (Array.isArray(entries)) {
+              unmatchedRaw.push(...entries);
+              totalQueries += entries.length;
+            }
+          }
+          const topQueries = Object.entries(topQueriesMap)
+            .sort((a, b) => b[1] - a[1]).slice(0, 10)
+            .map(([query, count]) => ({ query, count }));
+          const unmatchedQueries = unmatchedRaw.slice(0, 10);
+          // Conversational revenue for this publisher (last 7 days)
+          let convRevenueGBP = 0;
+          for (let i = 0; i < 7; i++) {
+            const d = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+            const v = parseInt(await kvGet('revenue:publisher:' + pubId + ':date:' + d)) || 0;
+            convRevenueGBP += v;
+          }
+          return { totalQueries, matchedQueries, topQueries, unmatchedQueries, revenueGBP: parseFloat((convRevenueGBP / 1000).toFixed(4)) };
+        })(),
       });
     }
 

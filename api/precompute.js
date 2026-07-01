@@ -381,8 +381,70 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({ message: 'Invalidated', campaignId, category: category || null, keysDeleted: deleted.length });
   }
 
+  // ── action=aggregate — Query Insights aggregation (Track 3) ──
+  // Reads raw conv_queries:{campaignId}:{date} lists from the last 7 days,
+  // counts query frequencies, writes aggregated query_insights:{campaignId}:{date}.
+  // On-demand only — Vercel crons incompatible with legacy routes config.
+  if (req.method === 'GET' && action === 'aggregate') {
+    const today = new Date().toISOString().slice(0, 10);
+    // Gather all campaign IDs
+    const config = require('../lib/config');
+    const allIds = [];
+    for (const cat of config.categories) {
+      const ids = (await kvGet('campaigns:' + cat)) || [];
+      allIds.push(...ids);
+    }
+    const uniqueIds = [...new Set(allIds)];
+
+    // For each campaign, aggregate last 7 days of query logs
+    const results = [];
+    for (const campaignId of uniqueIds) {
+      const days = [];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+        days.push(d);
+      }
+      const rawEntries = [];
+      for (const day of days) {
+        const entries = (await kvGet('conv_queries:' + campaignId + ':' + day)) || [];
+        if (Array.isArray(entries)) rawEntries.push(...entries);
+      }
+      if (rawEntries.length === 0) continue;
+
+      // Count query frequencies
+      const freq = {};
+      const pubCounts = {};
+      for (const e of rawEntries) {
+        const q = (e.query || '').toLowerCase().trim();
+        if (!q) continue;
+        freq[q] = (freq[q] || 0) + 1;
+        if (e.pubId) pubCounts[e.pubId] = (pubCounts[e.pubId] || 0) + 1;
+      }
+      const topQueries = Object.entries(freq)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 20)
+        .map(([query, count]) => ({ query, count }));
+
+      const insights = {
+        campaignId,
+        totalQueries: rawEntries.length,
+        topQueries,
+        pubBreakdown: pubCounts,
+        aggregatedAt: new Date().toISOString(),
+      };
+      await kvSet('query_insights:' + campaignId + ':' + today, insights);
+      results.push({ campaignId, totalQueries: rawEntries.length, topQueriesCount: topQueries.length });
+    }
+
+    return res.status(200).json({
+      message: 'Aggregated query insights',
+      aggregated: results.length,
+      campaigns: results,
+    });
+  }
+
   return res.status(400).json({
     error: 'Unknown or missing action',
-    validActions: ['sweep (GET)', 'status (GET)', 'invalidate (POST)'],
+    validActions: ['sweep (GET)', 'status (GET)', 'invalidate (POST)', 'aggregate (GET)', 'invalidate-url (POST)'],
   });
 };
