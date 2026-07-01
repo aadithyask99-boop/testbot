@@ -8,6 +8,25 @@
 
 ---
 
+## Current State (end of Session 13, 2026-07-01)
+
+**Live URL:** https://testbot-two-psi.vercel.app
+**Dashboard:** https://testbot-two-psi.vercel.app/ui (chooser)
+**GitHub:** https://github.com/aadithyask99-boop/testbot (main branch, commit 23973f2)
+**Vercel:** Hobby plan — 10/12 serverless functions used, 2 free
+
+### What's deployed (pending Vercel build)
+- All Session 12 features (17 campaigns, portal architecture, Creative Studio)
+- **Batch A — Trackable Links:** /t/{token} redirect handler, /admin/tracklink CRUD, [[anchor|url]] inline syntax in variants, unstyled link injection, click stats on advertiser portal
+- **Batch B — Conversational Surface:** /chat/query (auth, rate limit, freq capping, Haiku bridge phrase, history gate), /chat/ping (Surface B isolation — only impr:conversational:* written)
+- **Batch B — Query Insights:** /precompute?action=aggregate, chatInsights in publisher view, Query Insights section in Campaign page, Publisher Conversational sidebar page
+
+### NOT YET VERIFIED LIVE
+Run Batch A verification (BUILD_PLAN.md §3.9) then Batch B verification (§4.10) after Vercel deploys.
+Surface isolation checks (Batch B step 1-3) MUST run before functional checks.
+
+---
+
 ## Current State (end of Session 12, 2026-06-23)
 
 **Live URL:** https://testbot-two-psi.vercel.app

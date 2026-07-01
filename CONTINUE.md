@@ -872,3 +872,33 @@ principle. If future feature requests push toward "add a logo," "add a product i
 "add a CTA button" — resist until there's evidence the editorial format isn't working.
 The format ladder (text → logo → prompt → image) exists as a planned progression, but
 Phase 1 should be validated before advancing.
+
+---
+
+## Session 13 Learnings
+
+### The dashboard-ui.js onclick quoting trap — data attributes are the only safe escape
+When building HTML with onclick handlers that reference JS variables, the escaping stack is:
+Node.js string → browser JS string → HTML attribute → onclick JS. Four layers. Any time
+a runtime variable (like a loop variable `su = "/t/" + tl.token`) needs to appear inside
+an onclick, using string concatenation to build `onclick='copyLink("` + su + `")'`
+fails because the `"` closes the outer HTML-building double-quoted string before the JS
+parser sees it. Tried four approaches before landing on the right one:
+- `onclick='copyLink(\\"...\\")'` — still breaks at the Node string level
+- `data-v` attribute + `this.dataset.v` in onclick — correct but the `data-v='"+su+"'` still fails same way
+- Index-based: `window.__tlinks[i]` in onclick with `i` as a numeric literal — **this is the only pattern that works cleanly**. Store the full objects in a window global array, use the loop index (a plain number, no quoting needed) in the onclick. `onclick='var l=window.__tlinks[0];if(l)...'` is unambiguous at every escaping layer.
+
+**Lesson: never put string variables in onclick attribute values inside dashboard-ui.js. Use numeric indices into a window global, or data-* attributes with a generic delegated handler (e.g. a single click listener on the table that reads data-* from the clicked row).**
+
+### forceHaiku flag not yet implemented in lib/relevance.js
+The /chat/query handler passes `forceHaiku: true` in the runMatch() call, but lib/relevance.js
+doesn't currently read this flag — it would be silently ignored. The behaviour is still
+correct for the common case (short queries do trigger Haiku via the keyword scoring path),
+but the protection against KEYWORD_CONFIDENT_SCORE short-circuiting is not enforced.
+If this causes misclassification in live testing, add a check at the top of classifyOnly():
+`if (pageSignals.forceHaiku) skip Layer 2 confident-bypass`.
+
+### /chat/query uses fetch() — available in Node 18+ serverless
+The bridge phrase Haiku call uses the global `fetch()` (no require). This is fine on
+Vercel's Node 18+ runtime. If ever running locally against an older Node, this will fail
+with "fetch is not defined" — use node-fetch or upgrade Node.

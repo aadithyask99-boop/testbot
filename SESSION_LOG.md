@@ -901,3 +901,38 @@ sequential KV bug) before starting the sidebar work.
 ## Session 13 — Conversational and Trackable Link Build
 **Date:** 2026-07-01
 **Goal:** Build Batch A (Trackable Links) and Batch B (Conversational Surface + Query Insights)
+
+**Date:** 2026-07-01
+**Goal:** Build Batch A (Trackable Links) and Batch B (Conversational Surface + Query Insights)
+
+**What was built:**
+
+**Batch A — Track 1 (Trackable Links):**
+- vercel.json: 6 new routes — /t/{token} → click.js, /admin/tracklink → admin.js, /chat/query → match.js?_route=chat, /chat/ping → impression.js?_route=chat, /publisher/{slug}/chat → dashboard-ui.js
+- api/click.js: /t/{token} handler — atomic kvIncr total/date/platform, kvListPush log:track:{token}, fire-and-forget 302 redirect
+- api/admin.js: tracklink CRUD — POST (generate, max 10/campaign), DELETE (soft deactivate, stats preserved), GET (list with live click stats). Added crypto require and kvIncr/kvListPush imports.
+- api/admin.js: validateVariants() additions — max 1 [[anchor|url]] per variant (error if >1), URL must start https://, char limit enforced on display text (URL stripped before counting)
+- lib/injector.js: parseInlineLinks() converts [[anchor|url]] → unstyled <a href> + ?vid=variantId. Exported. Fallback chain: inline link > legacy options.link > plain text (backward compatible for all existing campaigns).
+- api/index.js: variantId forwarded into injectSponsoredContent options
+- api/dashboard.js: per-campaign click stats — track:list:{id} → parallel fetch each token → totalClicks, aiClicks, estimatedCTR, trackLinks[]
+- api/dashboard-ui.js: Trackable Links section in Campaign page (table with Copy/Del, generate form); AI-referred clicks + Est. citation rate cards on Overview
+
+**Batch B — Track 2 (Conversational Surface):**
+- api/match.js: /chat/query branch (req.query._route==='chat') — full 13-step handler: auth via pubToken, rate limit 60/min per pubId (kvIncr + 2-min TTL), frequency capping (adOffset/maxFrequency per conversationId), bodySample = query + last 5 history messages, forceHaiku flag passed to runMatch, history relevance gate (CONVERSATIONAL_GATE=0.15), trackable URL lookup, [[anchor|url]] extraction, bridge phrase via Haiku (max 8 words, fires only if relevanceScore>=0.5, fallback "Worth knowing:"), query storage to conv_queries:{campaignId}:{date} (LTRIM 500), frequency state update
+- api/impression.js: /chat/ping branch (req.query._route==='chat') — writes ONLY impr:conversational:{id}:total/date and stats:impressions:conversational:*. NEVER touches impr:retrieval:*. Also writes spend tracking (same campaign budget across both surfaces) and log:recent with source:'conversational'
+
+**Batch B — Track 3 (Query Insights):**
+- api/precompute.js: action=aggregate — reads conv_queries:{campaignId}:{date} for last 7 days, counts frequencies, writes query_insights:{campaignId}:{date} with topQueries (top 20), pubBreakdown
+- api/dashboard.js: queryInsights (kvGet query_insights:{id}:{today}) added per campaign in campaignList; chatInsights in publisher view (totalQueries, matchedQueries, topQueries, unmatchedQueries, revenueGBP)
+- api/dashboard-ui.js: Publisher Conversational sidebar item + /publisher/{slug}/chat page — shows query volume cards, matched/unmatched tables, integration snippet if no data yet; Query Insights section in advertiser Campaign page
+
+**Parse gate:** All 9 modified files pass node --check. Inline JS extracted and parsed clean for campaign, overview, and publisher chat views.
+
+**Function count:** 10/12 (unchanged)
+
+**Where we stopped:**
+- All Batch A + Batch B code deployed to GitHub (main branch, commit 23973f2)
+- Vercel deployment triggered — verify live after deploy
+- NOT YET VERIFIED LIVE: /t/{token} redirect, /admin/tracklink endpoints, /chat/query, /chat/ping, publisher chat page
+- Batch A verification steps (BUILD_PLAN.md §3.9) not yet run — need Vercel deploy first
+- Batch B verification steps (BUILD_PLAN.md §4.10) not yet run — surface isolation checks first
