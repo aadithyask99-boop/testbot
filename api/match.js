@@ -12,7 +12,7 @@
 // Route separation: req.query._route === 'chat' → chat branch.
 // ============================================================
 
-const { runMatch, scoreCampaignRelevance } = require('../lib/relevance');
+const { runMatch, runConversationalMatch, scoreCampaignRelevance } = require('../lib/relevance');
 const { getPubId } = require('../lib/demo-pages');
 const { kvGet, kvSet, kvSetWithTTL, kvIncr, kvListPush } = require('../lib/kv');
 
@@ -57,6 +57,7 @@ async function handleChatQuery(req, res, body) {
     query,
     history = [],
     storeQuery = true,
+    enableRewrite = false,   // opt-in: publisher enables conversational rewrite pass
   } = body;
   // Stored config takes precedence over caller-supplied values
   const adOffset    = storedConfig.adOffset    !== undefined ? storedConfig.adOffset    : (body.adOffset    !== undefined ? body.adOffset    : 3);
@@ -99,18 +100,15 @@ async function handleChatQuery(req, res, body) {
   const historyMessages = (history || []).slice(-5).map(m => m.content || '');
   const bodySample = [query, ...historyMessages].join(' ').slice(0, 1500);
 
-  // Step 5+6: Run The Matcher — always force Haiku (short queries score
-  // artificially high on keyword normalization, must not skip Haiku)
+  // Steps 5+6: Run conversational match — query-relevance first auction
+  // (variant scoring via Haiku, CPM as tiebreaker, optional rewrite pass)
   let matchResult;
   try {
-    matchResult = await runMatch({
-      url: 'chat://' + pubId,
-      title: query,
-      metaDescription: '',
-      firstParagraph: query,
-      bodySample,
+    matchResult = await runConversationalMatch({
+      query,
+      history,
       pubId,
-      forceHaiku: true,  // chat path always needs Haiku classification
+      enableRewrite: enableRewrite || (storedConfig.enableRewrite === true),
     });
   } catch (e) {
     console.error('/chat/query match error:', e.message);
@@ -231,6 +229,8 @@ async function handleChatQuery(req, res, body) {
       anchor,
       category: matchResult.category,
       relevanceScore: matchResult.relevanceScore || null,
+      winMethod: matchResult.winMethod || null,         // 'won_on_relevance' | 'won_on_bid'
+      topCandidates: matchResult.topCandidates || null, // top 3 scored variants for transparency
     },
   });
 }

@@ -535,13 +535,13 @@ module.exports = async function handler(req, res) {
       const pubId = req.query && req.query.pubId;
       if (!pubId) return res.status(400).json({ error: 'pubId required' });
       const cfg = (await kvGet('pub_chat_config:' + pubId)) || {
-        adOffset: 3, maxFrequency: 5, enabled: true,
+        adOffset: 3, maxFrequency: 5, enabled: true, enableRewrite: false,
       };
       return res.status(200).json({ pubId, config: cfg });
     }
     if (req.method === 'POST') {
       const data = await readBody(req);
-      const { pubId, adOffset, maxFrequency, enabled } = data || {};
+      const { pubId, adOffset, maxFrequency, enabled, enableRewrite } = data || {};
       if (!pubId) return res.status(400).json({ error: 'pubId required' });
       if (adOffset !== undefined && (typeof adOffset !== 'number' || adOffset < 0 || adOffset > 20)) {
         return res.status(400).json({ error: 'adOffset must be 0–20' });
@@ -549,12 +549,13 @@ module.exports = async function handler(req, res) {
       if (maxFrequency !== undefined && (typeof maxFrequency !== 'number' || maxFrequency < 1 || maxFrequency > 20)) {
         return res.status(400).json({ error: 'maxFrequency must be 1–20' });
       }
-      const existing = (await kvGet('pub_chat_config:' + pubId)) || { adOffset: 3, maxFrequency: 5, enabled: true };
+      const existing = (await kvGet('pub_chat_config:' + pubId)) || { adOffset: 3, maxFrequency: 5, enabled: true, enableRewrite: false };
       const updated = {
         ...existing,
-        ...(adOffset    !== undefined ? { adOffset }    : {}),
-        ...(maxFrequency !== undefined ? { maxFrequency } : {}),
-        ...(enabled     !== undefined ? { enabled }     : {}),
+        ...(adOffset       !== undefined ? { adOffset }       : {}),
+        ...(maxFrequency   !== undefined ? { maxFrequency }   : {}),
+        ...(enabled        !== undefined ? { enabled }        : {}),
+        ...(enableRewrite  !== undefined ? { enableRewrite }  : {}),
         updatedAt: new Date().toISOString(),
       };
       await kvSet('pub_chat_config:' + pubId, updated);

@@ -1016,7 +1016,10 @@ function scopedPublisherChatHtml(pub) {
     '      "<input type=\'number\' id=\'cfgFreq\' min=\'1\' max=\'20\' value=\'"+cfg.maxFrequency+"\'></div>" +' +
     '      "<div style=\'flex:1\'><label style=\'font-size:11px;color:#888\'>Ads enabled</label>" +' +
     '      "<select id=\'cfgEnabled\'><option value=\'true\'"+(cfg.enabled?" selected":"")+">On</option><option value=\'false\'"+(cfg.enabled?"":" selected")+">Off</option></select></div>" +' +
+    '      "<div style=\'flex:1\'><label style=\'font-size:11px;color:#888\'>Conversational rewrite</label>" +' +
+    '      "<select id=\'cfgRewrite\'><option value=\'false\'"+(cfg.enableRewrite?"":" selected")+">Off \u2014 serve verbatim</option><option value=\'true\'"+(cfg.enableRewrite?" selected":"")+">On \u2014 Haiku adapts tone</option></select></div>" +' +
     '      "<div style=\'align-self:flex-end\'><button class=\'btn\' onclick=\'saveChatConfig()\' id=\'cfgSaveBtn\'>Save</button></div></div>" +' +
+    '      "<div class=\'h2sub\' style=\'margin-top:6px;margin-bottom:4px\'>Rewrite adapts variant tone to the conversation without changing numbers or facts.</div>" +' +
     '      "<div class=\'formmsg\' id=\'cfgMsg\'></div>";' +
     '  }).catch(function(e){document.getElementById("chat-cfg").innerHTML="<div class=\'empty\'>Error: "+e.message+"</div>";});' +
     '}' +
@@ -1024,9 +1027,10 @@ function scopedPublisherChatHtml(pub) {
     '  var offset=parseInt(document.getElementById("cfgOffset").value);' +
     '  var freq=parseInt(document.getElementById("cfgFreq").value);' +
     '  var enabled=document.getElementById("cfgEnabled").value==="true";' +
+    '  var enableRewrite=document.getElementById("cfgRewrite").value==="true";' +
     '  var msg=document.getElementById("cfgMsg");msg.textContent="";' +
     '  var btn=document.getElementById("cfgSaveBtn");btn.disabled=true;btn.textContent="Saving...";' +
-    '  fetch("/publisher/chat-config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pubId:PUB_ID,adOffset:offset,maxFrequency:freq,enabled:enabled})})' +
+    '  fetch("/publisher/chat-config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pubId:PUB_ID,adOffset:offset,maxFrequency:freq,enabled:enabled,enableRewrite:enableRewrite})})' +
     '    .then(function(r){return r.json();}).then(function(res){' +
     '    btn.disabled=false;btn.textContent="Save";' +
     '    if(res.error){msg.textContent=res.error;msg.style.color="#dc2626";return;}' +
