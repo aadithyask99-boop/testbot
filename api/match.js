@@ -229,8 +229,9 @@ async function handleChatQuery(req, res, body) {
       anchor,
       category: matchResult.category,
       relevanceScore: matchResult.relevanceScore || null,
-      winMethod: matchResult.winMethod || null,         // 'won_on_relevance' | 'won_on_bid'
-      topCandidates: matchResult.topCandidates || null, // top 3 scored variants for transparency
+      winMethod: matchResult.winMethod || null,
+      variantMethod: matchResult.variantMethod || null,   // 'haiku_rewrite' | 'direct'
+      topCandidates: matchResult.topCandidates || null,
     },
   });
 }
