@@ -374,7 +374,29 @@ module.exports = async function handler(req, res) {
         aiClicks,
         estimatedCTR: spend.totalImpressions > 0 ? parseFloat(((totalClicks / spend.totalImpressions) * 100).toFixed(2)) : 0,
         trackLinks: trackLinks.filter(Boolean),
-        queryInsights: await kvGet('query_insights:' + c.id + ':' + new Date().toISOString().slice(0, 10)),
+        queryInsights: await (async () => {
+          // Read raw conv_queries for last 7 days — no aggregate step needed.
+          // Falls back to pre-aggregated query_insights if raw data is empty.
+          const days = [];
+          for (let i = 0; i < 7; i++) {
+            days.push(new Date(Date.now() - i * 86400000).toISOString().slice(0, 10));
+          }
+          const rawEntries = [];
+          await Promise.all(days.map(async d => {
+            const entries = await kvGet('conv_queries:' + c.id + ':' + d);
+            if (Array.isArray(entries)) rawEntries.push(...entries);
+          }));
+          if (rawEntries.length === 0) return null;
+          const freq = {};
+          for (const e of rawEntries) {
+            const q = (e.query || '').toLowerCase().trim();
+            if (q) freq[q] = (freq[q] || 0) + 1;
+          }
+          const topQueries = Object.entries(freq)
+            .sort((a, b) => b[1] - a[1]).slice(0, 20)
+            .map(([query, count]) => ({ query, count }));
+          return { totalQueries: rawEntries.length, topQueries };
+        })(),
         // Surface breakdown — where this campaign's ads actually appeared
         surfaceBreakdown: {
           crawler: { impressions: spend.retrievalTotal + spend.trainingTotal },
