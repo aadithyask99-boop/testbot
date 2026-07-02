@@ -375,6 +375,11 @@ module.exports = async function handler(req, res) {
         estimatedCTR: spend.totalImpressions > 0 ? parseFloat(((totalClicks / spend.totalImpressions) * 100).toFixed(2)) : 0,
         trackLinks: trackLinks.filter(Boolean),
         queryInsights: await kvGet('query_insights:' + c.id + ':' + new Date().toISOString().slice(0, 10)),
+        // Surface breakdown — where this campaign's ads actually appeared
+        surfaceBreakdown: {
+          crawler: { impressions: spend.retrievalTotal + spend.trainingTotal },
+          conversational: { impressions: spend.conversationalTotal || 0 },
+        },
       };
     }));
     const campaignList = campaignResults.filter(Boolean);

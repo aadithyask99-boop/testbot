@@ -419,6 +419,11 @@ function scopedAdvertiserCampaignHtml(adv) {
     '    "<div class=\'stat\'><div class=\'sv\'>"+(camp.dailyBudgetUsedPct||0)+"%</div><div class=\'sl\'>Daily budget used</div></div>" +' +
     '    "<div class=\'stat\'><div class=\'sv\'><span class=\'badge "+(camp.active?"active":"paused")+"\'"+">"+(camp.active?"Active":"Paused")+"</span></div><div class=\'sl\'>Status &nbsp; <button class=\'btnsec\' style=\'font-size:11px;padding:2px 8px\' onclick=\'togglePause()\' id=\'pauseBtn\'>"+(camp.active?"Pause":"Activate")+"</button><span id=\'pauseMsg\' style=\'font-size:11px;margin-left:6px\'></span></div></div>" +' +
     '    "</div>";' +
+    '  var sb=(camp.surfaceBreakdown||{});var crawlerImpr=((sb.crawler||{}).impressions||0);var convImpr=((sb.conversational||{}).impressions||0);' +
+    '  if(crawlerImpr>0||convImpr>0){' +
+    '    html+="<div style=\'font-size:12px;font-weight:600;color:#666;margin:14px 0 8px;text-transform:uppercase;letter-spacing:0.03em\'>Where served</div>";' +
+    '    html+="<div class=\'stat-row\' style=\'margin-bottom:4px\'><div class=\'stat\'><div class=\'sv\'>"+fmt(crawlerImpr)+"</div><div class=\'sl\'>Crawler impressions</div></div><div class=\'stat\'><div class=\'sv\'>"+fmt(convImpr)+"</div><div class=\'sl\'>Conversational impressions</div></div></div>";' +
+    '  }' +
     '  var tlinks=camp.trackLinks||[];' +
     '  html+="<div style=\'font-size:12px;font-weight:600;color:#666;margin:14px 0 8px;text-transform:uppercase;letter-spacing:0.03em\'>Trackable links</div>";' +
     '  html+="<div class=\'h2sub\' style=\'margin-bottom:8px\'>Short tracked URLs for variant copy. Use [[anchor|url]] syntax in variants. Max 10.</div>";' +
