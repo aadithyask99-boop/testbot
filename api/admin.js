@@ -525,6 +525,44 @@ module.exports = async function handler(req, res) {
     });
   }
 
+  // ============================================================
+  // PUBLISHER CHAT CONFIG — /publisher/chat-config
+  // GET  /publisher/chat-config?pubId=X  — read stored config
+  // POST /publisher/chat-config          — save config
+  // ============================================================
+  if (url.includes('/publisher/chat-config')) {
+    if (req.method === 'GET') {
+      const pubId = req.query && req.query.pubId;
+      if (!pubId) return res.status(400).json({ error: 'pubId required' });
+      const cfg = (await kvGet('pub_chat_config:' + pubId)) || {
+        adOffset: 3, maxFrequency: 5, enabled: true,
+      };
+      return res.status(200).json({ pubId, config: cfg });
+    }
+    if (req.method === 'POST') {
+      const data = await readBody(req);
+      const { pubId, adOffset, maxFrequency, enabled } = data || {};
+      if (!pubId) return res.status(400).json({ error: 'pubId required' });
+      if (adOffset !== undefined && (typeof adOffset !== 'number' || adOffset < 0 || adOffset > 20)) {
+        return res.status(400).json({ error: 'adOffset must be 0–20' });
+      }
+      if (maxFrequency !== undefined && (typeof maxFrequency !== 'number' || maxFrequency < 1 || maxFrequency > 20)) {
+        return res.status(400).json({ error: 'maxFrequency must be 1–20' });
+      }
+      const existing = (await kvGet('pub_chat_config:' + pubId)) || { adOffset: 3, maxFrequency: 5, enabled: true };
+      const updated = {
+        ...existing,
+        ...(adOffset    !== undefined ? { adOffset }    : {}),
+        ...(maxFrequency !== undefined ? { maxFrequency } : {}),
+        ...(enabled     !== undefined ? { enabled }     : {}),
+        updatedAt: new Date().toISOString(),
+      };
+      await kvSet('pub_chat_config:' + pubId, updated);
+      return res.status(200).json({ message: 'Chat config saved', pubId, config: updated });
+    }
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
   // ---- REINDEX campaigns:finance + campaigns:tech from existing campaign:{id} keys ----
   // Useful after reset-stats clears category indexes. Safe to call any time.
   if (req.method === 'POST' && url.includes('/admin/reindex')) {

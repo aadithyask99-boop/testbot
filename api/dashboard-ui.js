@@ -998,10 +998,41 @@ function scopedPublisherChatHtml(pub) {
     '<div class="card"><div class="lbl">Match rate</div><div class="val" id="c-rate">-</div></div>' +
     '<div class="card"><div class="lbl">Revenue (7d)</div><div class="val" id="c-rev">-</div></div></div>' +
     '<div id="chat-content"><div class="empty">Loading...</div></div></section>' +
+    '<section><h2>Ad frequency settings</h2>' +
+    '<div class="h2sub">Control how often sponsored messages appear in conversations on your site</div>' +
+    '<div id="chat-cfg"><div class="empty">Loading...</div></div></section>' +
     '</main></div>' +
     '<script>' +
     'var PUB_ID="' + escapeHtml(pub.pubId) + '";' +
     'function money(n){return "\u00a3"+(n||0).toFixed(2);}' +
+    'function loadChatConfig(){' +
+    '  fetch("/publisher/chat-config?pubId="+encodeURIComponent(PUB_ID)).then(function(r){return r.json();}).then(function(d){' +
+    '    var cfg=d.config||{adOffset:3,maxFrequency:5,enabled:true};' +
+    '    document.getElementById("chat-cfg").innerHTML=' +
+    '      "<div class=\'formrow\'>" +' +
+    '      "<div style=\'flex:1\'><label style=\'font-size:11px;color:#888\'>Ad offset (turns before first ad)</label>" +' +
+    '      "<input type=\'number\' id=\'cfgOffset\' min=\'0\' max=\'20\' value=\'"+cfg.adOffset+"\'></div>" +' +
+    '      "<div style=\'flex:1\'><label style=\'font-size:11px;color:#888\'>Min turns between ads</label>" +' +
+    '      "<input type=\'number\' id=\'cfgFreq\' min=\'1\' max=\'20\' value=\'"+cfg.maxFrequency+"\'></div>" +' +
+    '      "<div style=\'flex:1\'><label style=\'font-size:11px;color:#888\'>Ads enabled</label>" +' +
+    '      "<select id=\'cfgEnabled\'><option value=\'true\'"+(cfg.enabled?" selected":"")+">On</option><option value=\'false\'"+(cfg.enabled?"":" selected")+">Off</option></select></div>" +' +
+    '      "<div style=\'align-self:flex-end\'><button class=\'btn\' onclick=\'saveChatConfig()\' id=\'cfgSaveBtn\'>Save</button></div></div>" +' +
+    '      "<div class=\'formmsg\' id=\'cfgMsg\'></div>";' +
+    '  }).catch(function(e){document.getElementById("chat-cfg").innerHTML="<div class=\'empty\'>Error: "+e.message+"</div>";});' +
+    '}' +
+    'function saveChatConfig(){' +
+    '  var offset=parseInt(document.getElementById("cfgOffset").value);' +
+    '  var freq=parseInt(document.getElementById("cfgFreq").value);' +
+    '  var enabled=document.getElementById("cfgEnabled").value==="true";' +
+    '  var msg=document.getElementById("cfgMsg");msg.textContent="";' +
+    '  var btn=document.getElementById("cfgSaveBtn");btn.disabled=true;btn.textContent="Saving...";' +
+    '  fetch("/publisher/chat-config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pubId:PUB_ID,adOffset:offset,maxFrequency:freq,enabled:enabled})})' +
+    '    .then(function(r){return r.json();}).then(function(res){' +
+    '    btn.disabled=false;btn.textContent="Save";' +
+    '    if(res.error){msg.textContent=res.error;msg.style.color="#dc2626";return;}' +
+    '    msg.textContent="Settings saved.";msg.style.color="#16a34a";' +
+    '  }).catch(function(e){btn.disabled=false;btn.textContent="Save";msg.textContent="Error: "+e.message;msg.style.color="#dc2626";});' +
+    '}' +
     'function load(){' +
     '  fetch("/dashboard?view=publisher&pubId="+encodeURIComponent(PUB_ID)+"&includeChat=1").then(function(r){return r.json();}).then(function(d){' +
     '    var ci=d.chatInsights||{};' +
@@ -1039,7 +1070,7 @@ function scopedPublisherChatHtml(pub) {
     '    document.getElementById("ts").textContent="Updated "+new Date().toLocaleTimeString("en-GB");' +
     '  }).catch(function(e){document.getElementById("ts").textContent="Error: "+e.message;});' +
     '}' +
-    'load();setInterval(load,15000);' +
+    'load();loadChatConfig();setInterval(load,15000);' +
     '</script></body></html>';
 }
 

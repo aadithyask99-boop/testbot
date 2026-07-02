@@ -23,6 +23,7 @@
     { "src": "^/publisher/(?<slug>[^/]+)/overview$",  "dest": "/api/dashboard-ui.js?slug=$slug&view=overview" },
     { "src": "^/publisher/(?<slug>[^/]+)/pages$",  "dest": "/api/dashboard-ui.js?slug=$slug&view=pages" },
     { "src": "^/t/([a-z0-9]+)$", "dest": "/api/click.js?token=$1" },
+    { "src": "^/publisher/chat-config$", "dest": "/api/admin.js" },
     { "src": "^/admin/tracklink$",   "dest": "/api/admin.js" },
     { "src": "^/chat/query$",        "dest": "/api/match.js?_route=chat" },
     { "src": "^/chat/ping$",         "dest": "/api/impression.js?_route=chat" },

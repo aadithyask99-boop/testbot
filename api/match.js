@@ -49,18 +49,25 @@ async function handleChatQuery(req, res, body) {
     return res.status(401).json({ bid: null, reason: 'auth_failed' });
   }
 
+  // Step 2a: Load stored publisher chat config (overrides body defaults)
+  const storedConfig = await kvGet('pub_chat_config:' + pubId) || {};
   const {
     userId,
     conversationId,
     query,
     history = [],
-    adOffset = 3,
-    maxFrequency = 5,
     storeQuery = true,
   } = body;
+  // Stored config takes precedence over caller-supplied values
+  const adOffset    = storedConfig.adOffset    !== undefined ? storedConfig.adOffset    : (body.adOffset    !== undefined ? body.adOffset    : 3);
+  const maxFrequency = storedConfig.maxFrequency !== undefined ? storedConfig.maxFrequency : (body.maxFrequency !== undefined ? body.maxFrequency : 5);
+  const enabled      = storedConfig.enabled !== false; // default true
 
   if (!query || !conversationId) {
     return res.status(400).json({ bid: null, reason: 'query and conversationId are required' });
+  }
+  if (!enabled) {
+    return res.status(200).json({ bid: null, reason: 'conversational_disabled' });
   }
 
   // Step 2: Rate limiting — 60 req/min per pubId
